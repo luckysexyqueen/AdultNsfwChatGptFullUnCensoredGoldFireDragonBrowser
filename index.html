@@ -4296,7 +4296,7 @@
         localGGUFLoadPromise = (async () => {
         if (!window.LocalGGUF) {
           try {
-            await import("./assets/index-5ZTgpfZO.js");
+            await import(/* @vite-ignore */ "/assets/index-5ZTgpfZO.js");
           } catch (error) {
             console.warn("내장 LocalGGUF 모듈 재초기화 실패:", error);
           }
