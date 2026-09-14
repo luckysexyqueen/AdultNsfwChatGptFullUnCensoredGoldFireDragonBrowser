@@ -1,11 +1,12 @@
 const CACHE_NAME = 'ai-chat-v1';
 const STATIC_CACHE = 'static-v2';
-const DYNAMIC_CACHE = 'dynamic-v1';
+const DYNAMIC_CACHE = 'dynamic-v2';
 
 // 캐시할 정적 파일 목록
 const STATIC_ASSETS = [
   '/',
   '/index.html',
+  '/GoldFireDragonBrowser.html',
   '/icon.png',
   '/manifest.json'
 ];
@@ -70,8 +71,10 @@ self.addEventListener('fetch', (event) => {
             return cachedResponse;
           }
           
-          // 캐시에도 없으면 오프라인 페이지 또는 기본 응답
-          if (request.destination === 'document') {
+          // 채팅 앱 문서만 index.html로 복구합니다. 내장 브라우저 문서를
+          // index.html로 대체하면 iframe 안에 채팅 화면이 다시 표시됩니다.
+          const requestPath = new URL(request.url).pathname.toLowerCase();
+          if (request.destination === 'document' && !requestPath.endsWith('/goldfiredragonbrowser.html')) {
             return caches.match('/index.html');
           }
           
