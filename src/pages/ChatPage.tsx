@@ -72,15 +72,16 @@ export function ChatPage() {
   }, []);
 
   // 커스텀 GPT 변경 시 파일 로드
+  const currentGPTId = currentGPT?.id;
   useEffect(() => {
-    if (currentGPT) {
-      fetchGPTFiles(currentGPT.id)
+    if (currentGPTId) {
+      fetchGPTFiles(currentGPTId)
         .then(setCurrentGPTFiles)
         .catch((e) => console.error('GPT 파일 로드 실패:', e));
     } else {
       setCurrentGPTFiles([]);
     }
-  }, [currentGPT?.id]);
+  }, [currentGPTId, setCurrentGPTFiles]);
 
   // 메시지 스크롤
   useEffect(() => {
@@ -117,7 +118,7 @@ export function ChatPage() {
             }
           } else {
             // 인증 유저: Supabase Storage 업로드 → signed URL
-            const safeName = file.name.replace(/[^a-zA-Z0-9._\-]/g, '_');
+            const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
             const path = `${userId}/chat/${Date.now()}_${safeName}`;
             const { data, error } = await supabase.storage
               .from('chat-files')

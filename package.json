@@ -80,6 +80,7 @@
     "input-otp": "^1.2.4",
     "jspdf": "^3.0.3",
     "leaflet": "^1.9.4",
+    "localforage": "^1.10.0",
     "lucide-react": "^0.462.0",
     "next-themes": "^0.3.0",
     "open": "^11.0.0",

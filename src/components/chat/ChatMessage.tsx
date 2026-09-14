@@ -17,19 +17,22 @@ function formatSize(bytes: number): string {
 
 export function ChatMessage({ message, isStreaming = false }: ChatMessageProps) {
   const isUser = message.role === 'user';
+  const messageId = message.id;
   const [attachedFiles, setAttachedFiles] = useState<StoredFileMetadata[]>([]);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const revokeListRef = useRef<string[]>([]);
+  const localFileIdsKey = message.localFileIds?.join(',') ?? '';
 
   // localforage에서 첨부 파일 로드
   useEffect(() => {
-    if (!message.localFileIds || message.localFileIds.length === 0) return;
+    if (!localFileIdsKey) return;
 
     let mounted = true;
+    const urlsToRevoke: string[] = [];
 
     (async () => {
       try {
-        const files = await getMessageFiles(message.id);
+        const files = await getMessageFiles(messageId);
         if (!mounted) return;
         setAttachedFiles(files);
 
@@ -40,7 +43,7 @@ export function ChatMessage({ message, isStreaming = false }: ChatMessageProps) 
             const url = await createFileObjectUrl(file.id);
             if (url) {
               urls[file.id] = url;
-              revokeListRef.current.push(url);
+              urlsToRevoke.push(url);
             }
           }
         }
@@ -52,13 +55,15 @@ export function ChatMessage({ message, isStreaming = false }: ChatMessageProps) 
 
     return () => {
       mounted = false;
+      urlsToRevoke.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [message.id, message.localFileIds?.join(',')]);
+  }, [messageId, localFileIdsKey]);
 
   // 언마운트 시 Object URL 해제
   useEffect(() => {
+    const urls = revokeListRef.current;
     return () => {
-      revokeListRef.current.forEach((url) => URL.revokeObjectURL(url));
+      urls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, []);
 
