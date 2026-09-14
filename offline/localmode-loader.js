@@ -3,13 +3,13 @@
  */
 (async () => {
   try {
-    const mod = await import(new URL("./localmode/wllama/index.js", document.baseURI).href);
+    const mod = await import(new URL("./wllama-core.mjs", document.baseURI).href);
     const settings = {
       wasmPath: new URL("./wllama/esm/wasm/wllama.wasm", document.baseURI).href,
       modelPath: new URL("./models", document.baseURI).href,
     };
     window.LocalMode = mod;
-    window.LocalModeWllama = mod.createWllama?.(settings) || mod.wllama;
+    window.LocalModeWllama = mod.createWllama?.(settings) || mod.Wllama || mod.wllama;
     window.dispatchEvent(new CustomEvent("goldfire-localmode-ready", { detail: mod }));
   } catch (error) {
     console.error("[LocalMode] 오프라인 모듈 로드 실패:", error);

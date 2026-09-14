@@ -6,13 +6,13 @@
     <meta name="theme-color" content="#10a37f" />
     <meta name="description" content="제한 없는 AI 채팅 애플리케이션" />
     <meta name="goldfire-offline-engine" content="bundled-wllama-wasm" />
-    <meta name="goldfire-offline-model" content="sexygpt-uncensored-q3_k_m.gguf" />
+    <meta name="goldfire-offline-model" content="sexygpt-uncensored-q4_0.gguf" />
     <script>
       // index.html 자체가 오프라인 로컬 엔진/모델 경로를 선언합니다.
       // 온라인에서는 API를 사용하고, 네트워크가 없으면 이 경로의 WASM/GGUF를 사용합니다.
       window.GoldFireOfflineConfig = Object.freeze({
-        engine: new URL("./assets/wllama-CmLUJC6F.wasm", document.baseURI).href,
-        model: new URL("models/sexygpt-uncensored-q3_k_m.gguf", document.baseURI).href,
+        engine: new URL("./offline/wllama/esm/wasm/wllama.wasm", document.baseURI).href,
+        model: "https://huggingface.co/Ayyystin/sexyGPT-Uncensored-Q4_0-GGUF/resolve/main/sexygpt-uncensored-q4_0.gguf",
         koreanOnly: true,
         apiOnlinePreferred: true,
          forceLocalOnAndroid: true,
@@ -21,9 +21,9 @@
       });
     </script>
     <title>AI Chat - 무제한 대화</title>
-    <link rel="icon" type="image/png" href="./assets/icon-CV9Zx_iX.png" />
-    <link rel="manifest" href="./assets/manifest-BnsIcC0n.json" />
-    <link rel="apple-touch-icon" href="./assets/icon-CV9Zx_iX.png" />
+    <link rel="icon" type="image/png" href="./icon.png" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="apple-touch-icon" href="./icon.png" />
     <!-- 선택 사항: 배포 환경의 Supabase 공개 키 설정. 파일이 없어도 로컬 모드로 계속 실행됩니다. -->
     <script src="./vpn-index-control.js" defer=""></script>
     <script src="./boot-guard.js" defer=""></script>
@@ -33,7 +33,7 @@
       // Install the bundled GGUF into the same IndexedDB vault used by the local AI UI.
       // The model is copied once; inference remains handled by the existing LocalGGUF/WASM runtime.
       (function installBundledGoldFireModel() {
-        const modelName = "sexygpt-uncensored-q3_k_m.gguf";
+        const modelName = "sexygpt-uncensored-q4_0.gguf";
         const modelUrl = window.GoldFireOfflineConfig?.model || new URL("models/" + modelName, document.baseURI).href;
         const installKey = "goldfire-bundled-model-installed";
         let attempts = 0;
@@ -318,16 +318,12 @@
         };
       })();
     </script>
-    <!-- Lucide Icons -->
-    <script src="./offline/lucide.min.js"></script>
-    <!-- Font Awesome (브라우저 오버레이 아이콘용) -->
-    <link rel="stylesheet" href="./offline/fontawesome-6.5.1.css" />
-    <link rel="stylesheet" href="./offline/gamefont.css" />
+    <link rel="stylesheet" href="./fonts/gamefont.css" />
 
     <style>
       @font-face {
         font-family: "acutehoney";
-        src: url("./offline/fonts/acutehoney.woff") format("woff");
+        src: url("./fonts/aCutieHoney.woff") format("woff");
         font-weight: normal;
         font-style: normal;
         font-display: swap;
@@ -4227,9 +4223,9 @@
         return next;
       }
       async function ensureBundledGGUFModel() {
-        const modelName = "sexygpt-uncensored-q3_k_m.gguf";
+        const modelName = "sexygpt-uncensored-q4_0.gguf";
         const models = await getSavedGGUFModels().catch(() => []);
-        const existing = models.find((m) => m?.name === modelName || /sexygpt-uncensored-q3_k_m\.gguf/i.test(m?.name || ""));
+        const existing = models.find((m) => m?.name === modelName || /sexygpt-uncensored-q[34]_(?:k_m|0)\.gguf/i.test(m?.name || ""));
         if (existing) return markGGUFModelBundled(existing);
         const response = await fetch(window.GoldFireOfflineConfig?.model || new URL("models/" + modelName, document.baseURI).href, { cache: "no-store" });
         if (!response.ok && response.status !== 0) throw new Error("내장 GGUF 모델을 읽을 수 없습니다.");
@@ -4311,7 +4307,7 @@
             const savedModels = await getSavedGGUFModels();
             target =
               savedModels.find((m) => m.id === preferredModelId) ||
-              savedModels.find((m) => /sexygpt-uncensored-q3_k_m\.gguf/i.test(m.name || "")) ||
+              savedModels.find((m) => /sexygpt-uncensored-q[34]_(?:k_m|0)\.gguf/i.test(m.name || "")) ||
               savedModels[0];
             if (target) files = await getSavedGGUFFiles(target);
           } catch (error) {
@@ -4320,12 +4316,12 @@
           if (!files.length) {
             const response = await fetch(
               window.GoldFireOfflineConfig?.model ||
-                new URL("models/sexygpt-uncensored-q3_k_m.gguf", document.baseURI).href,
+                window.GoldFireOfflineConfig?.model,
               { cache: "no-store" },
             );
             if (!response.ok && response.status !== 0) throw new Error("APK 내장 GGUF 파일을 읽지 못했습니다.");
             files = [
-              new File([await response.blob()], "sexygpt-uncensored-q3_k_m.gguf", { type: "application/octet-stream" }),
+              new File([await response.blob()], "sexygpt-uncensored-q4_0.gguf", { type: "application/octet-stream" }),
             ];
           }
           let status;
@@ -4341,11 +4337,11 @@
             await window.LocalGGUF.unload?.().catch(() => {});
             const embeddedUrl =
               window.GoldFireOfflineConfig?.model ||
-              new URL("models/sexygpt-uncensored-q3_k_m.gguf", document.baseURI).href;
+              window.GoldFireOfflineConfig?.model;
             const embeddedResponse = await fetch(embeddedUrl, { cache: "no-store" });
             if (!embeddedResponse.ok && embeddedResponse.status !== 0) throw savedError;
             const embeddedBlob = await embeddedResponse.blob();
-            const embeddedFile = new File([embeddedBlob], "sexygpt-uncensored-q3_k_m.gguf", {
+            const embeddedFile = new File([embeddedBlob], "sexygpt-uncensored-q4_0.gguf", {
               type: "application/octet-stream",
             });
             status = await window.LocalGGUF.load([embeddedFile], {
@@ -4354,7 +4350,7 @@
             });
             target = null;
           }
-          setState({ localModel: { ...status, savedModelId: target?.id || "bundled-sexygpt-uncensored-q3_k_m" } });
+          setState({ localModel: { ...status, savedModelId: target?.id || "bundled-sexygpt-uncensored-q4_0" } });
           return true;
         })().catch((error) => {
           localGGUFLoadPromise = null;
@@ -4648,18 +4644,18 @@
         if (ggufSelect) {
           await window.ensureBundledGGUFModel?.().catch((error) => console.warn("Builder bundled GGUF registration:", error));
           const savedModels = await getSavedGGUFModels().catch(() => []);
-          const visibleModels = savedModels.length ? savedModels : [{ id: "bundled-sexygpt-uncensored-q3_k_m", name: "sexygpt-uncensored-q3_k_m.gguf", totalBytes: 97672640, bundledUnavailable: true }];
+          const visibleModels = savedModels.length ? savedModels : [{ id: "bundled-sexygpt-uncensored-q4_0", name: "sexygpt-uncensored-q4_0.gguf", totalBytes: 106559296, bundledUnavailable: true }];
           ggufSelect.innerHTML = `<option value="">선택 안 함 — API 우선 · 장애 시 자동 GGUF</option>` + visibleModels.map((m) =>
             `<option value="${escHtml(m.id)}">${escHtml(m.name)} · ${formatModelSize(m.totalBytes)}</option>`).join("");
-          const bundled = visibleModels.find((m) => /sexygpt-uncensored-q3_k_m\.gguf/i.test(m?.name || ""));
+          const bundled = visibleModels.find((m) => /sexygpt-uncensored-q4_0\.gguf/i.test(m?.name || ""));
           ggufSelect.value = editing?.local_gguf_model_id || bundled?.id || "";
           const refreshGGUFSelect = async () => {
             const current = ggufSelect.value;
             await window.ensureBundledGGUFModel?.().catch(() => {});
             const models = await getSavedGGUFModels().catch(() => []);
-            const visible = models.length ? models : [{ id: "bundled-sexygpt-uncensored-q3_k_m", name: "sexygpt-uncensored-q3_k_m.gguf", totalBytes: 97672640 }];
+            const visible = models.length ? models : [{ id: "bundled-sexygpt-uncensored-q4_0", name: "sexygpt-uncensored-q4_0.gguf", totalBytes: 106559296 }];
             ggufSelect.innerHTML = `<option value="">선택 안 함 — API 우선 · 장애 시 자동 GGUF</option>` + visible.map((m) => `<option value="${escHtml(m.id)}">🤖 ${escHtml(m.name)} · ${formatModelSize(m.totalBytes)}</option>`).join("");
-            ggufSelect.value = (visible.some((m) => m.id === current) ? current : (editing?.local_gguf_model_id || visible.find((m) => /sexygpt-uncensored-q3_k_m\.gguf/i.test(m.name || ""))?.id || ""));
+            ggufSelect.value = (visible.some((m) => m.id === current) ? current : (editing?.local_gguf_model_id || visible.find((m) => /sexygpt-uncensored-q4_0\.gguf/i.test(m.name || ""))?.id || ""));
           };
           document.getElementById("gf-refresh-gguf")?.addEventListener("click", () => { void refreshGGUFSelect(); });
           document.getElementById("gf-open-gguf-manager")?.addEventListener("click", () => {
@@ -5310,8 +5306,8 @@
 (function GoldFireAndroidLocalEngineGuard(){
   const isAndroid=/Android|wv|WebView/i.test(navigator.userAgent||"");
   if(!isAndroid) return;
-  const MODEL="sexygpt-uncensored-q3_k_m.gguf";
-  const MODEL_URL=()=>new URL("./models/"+MODEL,document.baseURI).href;
+  const MODEL="sexygpt-uncensored-q4_0.gguf";
+  const MODEL_URL=()=>window.GoldFireOfflineConfig?.model;
   let timer=0;
   async function boot(){
     if(!window.LocalGGUF){ timer=setTimeout(boot,300); return; }
