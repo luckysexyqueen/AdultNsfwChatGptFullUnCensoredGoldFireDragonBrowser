@@ -486,6 +486,28 @@
         overflow: hidden;
         text-overflow: ellipsis;
       }
+      #brow-url-form {
+        display: flex;
+        align-items: center;
+        flex: 1;
+        min-width: 0;
+      }
+      #brow-url-input {
+        flex: 1;
+        min-width: 0;
+        height: 32px;
+        padding: 5px 10px;
+        color: #e5e7eb;
+        background: #16171f;
+        border: 1px solid #2d2f3e;
+        border-radius: 7px;
+        outline: none;
+        font: 12px "JetBrains Mono", monospace;
+      }
+      #brow-url-input:focus {
+        border-color: #4ade80;
+        box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.15);
+      }
       #brow-iframe {
         flex: 1;
         width: 100%;
@@ -1685,10 +1707,17 @@
             <i class="fa-solid fa-xmark"></i>
             &nbsp;닫기
           </button>
-          <div id="brow-url">
-            <i class="fa-solid fa-lock" style="color: #4ade80; margin-right: 4px"></i>
-            골드파이어드래곤브라우저
-          </div>
+          <form id="brow-url-form" role="search" autocomplete="off">
+            <label class="sr-only" for="brow-url-input">브라우저 주소</label>
+            <input
+              id="brow-url-input"
+              type="url"
+              inputmode="url"
+              spellcheck="false"
+              placeholder="https://example.com"
+              aria-label="브라우저 주소"
+            />
+          </form>
           <button
             id="vpn-settings-btn"
             class="input-box-btn"
@@ -1717,8 +1746,10 @@
         </div>
         <iframe
           id="brow-iframe"
-          src="GoldFireDragonBrowser.html?gfd-build=20260909-background"
+          src="./GoldFireDragonBrowser.html?gfd-build=20260909-background"
           title="브라우저"
+          sandbox="allow-downloads allow-forms allow-modals allow-orientation-lock allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-presentation allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
+          referrerpolicy="no-referrer"
           allowfullscreen=""
           style="flex: 1; width: 100%; border: none"
         ></iframe>
@@ -5728,7 +5759,77 @@
         };
       }
 
-      const BROWSER_HOME_URL = "GoldFireDragonBrowser.html?gfd-build=20260909-background";
+      const BROWSER_HOME_URL = new URL(
+        "./GoldFireDragonBrowser.html?gfd-build=20260909-background",
+        document.baseURI,
+      ).href;
+
+      const browserUrlInput = () => document.getElementById("brow-url-input");
+
+      function normalizeBrowserUrl(value) {
+        const raw = String(value || "").trim();
+        if (!raw) return null;
+        const candidate = /^[a-z][a-z\d+.-]*:/i.test(raw) ? raw : `https://${raw}`;
+        try {
+          const url = new URL(candidate);
+          if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+          return url.href;
+        } catch {
+          return null;
+        }
+      }
+
+      function setBrowserAddress(url) {
+        const input = browserUrlInput();
+        if (input && document.activeElement !== input) input.value = url;
+      }
+
+      function navigateBrowser(url) {
+        const target = normalizeBrowserUrl(url);
+        const input = browserUrlInput();
+        if (!target) {
+          input?.setCustomValidity("HTTP 또는 HTTPS 주소를 입력하세요.");
+          input?.reportValidity();
+          return false;
+        }
+        input?.setCustomValidity("");
+        const iframe = document.getElementById("brow-iframe");
+        if (!iframe) return false;
+        setBrowserAddress(target);
+        iframe.src = target;
+        return true;
+      }
+
+      function syncBrowserAddress(iframe) {
+        try {
+          const url = iframe.contentWindow?.location?.href;
+          if (url && url !== "about:blank") setBrowserAddress(url);
+        } catch {
+          // Cross-origin pages cannot expose their location; keep the requested URL.
+        }
+      }
+
+      function handleBrowserFrameLoad(event) {
+        const iframe = event.currentTarget;
+        if (!iframe) return;
+        try {
+          const frameUrl = new URL(iframe.contentWindow.location.href);
+          const parentUrl = new URL(window.location.href);
+          const documentPath = (url) =>
+            url.pathname.replace(/\/index\.html$/i, "/").replace(/\/$/, "");
+          const isParentDocument =
+            frameUrl.origin === parentUrl.origin &&
+            documentPath(frameUrl) === documentPath(parentUrl);
+          if (isParentDocument) {
+            iframe.src = BROWSER_HOME_URL;
+            setBrowserAddress(BROWSER_HOME_URL);
+            return;
+          }
+        } catch {
+          // Cross-origin frames are intentionally not inspected.
+        }
+        syncBrowserAddress(iframe);
+      }
 
       function openBrowserOverlay() {
         const brow = document.getElementById("brow");
@@ -5737,6 +5838,7 @@
         if (!iframe.src || iframe.src === "about:blank") {
           iframe.src = BROWSER_HOME_URL;
         }
+        setBrowserAddress(iframe.src || BROWSER_HOME_URL);
         brow.classList.add("open");
         setState({ browserOpen: true });
       }
@@ -5753,6 +5855,13 @@
       const browserOrientationQuery = window.matchMedia("(orientation: landscape)");
       function bindBrowserOverlay() {
         document.getElementById("brow-back")?.addEventListener("click", closeBrowserOverlay);
+        document.getElementById("brow-url-form")?.addEventListener("submit", (event) => {
+          event.preventDefault();
+          navigateBrowser(browserUrlInput()?.value);
+        });
+        const browserFrame = document.getElementById("brow-iframe");
+        browserFrame?.addEventListener("load", handleBrowserFrameLoad);
+        setBrowserAddress(browserFrame?.src || BROWSER_HOME_URL);
         document.getElementById("brow-reload")?.addEventListener("click", () => {
           const iframe = document.getElementById("brow-iframe");
           if (iframe && iframe.src && iframe.src !== "about:blank") {
@@ -5760,7 +5869,8 @@
           }
         });
         document.getElementById("brow-newtab")?.addEventListener("click", () => {
-          window.open(BROWSER_HOME_URL, "_blank", "noopener,noreferrer");
+          const currentUrl = browserUrlInput()?.value || BROWSER_HOME_URL;
+          window.open(normalizeBrowserUrl(currentUrl) || BROWSER_HOME_URL, "_blank", "noopener,noreferrer");
         });
         bindBrowserResize();
         // 화면 회전 시 수동 조절값을 지워서 세로=상하 반반 / 가로=좌우 반반 기본값으로 재적용
