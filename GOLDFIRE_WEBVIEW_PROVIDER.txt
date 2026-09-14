@@ -1,0 +1,8 @@
+GoldFire GeckoView WebView Provider integration marker.
+
+This APK contains GeckoView/native Gecko. Android's System WebView provider interface
+requires a native library implementing the Android WebView provider ABI. GeckoView's
+native libraries are not automatically interchangeable with that ABI.
+
+This marker is intentionally informational; no incompatible fake provider library is
+inserted.
