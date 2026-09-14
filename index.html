@@ -2327,7 +2327,7 @@
         if (!config.url || !config.anonKey) return null;
         const key = `${config.url}|${config.anonKey}`;
         if (cloudClient && cloudClientKey === key) return cloudClient;
-        const { createClient } = await import("./offline/supabase.bundle.js");
+        const { createClient } = await import("/offline/supabase.bundle.js");
         cloudClient = createClient(config.url, config.anonKey, {
           auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
         });
