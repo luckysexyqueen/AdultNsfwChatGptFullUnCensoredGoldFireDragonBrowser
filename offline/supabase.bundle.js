@@ -1,1 +1,1 @@
-export { createClient } from '@supabase/supabase-js';
+export { createClient } from 'https://esm.sh/@supabase/supabase-js@2.78.0';

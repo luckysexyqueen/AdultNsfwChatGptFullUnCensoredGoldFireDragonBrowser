@@ -2404,7 +2404,13 @@
         if (!config.url || !config.anonKey) return null;
         const key = `${config.url}|${config.anonKey}`;
         if (cloudClient && cloudClientKey === key) return cloudClient;
-        const { createClient } = await import("./offline/supabase.bundle.js");
+        let createClient;
+        try {
+          ({ createClient } = await import("./offline/supabase.bundle.js"));
+        } catch (error) {
+          console.warn("클라우드 동기화 모듈을 불러오지 못했습니다. 로컬 모드로 계속합니다.", error);
+          return null;
+        }
         cloudClient = createClient(config.url, config.anonKey, {
           auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
         });
