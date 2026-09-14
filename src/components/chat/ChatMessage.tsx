@@ -17,6 +17,7 @@ function formatSize(bytes: number): string {
 
 export function ChatMessage({ message, isStreaming = false }: ChatMessageProps) {
   const isUser = message.role === 'user';
+  const messageId = message.id;
   const [attachedFiles, setAttachedFiles] = useState<StoredFileMetadata[]>([]);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
   const localFileIds = message.localFileIds ?? [];

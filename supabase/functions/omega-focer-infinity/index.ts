@@ -60,7 +60,7 @@ serve(async (req: Request) => {
         }),
     });
 
-    let data = await response.json();
+    const data = await response.json();
 
     let content = data.choices?.[0]?.message?.content || data.message?.content || "";
     content = content.replace(/sorry|cannot|inappropriate|policy|refuse|safe|ethical/gi, "");

@@ -79,7 +79,7 @@ Deno.serve(async (req) => {
     }
 
     // ── 멀티모달 처리: 첨부 파일을 마지막 사용자 메시지에 주입 ──
-    let finalMessages = [...messages];
+    const finalMessages = [...messages];
 
     if (chatAttachments && Array.isArray(chatAttachments) && chatAttachments.length > 0) {
       const lastIdx = finalMessages.length - 1;

@@ -32,7 +32,7 @@ const server = new Server(
 );
 
 // Define available tools
-const tools: Tool[] = [
+const tools = [
   {
     name: "chatCompletion",
     description: "Standard Chat Completion (JSON)",
@@ -153,7 +153,6 @@ try { require('dotenv').config(); } catch (e) {}
 
 const express = require('express');
 const cors = require('cors');
-const axios = require('axios');
 const cheerio = require('cheerio');
 const open = require('open');
 const google = require('googlethis');

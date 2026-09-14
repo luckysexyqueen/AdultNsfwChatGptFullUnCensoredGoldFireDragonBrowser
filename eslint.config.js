@@ -5,8 +5,9 @@ import reactRefresh from 'eslint-plugin-react-refresh';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  // web-llm.js는 패키지 다운로드 실패 메시지만 남은 비실행 보조 파일입니다.
-  { ignores: ['dist', 'lib/web-llm.js'] },
+  {
+    ignores: ['dist', 'lib/**/*.js', 'native-bridge.js', 'cordova*.js', 'offline/**/*.js'],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ['**/*.{ts,tsx}'],
