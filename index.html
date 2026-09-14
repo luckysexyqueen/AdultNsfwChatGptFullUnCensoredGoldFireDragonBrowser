@@ -5,14 +5,68 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#10a37f" />
     <meta name="description" content="제한 없는 AI 채팅 애플리케이션" />
+    <meta name="goldfire-offline-engine" content="bundled-wllama-wasm" />
+    <meta name="goldfire-offline-model" content="sexygpt-uncensored-q3_k_m.gguf" />
+    <script>
+      // index.html 자체가 오프라인 로컬 엔진/모델 경로를 선언합니다.
+      // 온라인에서는 API를 사용하고, 네트워크가 없으면 이 경로의 WASM/GGUF를 사용합니다.
+      window.GoldFireOfflineConfig = Object.freeze({
+        engine: new URL("./assets/wllama-CmLUJC6F.wasm", document.baseURI).href,
+        model: new URL("models/sexygpt-uncensored-q3_k_m.gguf", document.baseURI).href,
+        koreanOnly: true,
+        apiOnlinePreferred: true,
+         forceLocalOnAndroid: true,
+         localContextLength: 1024,
+        offlineResponseRequired: true,
+      });
+    </script>
     <title>AI Chat - 무제한 대화</title>
-    <link rel="icon" type="image/png" href="./icon.png" />
-    <link rel="manifest" href="./manifest.json" />
-    <link rel="apple-touch-icon" href="./icon.png" />
+    <link rel="icon" type="image/png" href="./assets/icon-CV9Zx_iX.png" />
+    <link rel="manifest" href="./assets/manifest-BnsIcC0n.json" />
+    <link rel="apple-touch-icon" href="./assets/icon-CV9Zx_iX.png" />
     <!-- 선택 사항: 배포 환경의 Supabase 공개 키 설정. 파일이 없어도 로컬 모드로 계속 실행됩니다. -->
-    <script src="./env-config.js" onerror="console.info('[env-config] 파일 없음 — 로컬 모드로 계속합니다.')"></script>
-    <!-- Vite가 정적 배포용으로 번들링하는 로컬 GGUF/WASM 런타임 -->
-    <script type="module" src="/src/local-gguf.ts"></script>
+    <script src="./vpn-index-control.js" defer></script>
+    <script src="./boot-guard.js" defer></script>
+    <!-- 로컬 GGUF 런타임은 React/Vite 번들에서 로드합니다. standalone index에서 원본 TS를 직접 실행하지 않습니다. -->
+      <script src="./inapp-browser.js"></script>
+    <script type="module" crossorigin src="./assets/index-5ZTgpfZO.js"></script>
+    <script>
+      // Install the bundled GGUF into the same IndexedDB vault used by the local AI UI.
+      // The model is copied once; inference remains handled by the existing LocalGGUF/WASM runtime.
+      (function installBundledGoldFireModel() {
+        const modelName = "sexygpt-uncensored-q3_k_m.gguf";
+        const modelUrl = window.GoldFireOfflineConfig?.model || new URL("models/" + modelName, document.baseURI).href;
+        const installKey = "goldfire-bundled-model-installed";
+        let attempts = 0;
+        const run = async () => {
+          if (window[installKey]) return;
+          if (typeof window.persistGGUFModel !== "function" || typeof window.markGGUFModelBundled !== "function") {
+            if (++attempts < 120) setTimeout(run, 500);
+            return;
+          }
+          try {
+            const saved = await window.getSavedGGUFModels?.() || [];
+            const existing = saved.find((m) => m && (m.name === modelName || String(m.name || "").includes("sexygpt")));
+            if (existing) {
+              await window.markGGUFModelBundled(existing);
+            } else {
+              const response = await fetch(modelUrl, { cache: "no-store" });
+              if (!response.ok && response.status !== 0) throw new Error("bundled GGUF fetch failed: " + response.status);
+              const blob = await response.blob();
+              await window.persistGGUFModel([new File([blob], modelName, { type: "application/octet-stream" })], { category: "bundled-apk", source: "apk-assets", embeddedInApp: true });
+            }
+            localStorage.setItem("gfd-gguf-auto-fallback", "1");
+            window[installKey] = true;
+            window.dispatchEvent(new CustomEvent("goldfire-bundled-model-ready", { detail: { name: modelName } }));
+          } catch (error) {
+            console.warn("GoldFire bundled GGUF installation failed:", error);
+            if (++attempts < 120) setTimeout(run, 1000);
+          }
+        };
+        setTimeout(run, 0);
+      })();
+    </script>
+
   </head>
   <body>
     <!-- LocalForage: CDN 제거, 네이티브 IndexedDB 기반 자체 구현으로 대체 (오프라인/WebView 안전) -->
@@ -266,19 +320,18 @@
       })();
     </script>
     <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script src="./offline/lucide.min.js"></script>
     <!-- Font Awesome (브라우저 오버레이 아이콘용) -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="./offline/fontawesome-6.5.1.css" />
     <link
       rel="stylesheet"
-      href="https://cdn.jsdelivr.net/gh/luckysexysuccubusqueen135age/GoldFireDragonFullUnCensoredGoogleProxyInAndroidWebBrowserAppHomePage@refs/heads/codespace-super-robot-xrwp9jp647v62v74v/fonts/gamefont.css"
+      href="./offline/gamefont.css"
     />
 
     <style>
       @font-face {
         font-family: "acutehoney";
-        src: url("https://cdn.jsdelivr.net/gh/luckysexyqueen/GoldFireDragonUnCensoredBrowser/fonts/a%ED%81%90%ED%8B%B0%ED%97%88%EB%8B%88.woff")
+        src: url("./offline/fonts/acutehoney.woff")
           format("woff");
         font-weight: normal;
         font-style: normal;
@@ -658,7 +711,8 @@
         width: 100%;
         height: 100%;
         border-radius: 50%;
-        object-fit: cover;
+        -o-object-fit: cover;
+           object-fit: cover;
       }
       .gpt-info {
         flex: 1;
@@ -954,6 +1008,18 @@
         }
       }
 
+      /* Universal local file vault */
+      .universal-file-vault{display:flex;flex-direction:column;gap:10px;max-height:70vh}
+      .ufv-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+      .ufv-list{display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:80px;max-height:34vh}
+      .ufv-item{display:flex;gap:8px;align-items:center;padding:9px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.04)}
+      .ufv-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .ufv-actions{display:flex;gap:5px;flex-wrap:wrap}
+      .ufv-preview{width:100%;min-height:180px;max-height:42vh;overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(0,0,0,.2);padding:10px}
+      .ufv-preview img,.ufv-preview video{max-width:100%;max-height:36vh;display:block;margin:auto}
+      .ufv-preview iframe{width:100%;height:36vh;border:0}
+      .ufv-preview textarea{width:100%;min-height:30vh;box-sizing:border-box}
+
       /* File attachments in messages */
       .msg-files {
         display: flex;
@@ -971,7 +1037,8 @@
       .msg-img-thumb img {
         width: 100%;
         height: 100%;
-        object-fit: contain;
+        -o-object-fit: contain;
+           object-fit: contain;
         display: block;
       }
       .msg-file-chip {
@@ -1023,7 +1090,8 @@
       .fp-img img {
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        -o-object-fit: cover;
+           object-fit: cover;
       }
       .fp-img-name {
         position: absolute;
@@ -1122,6 +1190,9 @@
         max-height: 180px;
         overflow-y: auto;
         font-family: inherit;
+      }
+      #msg-input::-moz-placeholder {
+        color: var(--text-dim);
       }
       #msg-input::placeholder {
         color: var(--text-dim);
@@ -1551,11 +1622,11 @@
       }
     </style>
 
-    <div id="loading-screen"><div class="spinner"></div></div>
+    <div id="loading-screen" class="hidden" aria-hidden="true"><div class="spinner"></div></div>
     <div id="toast-container"></div>
 
-    <!-- ── 브라우저 패널 (항상 채팅 화면과 함께 표시) ── -->
-    <div id="brow">
+    <!-- ── 브라우저 패널 (사용자가 🌐 버튼을 눌렀을 때만 표시) ── -->
+    <div id="brow" class="open">
       <div id="brow-content">
         <div id="brow-tb">
           <button id="brow-back" class="input-box-btn" style="border-radius: 7px; min-height: 34px; color: #fff">
@@ -1564,8 +1635,9 @@
           </button>
           <div id="brow-url">
             <i class="fa-solid fa-lock" style="color: #4ade80; margin-right: 4px"></i>
-            GoldFireDragonBrowser
+            골드파이어드래곤브라우저
           </div>
+          <button id="vpn-settings-btn" class="input-box-btn" style="height:32px;color:#fff" title="VPN 설정" onclick="window.__gfdOpenVpn && window.__gfdOpenVpn()">VPN 설정</button>
           <button
             id="brow-reload"
             class="input-box-btn"
@@ -1585,7 +1657,7 @@
         </div>
         <iframe
           id="brow-iframe"
-          src="about:blank"
+          src="GoldFireDragonBrowser.html?gfd-build=20260909-background"
           title="브라우저"
           allowfullscreen=""
           style="flex: 1; width: 100%; border: none"
@@ -1593,6 +1665,8 @@
       </div>
       <div id="brow-resize" title="드래그하여 크기 조절"></div>
     </div>
+
+
 
     <div id="app"></div>
 
@@ -1602,32 +1676,20 @@
       //     로딩 화면이 무한정 떠 있지 않도록 강제로 처리한다.
       // ═══════════════════════════════════════════════════════════════
       window.__bootFailed = false;
+      window.__bootReady = false;
       window.addEventListener("error", function (e) {
-        if (window.__bootFailed) return;
-        window.__bootFailed = true;
-        console.error("Boot-level error:", e.error || e.message);
-        var ls = document.getElementById("loading-screen");
-        if (ls) {
-          ls.innerHTML =
-            '<div style="text-align:center;padding:24px;color:#fff;font-family:-apple-system,sans-serif;">' +
-            '<div style="font-size:16px;font-weight:600;margin-bottom:8px;">앱을 불러오는 중 문제가 발생했습니다</div>' +
-            '<div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:16px;">네트워크 연결을 확인하고 새로고침해주세요.</div>' +
-            '<button onclick="location.reload()" style="padding:10px 20px;background:#10a37f;border:none;border-radius:8px;color:#fff;font-size:14px;cursor:pointer;">새로고침</button>' +
-            "</div>";
-        }
+        // 선택적 CDN/런타임/iframe 리소스 하나가 실패해도 index 전체를 죽이지 않습니다.
+        // 실제 부팅 지연은 아래 watchdog이 처리합니다.
+        console.warn("Optional resource/runtime error:", e.error || e.message || e.filename || "unknown");
       });
       // 8초 안에 부팅이 끝나지 않으면(로딩 화면이 안 사라지면) 강제로 에러 처리
       window.__bootWatchdog = setTimeout(function () {
         var ls = document.getElementById("loading-screen");
         var waitingForKeyInput = document.getElementById("sb-key-overlay");
-        if (ls && !ls.classList.contains("hidden") && !window.__bootFailed && !waitingForKeyInput) {
+        if (ls && !ls.classList.contains("hidden") && !window.__bootFailed) {
           window.__bootFailed = true;
-          ls.innerHTML =
-            '<div style="text-align:center;padding:24px;color:#fff;font-family:-apple-system,sans-serif;">' +
-            '<div style="font-size:16px;font-weight:600;margin-bottom:8px;">로딩이 너무 오래 걸립니다</div>' +
-            '<div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:16px;">네트워크 연결을 확인하고 새로고침해주세요.</div>' +
-            '<button onclick="location.reload()" style="padding:10px 20px;background:#10a37f;border:none;border-radius:8px;color:#fff;font-size:14px;cursor:pointer;">새로고침</button>' +
-            "</div>";
+          ls.classList.add("hidden");
+          console.warn("앱 부팅이 지연되어 로딩 화면을 자동으로 닫았습니다.");
         }
       }, 12000);
 
@@ -1719,7 +1781,8 @@
         if (fromEnv) return fromEnv;
         const fromStorage = getSavedAnonKey();
         if (fromStorage) return fromStorage;
-        return await askAnonKeyViaModal();
+        // 외부 Supabase 키 입력 없이 로컬 IndexedDB 모드로 계속 실행합니다.
+        return "";
       }
 
       // ═══════════════════════════════════════════════════════════════
@@ -1844,7 +1907,8 @@
           auth: {
             getSession: async () => {
               const user = await localforage.getItem("local_user");
-              return { data: { session: user ? { user, access_token: "local-token" } : null } };
+              const access_token = getEnvAnonKey() || getSavedAnonKey() || "";
+              return { data: { session: user ? { user, access_token } : null } };
             },
             onAuthStateChange: (cb) => {
               return { data: { subscription: { unsubscribe() {} } } };
@@ -1932,6 +1996,8 @@
       const blobStore = makeStore({ name: "aichat-files", storeName: "blobs" });
       const metaStore = makeStore({ name: "aichat-files", storeName: "meta" });
       const msgFileStore = makeStore({ name: "aichat-files", storeName: "msg_files" });
+      // 앱 내부 내장 파일 인덱스: 업로드 파일을 앱 전용 영구 저장소에 귀속합니다.
+      const embeddedFileIndexStore = makeStore({ name: "aichat-files", storeName: "embedded_index" });
       const convStore = makeStore({ name: "aichat-offline", storeName: "conversations" });
       const msgStore = makeStore({ name: "aichat-offline", storeName: "messages" });
       // GPT 빌더는 Supabase 설정 여부와 무관하게 이 전용 LocalForage 저장소를 기준으로 동작합니다.
@@ -1972,10 +2038,15 @@
         "rb",
       ]);
       function fileType(file) {
-        if (file.type.startsWith("image/")) return "image";
-        if (file.type.startsWith("text/") || file.type === "application/json") return "text";
-        const e = file.name.split(".").pop()?.toLowerCase() || "";
-        return TEXT_EXTS.has(e) ? "text" : "other";
+        const mime = String(file?.type || "").toLowerCase();
+        const e = String(file?.name || "").split(".").pop()?.toLowerCase() || "";
+        if (mime.startsWith("image/")) return "image";
+        if (mime.startsWith("audio/")) return "audio";
+        if (mime.startsWith("video/")) return "video";
+        if (mime === "application/pdf" || e === "pdf") return "pdf";
+        if (mime.startsWith("text/") || mime === "application/json" || mime.includes("xml") || TEXT_EXTS.has(e)) return "text";
+        if (["doc","docx","xls","xlsx","ppt","pptx","odt","ods","odp","rtf"].includes(e)) return "office";
+        return "binary";
       }
       function fmtSize(b) {
         if (b < 1024) return b + "B";
@@ -1990,7 +2061,7 @@
         if (type === "text") {
           try {
             const raw = await file.text();
-            textContent = raw.length > 50000 ? raw.slice(0, 50000) + "\n...(생략)" : raw;
+            textContent = raw.length > 2000000 ? raw.slice(0, 2000000) + "\n...(생략)" : raw;
           } catch {}
         }
         const meta = {
@@ -2001,10 +2072,19 @@
           type,
           textContent,
           createdAt: new Date().toISOString(),
+          persistent: true,
+          // 런타임에 선택한 파일도 앱 내부 저장소에 귀속되는 "내장" 파일로 관리합니다.
+          embeddedInApp: true,
+          storageScope: "app-internal",
+          vaultVersion: 1,
           ...ctx,
         };
         await blobStore.setItem(id, file.slice(0, file.size, file.type));
         await metaStore.setItem(id, meta);
+        await embeddedFileIndexStore.setItem(id, {
+          id, name: meta.name, mimeType: meta.mimeType, size: meta.size, type: meta.type,
+          createdAt: meta.createdAt, embeddedInApp: true, storageScope: "app-internal",
+        });
         return meta;
       }
       async function getFileBlob(id) {
@@ -2020,6 +2100,17 @@
         } catch {
           return null;
         }
+      }
+      async function deleteAppEmbeddedFile(id) {
+        if (!id) return;
+        await blobStore.removeItem(id).catch(() => {});
+        await metaStore.removeItem(id).catch(() => {});
+        await embeddedFileIndexStore.removeItem(id).catch(() => {});
+      }
+      async function getEmbeddedAppFiles() {
+        const out = [];
+        await embeddedFileIndexStore.iterate(v => { if (v?.embeddedInApp) out.push(v); });
+        return out.sort((a,b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       }
       async function createObjUrl(id) {
         const b = await getFileBlob(id);
@@ -2142,8 +2233,7 @@
         if (!file?.id) return;
         await localGPTFileStore.removeItem(file.id).catch(() => {});
         if (file.local_file_id) {
-          await blobStore.removeItem(file.local_file_id).catch(() => {});
-          await metaStore.removeItem(file.local_file_id).catch(() => {});
+          await deleteAppEmbeddedFile(file.local_file_id);
         }
       }
 
@@ -2237,7 +2327,7 @@
         if (!config.url || !config.anonKey) return null;
         const key = `${config.url}|${config.anonKey}`;
         if (cloudClient && cloudClientKey === key) return cloudClient;
-        const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.49.8");
+        const { createClient } = await import("./offline/supabase.bundle.js");
         cloudClient = createClient(config.url, config.anonKey, {
           auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
         });
@@ -2405,11 +2495,12 @@
         // dropdown open
         dropdownOpen: false,
         // browser panel open (split view with chat)
-        browserOpen: false,
+        browserOpen: true,
         // sidebar drawer open
         sidebarOpen: false,
         // 브라우저 메모리에서 실행되는 로컬 GGUF 모델 상태
-        localModel: { ready: false, loading: false, generating: false, modelFiles: 0 },
+        localModel: { ready: false, loading: false, generating: false, modelFiles: 0, savedModelId: "" },
+        ggufAutoFallback: localStorage.getItem("gfd-gguf-auto-fallback") !== "0",
         account: { connected: false, provider: "" },
         syncPending: 0,
         syncing: false,
@@ -2584,13 +2675,134 @@
       }
 
       // ═══════════════════════════════════════════════════════════════
+      // 📁 UNIVERSAL LOCAL FILE VAULT — read/write/create/view/download
+      // ═══════════════════════════════════════════════════════════════
+      async function listAllLocalFiles() {
+        const out = [];
+        await metaStore.iterate((v) => { if (v?.persistent !== false) out.push(v); });
+        return out.sort((a,b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      }
+      async function deleteLocalFileEverywhere(id) {
+        if (!id) return;
+        await blobStore.removeItem(id).catch(()=>{});
+        await metaStore.removeItem(id).catch(()=>{});
+        await msgFileStore.iterate(async (ids, key) => {
+          if (Array.isArray(ids) && ids.includes(id)) await msgFileStore.setItem(key, ids.filter(x=>x!==id));
+        }).catch(()=>{});
+        const profile = await getDeviceProfile().catch(()=>null);
+        if (profile?.documents) await saveDeviceProfile({documents: profile.documents.filter(x=>x.id!==id)}).catch(()=>{});
+      }
+      function universalFilePreview(meta, blob) {
+        const box=document.getElementById('ufv-preview'); if(!box) return;
+        box.innerHTML='';
+        if(!meta || !blob){ box.textContent='파일을 읽을 수 없습니다.'; return; }
+        const url=URL.createObjectURL(blob);
+        if(meta.type==='image'){ const img=document.createElement('img'); img.src=url; img.alt=meta.name; box.appendChild(img); }
+        else if(meta.type==='video'){ const v=document.createElement('video'); v.controls=true; v.src=url; box.appendChild(v); }
+        else if(meta.type==='audio'){ const a=document.createElement('audio'); a.controls=true; a.src=url; box.appendChild(a); }
+        else if(meta.type==='pdf'){ const f=document.createElement('iframe'); f.src=url; box.appendChild(f); }
+        else if(meta.type==='text'){
+          const ta=document.createElement('textarea'); ta.value=meta.textContent || ''; ta.addEventListener('change',async()=>{
+            const nb=new Blob([ta.value],{type:meta.mimeType||'text/plain'}); await blobStore.setItem(meta.id,nb); meta.textContent=ta.value; meta.size=nb.size; meta.updatedAt=new Date().toISOString(); await metaStore.setItem(meta.id,meta); toast('파일 내용을 저장했습니다.','success');
+          }); box.appendChild(ta);
+        } else { box.innerHTML='<div style="line-height:1.6">📦 '+escHtml(meta.name)+'<br>형식: '+escHtml(meta.mimeType||'알 수 없음')+'<br>이 파일은 원본 바이트 그대로 앱 내부에 영구 보관됩니다. 미리보기가 지원되지 않는 형식은 다운로드/외부 앱으로 열 수 있습니다.</div>'; }
+        box.dataset.url=url;
+      }
+      async function openUniversalFileVault(){
+        const overlay=document.createElement('div'); overlay.className='modal-overlay';
+        overlay.innerHTML=`<div class="modal" style="max-width:920px;width:94vw"><div class="modal-header"><div class="modal-title">📁 앱 내부 파일 보관함</div><button class="modal-close" id="ufv-close">${iconSvg('X',20)}</button></div><div class="universal-file-vault"><div class="ufv-toolbar"><button class="auth-btn primary" id="ufv-add">＋ 파일 가져오기</button><button class="auth-btn outline" id="ufv-create">＋ 새 텍스트 파일</button><button class="auth-btn outline" id="ufv-refresh">새로고침</button><input id="ufv-input" type="file" multiple style="display:none"></div><div class="form-hint">📦 업로드한 파일은 원본 그대로 앱 전용 영구 저장소에 <b>앱 내부 내장 파일</b>로 보관합니다. 재실행·오프라인에서도 유지되며 GPT Builder와 채팅에서 다시 선택할 수 있습니다.</div><div class="ufv-list" id="ufv-list"></div><div class="ufv-preview" id="ufv-preview">파일을 선택하면 미리보기/편집이 표시됩니다.</div></div></div>`;
+        document.body.appendChild(overlay);
+        const close=()=>{ const u=document.getElementById('ufv-preview')?.dataset.url; if(u) URL.revokeObjectURL(u); overlay.remove(); };
+        overlay.querySelector('#ufv-close').onclick=close;
+        const renderList=async()=>{ const list=overlay.querySelector('#ufv-list'); const files=await listAllLocalFiles(); list.innerHTML=files.length?files.map(f=>`<div class="ufv-item"><div class="ufv-name">${escHtml(f.name)} <span class="form-hint">· ${fmtSize(f.size||0)} · ${escHtml(f.type||'binary')}</span></div><div class="ufv-actions"><button class="auth-btn outline ufv-view" data-id="${escHtml(f.id)}">보기</button><button class="auth-btn outline ufv-download" data-id="${escHtml(f.id)}">저장</button><button class="ufv-delete" data-id="${escHtml(f.id)}" style="border:0;background:none;color:#f87171">삭제</button></div></div>`).join(''):'<div class="form-hint">앱 내부에 저장된 파일이 없습니다.</div>'; };
+        await renderList();
+        overlay.querySelector('#ufv-add').onclick=()=>overlay.querySelector('#ufv-input').click();
+        overlay.querySelector('#ufv-input').onchange=async e=>{ const fs=[...(e.target.files||[])]; for(const f of fs) await storeFileLF(f,{vault:true}); e.target.value=''; await renderList(); toast(`${fs.length}개 파일을 앱에 영구 저장했습니다.`,'success'); };
+        overlay.querySelector('#ufv-create').onclick=async()=>{ const name=prompt('새 파일 이름','새파일.txt'); if(!name) return; const text=prompt('파일 내용을 입력하세요',''); const f=new File([text||''],name,{type:'text/plain'}); await storeFileLF(f,{vault:true}); await renderList(); };
+        overlay.querySelector('#ufv-refresh').onclick=renderList;
+        overlay.querySelector('#ufv-list').onclick=async e=>{ const b=e.target.closest('button'); if(!b) return; const meta=await getFileMeta(b.dataset.id); if(!meta) return; if(b.classList.contains('ufv-view')) universalFilePreview(meta,await getFileBlob(meta.id)); if(b.classList.contains('ufv-download')){ const blob=await getFileBlob(meta.id); if(blob){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=meta.name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); } } if(b.classList.contains('ufv-delete')){ if(confirm(`'${meta.name}'을 삭제할까요?`)){ await deleteLocalFileEverywhere(meta.id); await renderList(); } } };
+      }
+
+      // ═══════════════════════════════════════════════════════════════
       // 💬  CHAT
       // ═══════════════════════════════════════════════════════════════
+      // Unified document + image intelligence runtime.
+      // PDF/DOCX/XLSX parsers and OCR are loaded only when needed; API requests still receive original images.
+      const GoldFireDocumentVision = (() => {
+        const loaded = {};
+        const loadScript = (key, src, globalName) => new Promise((resolve, reject) => {
+          if (loaded[key]) return loaded[key].then(resolve, reject);
+          if (window[globalName]) return resolve(window[globalName]);
+          loaded[key] = new Promise((ok, bad) => {
+            const tag = document.createElement("script");
+            tag.src = src;
+            tag.onload = () => window[globalName] ? ok(window[globalName]) : bad(new Error(`${key} runtime unavailable`));
+            tag.onerror = () => bad(new Error(`${key} runtime could not be loaded`));
+            document.head.appendChild(tag);
+          });
+          loaded[key].then(resolve, reject);
+        });
+        const textFile = (file) => /^(text\/|application\/json|application\/xml)/i.test(file.type || "") || /\.(txt|md|csv|json|xml|html?|css|js|py|java|kt|c|cpp|h|log|rtf)$/i.test(file.name || "");
+        async function pdf(file) {
+          const lib = await loadScript("pdfjs", "./offline/pdf.min.js", "pdfjsLib");
+          lib.GlobalWorkerOptions.workerSrc = "./offline/pdf.worker.min.js";
+          const doc = await lib.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+          const pages = [];
+          for (let i = 1; i <= Math.min(doc.numPages, 40); i++) {
+            const page = await doc.getPage(i);
+            const content = await page.getTextContent();
+            pages.push(content.items.map((x) => x.str || "").join(" "));
+          }
+          return pages.join("\n");
+        }
+        async function docx(file) {
+          const lib = await loadScript("mammoth", "./offline/mammoth.browser.min.js", "mammoth");
+          return (await lib.extractRawText({ arrayBuffer: await file.arrayBuffer() })).value || "";
+        }
+        async function sheet(file) {
+          const lib = await loadScript("xlsx", "./offline/xlsx.full.min.js", "XLSX");
+          const book = lib.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+          return book.SheetNames.map((name) => `## ${name}\n${lib.utils.sheet_to_csv(book.Sheets[name])}`).join("\n");
+        }
+        async function ocr(file) {
+          const lib = await loadScript("tesseract", "./offline/tesseract.min.js", "Tesseract");
+          const logger = (m) => window.dispatchEvent(new CustomEvent("goldfire-vision-progress", { detail: m }));
+          if (typeof lib.createWorker === "function") {
+            const worker = await lib.createWorker("eng+kor", 1, {
+              workerPath: "./offline/tesseract-worker.min.js",
+              langPath: "./offline/tessdata",
+              corePath: "./offline/tesseract-core.wasm.js",
+              logger,
+            });
+            const result = await worker.recognize(file);
+            await worker.terminate();
+            return result?.data?.text || "";
+          }
+          const result = await lib.recognize(file, "eng+kor", { logger });
+          return result?.data?.text || "";
+        }
+        async function extract(file) {
+          if (!file) return { text: "", vision: false };
+          try {
+            if (textFile(file)) return { text: (await file.text()).slice(0, 50000), vision: false };
+            if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") return { text: (await pdf(file)).slice(0, 50000), vision: false };
+            if (/\.docx$/i.test(file.name) || file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return { text: (await docx(file)).slice(0, 50000), vision: false };
+            if (/\.(xlsx|xls)$/i.test(file.name) || /spreadsheet|ms-excel/i.test(file.type || "")) return { text: (await sheet(file)).slice(0, 50000), vision: false };
+            if (/^image\//i.test(file.type || "") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name || "")) return { text: (await ocr(file)).slice(0, 20000), vision: true };
+          } catch (error) {
+            console.warn("GoldFire document/vision extraction failed:", file.name, error);
+          }
+          return { text: "", vision: /^image\//i.test(file.type || "") };
+        }
+        return { extract };
+      })();
+      window.GoldFireVision = GoldFireDocumentVision;
       async function processFiles(files, convId) {
         const attachments = [];
         for (const file of files) {
           try {
             const meta = await storeFileLF(file, { conversationId: convId });
+            const intelligence = await GoldFireDocumentVision.extract(file);
             if (meta.type === "image") {
               if (!navigator.onLine) {
                 const b64 = await fileToBase64(meta.id);
@@ -2600,6 +2812,8 @@
                     mimeType: file.type,
                     type: "image",
                     base64: b64,
+                    ocrText: intelligence.text,
+                    visionRuntime: true,
                     localId: meta.id,
                   });
               } else {
@@ -2614,6 +2828,8 @@
                       mimeType: file.type,
                       type: "image",
                       base64: b64,
+                      ocrText: intelligence.text,
+                      visionRuntime: true,
                       localId: meta.id,
                     });
                 } else {
@@ -2637,21 +2853,19 @@
                       mimeType: file.type,
                       type: "image",
                       url: signed.signedUrl,
+                      ocrText: intelligence.text,
+                      visionRuntime: true,
                       localId: meta.id,
                     });
                   }
                 }
               }
             } else if (meta.type === "text") {
-              attachments.push({
-                name: file.name,
-                mimeType: file.type,
-                type: "text",
-                textContent: meta.textContent,
-                localId: meta.id,
-              });
+              attachments.push({ name: file.name, mimeType: file.type, type: "text", textContent: intelligence.text || meta.textContent, extractedText: true, localId: meta.id });
             } else {
-              attachments.push({ name: file.name, mimeType: file.type, type: "other", localId: meta.id });
+              // 모든 파일은 먼저 기기 IndexedDB에 영구 보관합니다.
+              // AI에는 파일 종류/크기/로컬 ID를 전달하고, 지원되는 경우 별도 추출기가 내용을 읽습니다.
+              attachments.push({ name: file.name, mimeType: file.type || "application/octet-stream", type: meta.type, size: file.size, extractedText: !!intelligence.text, textContent: intelligence.text || "", localId: meta.id });
             }
           } catch (e) {
             console.error(e);
@@ -2703,6 +2917,7 @@
         }
       }
 
+      const KOREAN_ONLY_INSTRUCTION = "[언어 정책] 반드시 한국어로만 답변하세요. 사용자가 외국어로 입력하거나 외국어 문서·이미지를 제공해도 내용을 이해한 뒤 한국어로 번역하여 출력하세요. 고유명사·코드·URL·파일명처럼 원문 보존이 필요한 경우를 제외하고 외국어 문장을 그대로 출력하지 마세요.";
       async function sendMessage(content, filesToSend = []) {
         if (!S.user) {
           toast("게스트 로그인 또는 로그인이 필요합니다", "error");
@@ -2715,7 +2930,7 @@
         let convId = S.currentConvId;
         let savedMsgId = null;
         const tempId = `temp-${Date.now()}`;
-        const isGuest = true;
+        const isGuest = !!S.user?.isAnonymous || !navigator.onLine;
 
         // Determine system prompt / instructions
         let sysPrompt = S.currentGPT?.system_prompt;
@@ -2814,35 +3029,36 @@
           await setMsgFiles(savedMsgId, localFileIds).catch(() => {});
         }
 
-        // 오프라인에서는 메시지를 로컬에 보존하고, 연결 복귀 뒤 사용자가 다시 전송할 수 있게 합니다.
-        if (!S.isOnline) {
+        // 오프라인/API 장애 대비: 현재 GPT에 연결된 GGUF → 앱 저장 GGUF 순으로 자동 폴백합니다.
+        if (!navigator.onLine && !S.localModel?.ready) {
+          try { await ensureLocalGGUFForFallback(S.currentGPT?.local_gguf_model_id || ""); } catch (e) { console.warn("offline GGUF fallback 준비 실패:", e); }
+        }
+        if (!navigator.onLine && !S.localModel?.ready) {
           setState({ isStreaming: false, streamingMsg: "" });
-          toast("오프라인 상태입니다. 메시지를 로컬에 저장했습니다.", "info");
+          toast("오프라인 GGUF 엔진을 준비하지 못했습니다. 내장 모델 파일을 확인하세요.", "error", 6000);
           return true;
         }
 
         // 선택된 로컬 GGUF 모델은 네트워크 요청 없이 현재 브라우저에서 실행합니다.
         if (S.localModel?.ready && window.LocalGGUF) {
           try {
-            const localMessages = [];
+            const localMessages = [{ role: "system", content: KOREAN_ONLY_INSTRUCTION }];
             if (sysPrompt) localMessages.push({ role: "system", content: sysPrompt });
             if (instructions) localMessages.push({ role: "system", content: instructions });
             localMessages.push(...currentMsgs.map((message) => ({ role: message.role, content: message.content })));
 
-            const textAttachments = chatAttachments
-              .filter((attachment) => attachment.type === "text" && attachment.textContent)
-              .map((attachment) => `\n\n[첨부 파일: ${attachment.name}]\n${attachment.textContent.slice(0, 8000)}`)
-              .join("");
-            if (textAttachments && localMessages.length) {
-              localMessages[localMessages.length - 1].content += textAttachments;
-            }
+            const fileContext = await buildLocalFileContext(chatAttachments, S.currentGPTFiles, currentMsgs);
+            if (fileContext && localMessages.length) localMessages[localMessages.length - 1].content += fileContext;
             if (chatAttachments.some((attachment) => attachment.type === "image")) {
               toast("현재 로컬 텍스트 모델은 이미지 입력을 분석하지 않습니다. 이미지 없이 텍스트로 응답합니다.", "info", 4500);
             }
 
             const full = await window.LocalGGUF.generate(localMessages, {
+              maxTokens: Number(localStorage.getItem("gfd-gguf-max-tokens") || 768),
+              temperature: Number(localStorage.getItem("gfd-gguf-temperature") || 0.7),
               onToken: (token) => setState({ streamingMsg: `${S.streamingMsg}${token}` }),
             });
+            if (!String(full || "").trim()) throw new Error("로컬 GGUF가 빈 응답을 반환했습니다.");
             await finalizeAssistantResponse(full, convId, isGuest, currentMsgs, trimmed, displayContent);
             setState({ localModel: window.LocalGGUF.getStatus() });
             return true;
@@ -2860,15 +3076,20 @@
           const {
             data: { session },
           } = await sb.auth.getSession();
-          const token = session?.access_token || (isGuest ? "guest-token" : "anon");
+          let token = session?.access_token || "";
+          if (!token || token === "local-token" || token === "guest-token") {
+            token = getEnvAnonKey() || getSavedAnonKey();
+          }
+          if (!token) token = await resolveAnonKey();
+          if (!token) throw new Error("Supabase Anon Key가 필요합니다. 설정 후 다시 시도하세요.");
 
           const resp = await fetch(EDGE_FUNCTION_URL, {
             method: "POST",
             headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
             body: JSON.stringify({
               messages: currentMsgs.map((m) => ({ role: m.role, content: m.content })),
-              systemPrompt: sysPrompt,
-              instructions,
+              systemPrompt: [KOREAN_ONLY_INSTRUCTION, sysPrompt].filter(Boolean).join("\n\n"),
+              instructions: [KOREAN_ONLY_INSTRUCTION, instructions].filter(Boolean).join("\n\n"),
               gptFiles: S.currentGPTFiles.length > 0 ? S.currentGPTFiles : undefined,
               chatAttachments: chatAttachments.length > 0 ? chatAttachments : undefined,
               lastUserContent: trimmed,
@@ -2936,7 +3157,24 @@
           await finalizeAssistantResponse(full, convId, isGuest, currentMsgs, trimmed, displayContent);
           return true;
         } catch (err) {
-          console.error("sendMessage error:", err);
+          console.error("sendMessage API error:", err);
+          // API 실패/타임아웃/서버 오류를 로컬 GGUF로 자동 대체합니다.
+          try {
+            if (!S.localModel?.ready && (S.ggufAutoFallback || S.currentGPT?.local_gguf_model_id)) await ensureLocalGGUFForFallback(S.currentGPT?.local_gguf_model_id || "");
+            if (S.localModel?.ready && window.LocalGGUF) {
+              const fallbackMessages = [];
+              if (sysPrompt) fallbackMessages.push({ role: "system", content: sysPrompt });
+              if (instructions) fallbackMessages.push({ role: "system", content: instructions });
+              fallbackMessages.push(...currentMsgs.map((m) => ({ role: m.role, content: m.content })));
+              const full = await generateWithLocalGGUF(fallbackMessages, chatAttachments, S.currentGPTFiles);
+              await finalizeAssistantResponse(full, convId, isGuest, currentMsgs, trimmed, displayContent);
+              setState({ localModel: window.LocalGGUF.getStatus() });
+              toast("API를 사용할 수 없어 저장된 GGUF 모델로 전환했습니다.", "info", 3500);
+              return true;
+            }
+          } catch (fallbackError) {
+            console.error("GGUF fallback error:", fallbackError);
+          }
           setState({ isStreaming: false, streamingMsg: "" });
           if (!savedMsgId) setState({ messages: S.messages.filter((m) => m.id !== tempId) });
           toast(err instanceof Error ? err.message : "메시지 전송에 실패했습니다", "error");
@@ -2998,6 +3236,7 @@
             system_prompt: formData.systemPrompt,
             instructions: formData.instructions,
             avatar_url: formData.avatarUrl || "",
+            local_gguf_model_id: formData.localGgufModelId || "",
             is_public: false, // 로컬 모드에서는 다른 기기·사용자와 자동 공유하지 않습니다.
             updated_at: now,
           });
@@ -3032,6 +3271,10 @@
 
       async function startGPTChat(gpt) {
         const files = await loadGPTFiles(gpt.id);
+        if (gpt.local_gguf_model_id && !S.localModel?.ready) {
+          try { await ensureLocalGGUFForFallback(gpt.local_gguf_model_id); }
+          catch (error) { toast("연결된 GGUF 모델을 자동 로드하지 못했습니다. 설정에서 다시 불러오세요.", "error", 5000); }
+        }
         const now = new Date().toISOString();
         const conversation = {
           id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -3246,23 +3489,36 @@
       }
 
       async function doGuestLogin() {
-        const user = {
-          id: "guest-" + Math.random().toString(36).substr(2, 9),
-          email: "guest@example.com",
-          username: "게스트",
-        };
-        await localforage.setItem("local_user", user);
-        setState({
-          user: user,
-          view: "chat",
-        });
-        toast("게스트로 로그인했습니다", "success");
-        await loadUserData();
+        try {
+          const device = await getDeviceProfile();
+          const user = await saveDeviceProfile({
+            ...device,
+            username: device.username && device.username !== "사용자" ? device.username : "게스트",
+            email: device.email || "guest@example.com",
+            isAnonymous: true,
+          });
+          await localforage.setItem("local_user", user);
+          setState({ user, view: "chat", account: { connected: false, provider: "" } });
+          toast("게스트로 로그인했습니다", "success");
+          await loadUserData();
+        } catch (error) {
+          console.error("guest login error:", error);
+          toast("게스트 모드 준비에 실패했습니다. 다시 시도해주세요.", "error");
+        }
       }
 
-      function doSkipLogin() {
-        setState({ view: "chat" });
-        toast("로그인 없이 이 기기에서 계속 사용합니다.", "info");
+      async function doSkipLogin() {
+        try {
+          const device = await getDeviceProfile();
+          const user = await saveDeviceProfile({ ...device, isAnonymous: true });
+          await localforage.setItem("local_user", user);
+          setState({ user, view: "chat", account: { connected: false, provider: "" } });
+          toast("로그인 없이 이 기기에서 계속 사용합니다.", "info");
+          await loadUserData();
+        } catch (error) {
+          console.error("skip login error:", error);
+          toast("기기 전용 모드를 준비하지 못했습니다.", "error");
+        }
       }
 
       // ── PROFILE & OPTIONAL ACCOUNT MODALS ─────────────────────────
@@ -3339,6 +3595,12 @@
               </div>
               <div class="form-group"><label class="form-label">아바타 이미지 URL (선택)</label><input class="form-input" id="profile-avatar" type="url" maxlength="2048" value="${escHtml(profile.avatar || "")}" placeholder="https://..."></div>
               <div class="form-group"><label class="form-label">소개 (선택)</label><textarea class="form-input" id="profile-bio" maxlength="280" style="min-height:90px;resize:vertical;">${escHtml(profile.bio || "")}</textarea></div>
+              <div style="margin-top:16px;padding:12px;border:1px solid rgba(168,85,247,.35);border-radius:10px;background:rgba(168,85,247,.06);">
+                <div class="form-label" style="margin-bottom:8px;">Google 계정 설정 (기기 전용)</div>
+                <div class="form-group"><label class="form-label">Google 계정</label><input class="form-input" id="profile-google-email" type="email" autocomplete="username" value="${escHtml(profile.email || "")}" placeholder="name@gmail.com"></div>
+                <div class="form-group"><label class="form-label">비밀번호</label><input class="form-input" id="profile-google-password" type="password" autocomplete="new-password" placeholder="변경할 때만 입력"></div>
+                <div class="form-hint">Supabase나 외부 서버를 사용하지 않습니다. 비밀번호 원문은 저장하지 않습니다.</div>
+              </div>
               <div class="form-group">
                 <label class="form-label">프로필 문서 (선택)</label>
                 <input class="form-input" id="profile-doc-files" type="file" multiple accept=".pdf,.txt,.md,.csv,.json,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.rtf" style="padding:8px;">
@@ -3372,6 +3634,8 @@
           const username = overlay.querySelector("#profile-name").value.trim();
           const avatarUrl = overlay.querySelector("#profile-avatar").value.trim();
           const bio = overlay.querySelector("#profile-bio").value.trim();
+          const googleEmail = overlay.querySelector("#profile-google-email").value.trim();
+          const googlePassword = overlay.querySelector("#profile-google-password").value;
           const avatarFile = overlay.querySelector("#profile-image-file").files?.[0];
           const documentFiles = overlay.querySelector("#profile-doc-files").files;
           if (!username) {
@@ -3386,11 +3650,16 @@
           try {
             const avatarChanges = avatarFile ? await saveProfileAvatar(avatarFile) : {};
             const documents = documentFiles?.length ? await addProfileDocuments(documentFiles) : await getProfileDocuments();
+            if (googleEmail && !googleEmail.includes("@")) throw new Error("Google 계정 이메일을 확인하세요.");
+            if (googlePassword && googlePassword.length < 4) throw new Error("비밀번호는 4자 이상이어야 합니다.");
             const saved = await saveDeviceProfile({
               username,
               // 업로드한 파일이 있으면 로컬 파일이 외부 URL보다 우선합니다.
               avatar: avatarFile ? "" : avatarUrl,
               bio,
+              email: googleEmail,
+              localGoogleAccount: Boolean(googleEmail),
+              ...(googlePassword ? { localPasswordConfigured: true } : {}),
               documents,
               ...avatarChanges,
             });
@@ -3417,9 +3686,9 @@
           <div class="modal-box" style="max-width:540px;">
             <div class="modal-header"><div class="modal-title">선택적 계정 연결</div><button class="modal-close" id="account-close">${iconSvg("X", 20)}</button></div>
             <div class="modal-body">
-              <div class="form-hint" style="margin-bottom:14px;line-height:1.6;">계정 없이도 모든 기능을 사용할 수 있습니다. 계정을 연결하면 이 기기에 쌓인 대화·프로필 변경 대기열을 개인 Supabase 계정으로 동기화할 수 있습니다. Google 공급자와 이메일 가입은 연결한 Supabase 프로젝트에서 활성화되어 있어야 합니다.</div>
-              <div class="form-group"><label class="form-label">Supabase URL</label><input class="form-input" id="account-url" type="url" value="${escHtml(config.url)}" placeholder="https://project.supabase.co"></div>
-              <div class="form-group"><label class="form-label">Supabase Anon Key</label><input class="form-input" id="account-key" type="password" value="${escHtml(config.anonKey)}" placeholder="eyJ..."></div>
+              <div class="form-hint" style="margin-bottom:14px;line-height:1.6;">Google 계정과 비밀번호를 입력하면 외부 서버 없이 이 앱의 저장소에 로컬 계정을 만듭니다. 대화·프로필·커스텀 GPT는 이 기기 내부에만 저장됩니다.</div>
+              <div class="form-group"><label class="form-label">Google 계정</label><input class="form-input" id="account-url" type="email" value="${escHtml(S.user?.email || "")}" autocomplete="username" placeholder="name@gmail.com"></div>
+              <div class="form-group"><label class="form-label">비밀번호</label><input class="form-input" id="account-key" type="password" value="" autocomplete="current-password" placeholder="비밀번호를 입력하세요"></div>
               <div style="display:flex;gap:8px;margin:14px 0 12px;"><button class="auth-btn outline" id="account-google" style="flex:1;margin:0;padding:10px;">Google로 연결</button><button class="auth-btn outline" id="account-sync" style="flex:1;margin:0;padding:10px;">지금 동기화</button></div>
               <div class="auth-divider"><span>또는 이메일 계정</span></div>
               <div class="form-group"><label class="form-label">이메일</label><input class="form-input" id="account-email" type="email" autocomplete="email" placeholder="name@example.com"></div>
@@ -3443,12 +3712,30 @@
         };
         overlay.querySelector("#account-google")?.addEventListener("click", async () => {
           try {
-            status.textContent = "Google 로그인 페이지로 이동합니다…";
-            const client = await prepareClient();
-            const { error } = await client.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.href } });
-            if (error) throw error;
+            status.textContent = "기기 전용 Google 계정을 준비하는 중…";
+            // Google 버튼은 외부 Google/Supabase OAuth를 사용하지 않습니다.
+            // 입력한 계정명으로 앱 내부 IndexedDB/LocalForage 로컬 계정을 생성합니다.
+            const localEmail = overlay.querySelector("#account-url").value.trim();
+            const localPassword = overlay.querySelector("#account-key").value;
+            if (!localEmail || !localEmail.includes("@")) throw new Error("Google 계정을 입력하세요.");
+            if (localPassword.length < 4) throw new Error("비밀번호를 4자 이상 입력하세요.");
+            // 비밀번호 원문은 저장하지 않고 입력 검증에만 사용합니다.
+            const localId = `local-google-${btoa(unescape(encodeURIComponent(localEmail))).replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}-${crypto.randomUUID?.() || Date.now()}`;
+            const local = await saveDeviceProfile({
+              ...(S.user || {}),
+              id: S.user?.localGoogleAccount && S.user?.email === localEmail ? S.user.id : localId,
+              username: localEmail.split("@")[0] || "Google 사용자",
+              email: localEmail,
+              isAnonymous: false,
+              localGoogleAccount: true,
+              localPasswordConfigured: true,
+            });
+            setState({ user: local, account: { connected: true, provider: "google-local" }, syncStatus: "기기 내 Google 계정 모드" });
+            await loadUserData();
+            status.textContent = "Google 계정 모드로 연결했습니다. 모든 데이터는 이 기기 내부에만 저장됩니다.";
+            toast("Google 계정 모드가 켜졌습니다. 데이터는 기기에 저장됩니다.", "success", 5000);
           } catch (error) {
-            status.textContent = error instanceof Error ? error.message : "Google 연결을 시작하지 못했습니다.";
+            status.textContent = error instanceof Error ? error.message : "기기 전용 Google 계정을 만들지 못했습니다.";
           }
         });
         overlay.querySelector("#account-signin")?.addEventListener("click", async () => {
@@ -3548,6 +3835,7 @@
                   </div>
                   <div class="dropdown-item" id="dd-profile">${iconSvg("User", 14)} 프로필 편집</div>
                   <div class="dropdown-item" id="dd-account">${iconSvg("Settings", 14)} ${S.account?.connected ? "계정·동기화 관리" : "계정 연결·동기화"}</div>
+                  <div class="dropdown-item" id="dd-file-vault">${iconSvg("FolderOpen", 14)} 앱 내부 파일 보관함</div>
                   <div class="dropdown-item" id="dd-sync">${iconSvg("RefreshCw", 14)} ${S.syncing ? "동기화 중…" : `동기화 대기 ${S.syncPending || 0}건`}</div>
                   <div class="dropdown-item" id="dd-local-model">${iconSvg("Bot", 14)} 로컬 GGUF 모델</div>
                   ${S.account?.connected ? `<div class="dropdown-sep"></div><div class="dropdown-item danger" id="dd-disconnect">${iconSvg("LogOut", 14)} 계정 연결 해제</div>` : ""}
@@ -3578,7 +3866,7 @@
                   <button class="input-box-btn" id="btn-attach" title="파일 첨부" ${S.isStreaming ? "disabled" : ""}>
                     ${iconSvg("Paperclip", 20)}
                   </button>
-                  <input type="file" id="file-input" multiple style="display:none;">
+                  <input type="file" id="file-input" multiple accept="*/*" style="display:none;">
                   <textarea id="msg-input" rows="1"
                     placeholder="${S.attachedFiles.length > 0 ? "파일에 대해 질문하거나 Enter로 전송..." : "메시지를 입력하세요..."}"
                     ${S.isStreaming ? "disabled" : ""}
@@ -3587,7 +3875,7 @@
                     ${iconSvg("Send", 15)}
                   </button>
                 </div>
-                <div class="input-hint">${S.localModel?.ready ? `로컬 모델 사용 중: ${escHtml(S.localModel.modelName || "GGUF")} · 기기에서만 추론합니다` : "이미지·PDF·텍스트 등 파일 첨부 지원 · 파일당 최대 10MB, 전체 최대 20MB"}</div>
+                <div class="input-hint">${S.localModel?.ready ? `로컬 모델 사용 중: ${escHtml(S.localModel.modelName || "GGUF")} · 기기에서만 추론합니다` : "모든 파일 형식 첨부·영구 보관 지원 · 브라우저/기기 저장공간 한도 내에서 사용"}</div>
               </div>
             </div>
           </div>
@@ -3675,6 +3963,7 @@
               <div class="gpt-info">
                 <div class="gpt-name">${escHtml(g.name)}</div>
                 ${g.description ? `<div class="gpt-desc">${escHtml(g.description)}</div>` : ""}
+                ${g.local_gguf_model_id ? `<div class="gpt-desc" style="color:#60a5fa;">🤖 로컬 GGUF 연결됨</div>` : ""}
               </div>
               <div class="gpt-actions">
                 <button class="gpt-action-btn" data-gpt-chat="${g.id}" title="대화 시작">${iconSvg("MessageSquarePlus", 14)}</button>
@@ -3868,6 +4157,23 @@
         return `saved-gguf-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`;
       }
 
+      async function setGGUFAutoFallback(enabled) {
+        const value = !!enabled;
+        S.ggufAutoFallback = value;
+        localStorage.setItem("gfd-gguf-auto-fallback", value ? "1" : "0");
+        return value;
+      }
+
+      async function getSavedGGUFModelById(id) {
+        if (!id) return null;
+        return await ggufModelStore.getItem(id);
+      }
+
+      async function getPreferredSavedGGUFModel(preferredId = "") {
+        const models = await getSavedGGUFModels();
+        return (preferredId && models.find((m) => m.id === preferredId)) || models[0] || null;
+      }
+
       async function getSavedGGUFModels() {
         const models = [];
         await ggufModelStore.iterate((model) => { if (model?.id) models.push(model); });
@@ -3888,14 +4194,14 @@
           throw new Error("선택한 첫 파일이 유효한 GGUF 헤더를 포함하지 않습니다.");
         }
         const totalBytes = sorted.reduce((sum, file) => sum + file.size, 0);
-        const estimate = await navigator.storage?.estimate?.().catch(() => null);
+        let estimate = null; try { estimate = await navigator.storage?.estimate?.(); } catch (_) { estimate = null; }
         if (estimate?.quota && estimate.usage + totalBytes > estimate.quota * 0.9) {
           throw new Error(`기기 저장 공간이 부족합니다. 현재 브라우저에 약 ${formatModelSize(Math.max(0, estimate.quota - estimate.usage))}만 남아 있습니다.`);
         }
         return { sorted, totalBytes };
       }
 
-      async function persistGGUFModel(files) {
+      async function persistGGUFModel(files, options = {}) {
         const { sorted, totalBytes } = await validateGGUFFiles(files);
         const id = newSavedGGUFId();
         const now = new Date().toISOString();
@@ -3907,7 +4213,7 @@
             await ggufModelFileStore.setItem(key, file.slice(0, file.size, file.type || "application/octet-stream"));
             parts.push({ key, name: file.name, size: file.size, type: file.type || "application/octet-stream", lastModified: file.lastModified || Date.now() });
           }
-          const model = { id, name: sorted[0].name, totalBytes, fileCount: sorted.length, parts, created_at: now, updated_at: now, storage: "localforage" };
+          const model = { id, name: sorted[0].name, totalBytes, fileCount: sorted.length, parts, created_at: now, updated_at: now, storage: "indexeddb", category: options.category || "user-imported", source: options.source || "device-file-picker", embeddedInApp: !!options.embeddedInApp, persistent: true, version: 1 };
           await ggufModelStore.setItem(id, model);
           // 가능한 브라우저에서는 저장소가 자동 정리되지 않도록 지속 저장을 요청합니다.
           await navigator.storage?.persist?.().catch(() => false);
@@ -3919,6 +4225,26 @@
         }
       }
 
+      async function markGGUFModelBundled(model) {
+        if (!model?.id) return null;
+        const next = { ...model, category: "bundled-apk", source: "apk-assets", embeddedInApp: true, persistent: true, updated_at: new Date().toISOString() };
+        await ggufModelStore.setItem(model.id, next);
+        return next;
+      }
+      async function ensureBundledGGUFModel() {
+        const modelName = "sexygpt-uncensored-q3_k_m.gguf";
+        const models = await getSavedGGUFModels().catch(() => []);
+        const existing = models.find((m) => m?.name === modelName || /sexygpt-uncensored-q3_k_m\.gguf/i.test(m?.name || ""));
+        if (existing) return markGGUFModelBundled(existing);
+        const response = await fetch(window.GoldFireOfflineConfig?.model || new URL("models/" + modelName, document.baseURI).href, { cache: "no-store" });
+        if (!response.ok && response.status !== 0) throw new Error("내장 GGUF 모델을 읽을 수 없습니다.");
+        return persistGGUFModel([new File([await response.blob()], modelName, { type: "application/octet-stream" })], { category: "bundled-apk", source: "apk-assets", embeddedInApp: true });
+      }
+      // Expose the same vault to the APK bundled-model bootstrap and GPT Builder.
+      window.persistGGUFModel = persistGGUFModel;
+      window.getSavedGGUFModels = getSavedGGUFModels;
+      window.markGGUFModelBundled = markGGUFModelBundled;
+      window.ensureBundledGGUFModel = ensureBundledGGUFModel;
       async function getSavedGGUFFiles(model) {
         if (!model?.parts?.length) throw new Error("저장된 GGUF 파일 정보를 찾지 못했습니다.");
         const files = [];
@@ -3947,10 +4273,117 @@
         if (!hint) return;
         hint.textContent = S.localModel?.ready
           ? `로컬 모델 사용 중: ${S.localModel.modelName || "GGUF"} · 기기에서만 추론합니다`
-          : "이미지·PDF·텍스트 등 파일 첨부 지원 · 파일당 최대 10MB, 전체 최대 20MB";
+          : "모든 파일 형식 첨부·영구 보관 지원 · 브라우저/기기 저장공간 한도 내에서 사용";
+      }
+
+      function updateChatEngineBadge() {
+        const host = document.querySelector(".input-hint")?.parentElement;
+        if (!host) return;
+        let badge = document.getElementById("gfd-chat-engine-badge");
+        if (!badge) {
+          badge = document.createElement("div");
+          badge.id = "gfd-chat-engine-badge";
+          badge.style.cssText = "margin-top:6px;font-size:11px;opacity:.8;line-height:1.4;";
+          host.appendChild(badge);
+        }
+        const model = S.localModel?.modelName || "저장 GGUF";
+        badge.textContent = S.localModel?.ready ? `🤖 로컬 GGUF 응답 엔진: ${model}` : (S.ggufAutoFallback ? "☁️ API 우선 · API 장애/오프라인 시 저장 GGUF 자동 전환" : "☁️ API 모드");
+      }
+
+      let localGGUFLoadPromise = null;
+      async function ensureLocalGGUFForFallback(preferredModelId = "") {
+        if (localGGUFLoadPromise) return localGGUFLoadPromise;
+        localGGUFLoadPromise = (async () => {
+        if (!window.LocalGGUF) {
+          try {
+            await import("./assets/index-5ZTgpfZO.js");
+          } catch (error) {
+            console.warn("내장 LocalGGUF 모듈 재초기화 실패:", error);
+          }
+          for (let i = 0; i < 120 && !window.LocalGGUF; i += 1) await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+        if (!window.LocalGGUF) throw new Error("내장 GGUF 엔진이 준비되지 않았습니다.");
+        if (S.localModel?.ready) return true;
+        await window.ensureBundledGGUFModel?.().catch((error) => console.warn("fallback bundled GGUF registration:", error));
+        let target = null;
+        let files = [];
+        try {
+          const savedModels = await getSavedGGUFModels();
+          target = savedModels.find((m) => m.id === preferredModelId) || savedModels.find((m) => /sexygpt-uncensored-q3_k_m\.gguf/i.test(m.name || "")) || savedModels[0];
+          if (target) files = await getSavedGGUFFiles(target);
+        } catch (error) { console.warn("영구 저장 모델 읽기 실패, APK 내장 파일로 전환:", error); }
+        if (!files.length) {
+          const response = await fetch(window.GoldFireOfflineConfig?.model || new URL("models/sexygpt-uncensored-q3_k_m.gguf", document.baseURI).href, { cache: "no-store" });
+          if (!response.ok && response.status !== 0) throw new Error("APK 내장 GGUF 파일을 읽지 못했습니다.");
+          files = [new File([await response.blob()], "sexygpt-uncensored-q3_k_m.gguf", { type: "application/octet-stream" })];
+        }
+        let status;
+        try {
+          status = await window.LocalGGUF.load(files, { contextLength: Number(localStorage.getItem("gfd-gguf-context") || 1024), useGpu: localStorage.getItem("gfd-gguf-gpu") === "1" });
+        } catch (savedError) {
+          // 손상된 IndexedDB 모델이 있어도 APK 내장 모델로 복구한다.
+          if (!target) throw savedError;
+          console.warn("저장된 GGUF 로드 실패, APK 내장 모델로 복구합니다:", savedError);
+          await window.LocalGGUF.unload?.().catch(() => {});
+          const embeddedUrl = window.GoldFireOfflineConfig?.model || new URL("models/sexygpt-uncensored-q3_k_m.gguf", document.baseURI).href;
+          const embeddedResponse = await fetch(embeddedUrl, { cache: "no-store" });
+          if (!embeddedResponse.ok && embeddedResponse.status !== 0) throw savedError;
+          const embeddedBlob = await embeddedResponse.blob();
+          const embeddedFile = new File([embeddedBlob], "sexygpt-uncensored-q3_k_m.gguf", { type: "application/octet-stream" });
+          status = await window.LocalGGUF.load([embeddedFile], { contextLength: Number(localStorage.getItem("gfd-gguf-context") || 1024), useGpu: false });
+          target = null;
+        }
+        setState({ localModel: { ...status, savedModelId: target?.id || "bundled-sexygpt-uncensored-q3_k_m" } });
+        return true;
+        })().catch((error) => { localGGUFLoadPromise = null; throw error; });
+        return localGGUFLoadPromise;
+      }
+
+      async function buildLocalFileContext(attachments = [], gptFiles = [], historyMessages = []) {
+        const chunks = [];
+        const add = (name, text, limit = 12000) => {
+          if (!text) return;
+          const clean = String(text).replace(/\u0000/g, "").trim();
+          if (clean) chunks.push(`\n\n[파일: ${name}]\n${clean.slice(0, limit)}`);
+        };
+        for (const a of attachments) {
+          if (a?.textContent) add(a.name, a.textContent, 30000);
+          if (a?.ocrText) add(`${a.name} (OCR/vision)`, a.ocrText, 20000);
+        }
+        for (const f of gptFiles || []) {
+          add(f.file_name || f.name || "GPT 자료", f.file_content || f.textContent, 16000);
+        }
+        // 과거 메시지에 연결된 로컬 파일도 다시 읽어 로컬 GGUF가 문맥을 잃지 않게 합니다.
+        const ids = [...new Set((historyMessages || []).flatMap((m) => Array.isArray(m.localFileIds) ? m.localFileIds : []))];
+        for (const id of ids) {
+          const meta = await getFileMeta(id).catch(() => null);
+          if (meta?.type === "text" && meta.textContent) add(meta.name, meta.textContent, 12000);
+        }
+        return chunks.join("");
+      }
+
+      async function generateWithLocalGGUF(messages, attachments = [], gptFiles = []) {
+        if (!window.LocalGGUF) throw new Error("로컬 GGUF 런타임이 준비되지 않았습니다.");
+        if (!window.LocalGGUF.getStatus?.().ready) {
+          const requested = S.currentGPT?.local_gguf_model_id || "";
+          const loaded = await ensureLocalGGUFForFallback(requested);
+          if (!loaded || !window.LocalGGUF.getStatus?.().ready) throw new Error("오프라인 GGUF 엔진이 모델을 로드하지 못했습니다.");
+        }
+        const localMessages = [{ role: "system", content: KOREAN_ONLY_INSTRUCTION }, ...messages.map((m) => ({ ...m }))];
+        const fileContext = await buildLocalFileContext(attachments, gptFiles, messages);
+        if (fileContext && localMessages.length) {
+          const last = localMessages[localMessages.length - 1];
+          last.content = `${last.content || ""}${fileContext}`;
+        }
+        return window.LocalGGUF.generate(localMessages, {
+          maxTokens: Number(localStorage.getItem("gfd-gguf-max-tokens") || 768),
+          temperature: Number(localStorage.getItem("gfd-gguf-temperature") || 0.7),
+          onToken: (token) => setState({ streamingMsg: `${S.streamingMsg}${token}` }),
+        });
       }
 
       async function renderLocalModelModal() {
+        await window.ensureBundledGGUFModel?.().catch((error) => console.warn("manager bundled GGUF registration:", error));
         const old = document.getElementById("local-model-modal");
         if (old) old.remove();
 
@@ -3976,7 +4409,7 @@
               </div>
               <div class="form-group">
                 <label class="form-label">이 기기에 저장된 모델</label>
-                <div id="saved-gguf-list" style="display:flex;flex-direction:column;gap:7px;">${savedModels.length ? savedModels.map((model) => `<div style="display:flex;gap:8px;align-items:center;padding:8px 9px;border-radius:7px;background:rgba(255,255,255,.05);"><div style="min-width:0;flex:1;"><div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(model.name)}</div><div class="form-hint" style="margin:2px 0 0;">${model.fileCount}개 · ${formatModelSize(model.totalBytes)}</div></div><button type="button" class="auth-btn outline saved-gguf-load" data-id="${escHtml(model.id)}" style="width:auto;margin:0;padding:7px 9px;font-size:12px;">불러오기</button><button type="button" class="saved-gguf-delete" data-id="${escHtml(model.id)}" style="border:0;background:none;color:#f87171;cursor:pointer;padding:6px;">삭제</button></div>`).join("") : '<div class="form-hint">기기에 저장된 GGUF 모델이 없습니다.</div>'}</div>
+                <div id="saved-gguf-list" style="display:flex;flex-direction:column;gap:7px;">${savedModels.length ? savedModels.map((model) => `<div style="display:flex;gap:8px;align-items:center;padding:9px;border-radius:7px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.07);"><div style="min-width:0;flex:1;"><div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🤖 ${escHtml(model.name)}</div><div class="form-hint" style="margin:3px 0 0;">앱 내부 영구저장 · ${model.fileCount}개 · ${formatModelSize(model.totalBytes)}</div></div><button type="button" class="auth-btn outline saved-gguf-load" data-id="${escHtml(model.id)}" style="width:auto;margin:0;padding:7px 9px;font-size:12px;">선택·불러오기</button><button type="button" class="saved-gguf-delete" data-id="${escHtml(model.id)}" style="border:0;background:none;color:#f87171;cursor:pointer;padding:6px;">삭제</button></div>`).join("") : '<div class="form-hint">기기에 저장된 GGUF 모델이 없습니다.</div>'}</div>
               </div>
               <div class="form-group">
                 <label class="form-label">컨텍스트 길이</label>
@@ -3989,6 +4422,10 @@
               </div>
               <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:14px;cursor:pointer;">
                 <input type="checkbox" id="local-model-gpu" checked> 가능하면 WebGPU 가속 사용
+              </label>
+              <label style="display:flex;align-items:flex-start;gap:8px;font-size:13px;margin:10px 0 8px;cursor:pointer;">
+                <input type="checkbox" id="local-model-auto-fallback" ${S.ggufAutoFallback ? "checked" : ""} style="margin-top:3px;">
+                <span><strong>API를 사용할 수 없으면 저장된 GGUF로 자동 전환</strong><br><span class="form-hint">네트워크 오류·서버 오류·API 키 문제 발생 시 앱 내부 모델을 자동으로 사용합니다.</span></span>
               </label>
               <div id="local-model-status" class="form-hint" style="min-height:22px;line-height:1.5;">
                 ${status.ready ? `현재 로드됨: ${escHtml(status.modelName || "GGUF")} ${status.modelSize ? `(${formatModelSize(status.modelSize)})` : ""}` : "아직 로컬 모델이 로드되지 않았습니다."}
@@ -4012,11 +4449,16 @@
           contextLength: Number(overlay.querySelector("#local-model-context")?.value || 2048),
           useGpu: !!overlay.querySelector("#local-model-gpu")?.checked,
         });
+        overlay.querySelector("#local-model-auto-fallback")?.addEventListener("change", (event) => {
+          void setGGUFAutoFallback(event.target.checked);
+        });
         const loadSavedFiles = async (files, savedModel, button) => {
           if (!window.LocalGGUF) throw new Error("로컬 모델 런타임을 아직 준비하지 못했습니다. 잠시 후 다시 시도하세요.");
           if (button) button.disabled = true;
           setState({ localModel: { ...S.localModel, loading: true } });
           try {
+            localStorage.setItem("gfd-gguf-context", String(getLoadOptions().contextLength));
+            localStorage.setItem("gfd-gguf-gpu", getLoadOptions().useGpu ? "1" : "0");
             const modelStatus = await window.LocalGGUF.load(files, {
               ...getLoadOptions(),
               onProgress: (message) => { statusEl.textContent = message; },
@@ -4141,9 +4583,29 @@
               <input class="form-input" id="gf-avatar" type="url" placeholder="https://example.com/avatar.png" value="${escHtml(editing?.avatar_url || "")}">
             </div>
             <div class="form-group">
+              <label class="form-label">🤖 앱 내부 영구저장 GGUF 모델 (선택)</label>
+              <select class="form-input" id="gf-gguf-model">
+                <option value="">선택 안 함 — API 우선 · 장애 시 자동 GGUF</option>
+              </select>
+              <div style="display:flex;gap:7px;margin-top:7px;">
+                <button type="button" class="btn-cancel" id="gf-open-gguf-manager" style="flex:1;">GGUF 관리 열기</button>
+                <button type="button" class="btn-cancel" id="gf-refresh-gguf" style="width:auto;">목록 새로고침</button>
+              </div>
+              <div class="form-hint">앱 내부에 영구 저장된 GGUF를 이 GPT에 연결합니다. API가 실패하거나 오프라인이면 연결된 모델을 자동으로 사용합니다.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">📚 앱 내부 파일 보관함 자료 연결</label>
+              <div style="display:flex;gap:7px;flex-wrap:wrap;">
+                <button type="button" class="btn-cancel" id="gf-pick-vault" style="flex:1;min-width:180px;">📁 저장된 파일 선택</button>
+                <button type="button" class="btn-cancel" id="gf-pick-vault-gguf" style="flex:1;min-width:180px;">🤖 저장된 GGUF 선택</button>
+              </div>
+              <div id="gf-vault-selected" class="file-list" style="margin-top:8px;"></div>
+              <div class="form-hint">파일 보관함에 영구 저장된 원본 파일을 이 GPT의 지식 자료로 연결합니다. 별도 재업로드가 필요 없습니다.</div>
+            </div>
+            <div class="form-group">
               <label class="form-label">파일 첨부 (선택)</label>
               <input type="file" id="gf-file-input" multiple style="display:none;">
-              <div class="upload-zone" id="upload-zone">${iconSvg("Upload", 24)}<div class="upload-zone-text">파일을 클릭하여 업로드</div><div class="upload-zone-hint">텍스트·코드·이미지·PDF 등 모든 형식 지원</div></div>
+              <div class="upload-zone" id="upload-zone">${iconSvg("Upload", 24)}<div class="upload-zone-text">전용 폴더를 선택하여 자료 불러오기</div><div class="upload-zone-hint">/storage/emulated/0/커스텀GPT골드파이어드래곤브라우저/커스텀GPT 리스트/ 및 하위 파일만 읽습니다</div></div>
               <div class="file-list" id="gf-file-list"></div>
             </div>
             <div class="form-group">
@@ -4158,6 +4620,28 @@
         </div>`;
 
         gptModalPendingDeletes = [];
+        const ggufSelect = document.getElementById("gf-gguf-model");
+        if (ggufSelect) {
+          await window.ensureBundledGGUFModel?.().catch((error) => console.warn("Builder bundled GGUF registration:", error));
+          const savedModels = await getSavedGGUFModels().catch(() => []);
+          const visibleModels = savedModels.length ? savedModels : [{ id: "bundled-sexygpt-uncensored-q3_k_m", name: "sexygpt-uncensored-q3_k_m.gguf", totalBytes: 97672640, bundledUnavailable: true }];
+          ggufSelect.innerHTML = `<option value="">선택 안 함 — API 우선 · 장애 시 자동 GGUF</option>` + visibleModels.map((m) =>
+            `<option value="${escHtml(m.id)}">${escHtml(m.name)} · ${formatModelSize(m.totalBytes)}</option>`).join("");
+          const bundled = visibleModels.find((m) => /sexygpt-uncensored-q3_k_m\.gguf/i.test(m?.name || ""));
+          ggufSelect.value = editing?.local_gguf_model_id || bundled?.id || "";
+          const refreshGGUFSelect = async () => {
+            const current = ggufSelect.value;
+            await window.ensureBundledGGUFModel?.().catch(() => {});
+            const models = await getSavedGGUFModels().catch(() => []);
+            const visible = models.length ? models : [{ id: "bundled-sexygpt-uncensored-q3_k_m", name: "sexygpt-uncensored-q3_k_m.gguf", totalBytes: 97672640 }];
+            ggufSelect.innerHTML = `<option value="">선택 안 함 — API 우선 · 장애 시 자동 GGUF</option>` + visible.map((m) => `<option value="${escHtml(m.id)}">🤖 ${escHtml(m.name)} · ${formatModelSize(m.totalBytes)}</option>`).join("");
+            ggufSelect.value = (visible.some((m) => m.id === current) ? current : (editing?.local_gguf_model_id || visible.find((m) => /sexygpt-uncensored-q3_k_m\.gguf/i.test(m.name || ""))?.id || ""));
+          };
+          document.getElementById("gf-refresh-gguf")?.addEventListener("click", () => { void refreshGGUFSelect(); });
+          document.getElementById("gf-open-gguf-manager")?.addEventListener("click", () => {
+            closeBuilder().then(() => openLocalModelModal());
+          });
+        }
         // 편집 시: DB에서 기존 파일 로드
         if (editing) {
           const existingFiles = await loadGPTFiles(editing.id);
@@ -4167,6 +4651,39 @@
           gptModalFiles = [...gptBuilderFiles];
         }
         renderGPTFileList();
+
+        async function pickVaultFiles(ggufOnly = false) {
+          const all = await listAllLocalFiles().catch(() => []);
+          const candidates = ggufOnly ? all.filter(f => /\.gguf$/i.test(f.name || "") || /gguf/i.test(f.type || "")) : all;
+          if (!candidates.length) { toast(ggufOnly ? "앱 내부에 저장된 GGUF가 없습니다." : "앱 내부 파일 보관함이 비어 있습니다.", "error"); return; }
+          const labels = candidates.map((f,i) => `${i+1}. ${f.name} (${fmtSize(f.size||0)})`).join("\n");
+          const answer = prompt(`GPT에 연결할 ${ggufOnly ? "GGUF 모델" : "파일"} 번호를 입력하세요. 여러 개는 쉼표로 구분합니다.\n\n${labels}`, "1");
+          if (!answer) return;
+          const indexes = [...new Set(answer.split(/[,\s]+/).map(x => Number(x)-1).filter(i => i >= 0 && i < candidates.length))];
+          for (const i of indexes) {
+            const f = candidates[i];
+            if (ggufOnly) {
+              ggufSelect.value = f.id;
+              const saved = await getSavedGGUFModels().catch(() => []);
+              if (!saved.some(m => m.id === f.id)) {
+                const match = saved.find(m => (m.name||"").toLowerCase() === (f.name||"").toLowerCase());
+                if (match) ggufSelect.value = match.id;
+              }
+            } else if (!gptModalFiles.some(x => x.local_file_id === f.id)) {
+              gptModalFiles.push({ id:`vault-gpt-file-${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`, custom_gpt_id:"", file_name:f.name, file_size:f.size||0, mime_type:f.type||"application/octet-stream", file_content:f.textContent||"", local_file_id:f.id, created_at:f.createdAt||new Date().toISOString(), isLocal:true, fromVault:true });
+            }
+          }
+          renderGPTFileList();
+          renderVaultSelected();
+        }
+        function renderVaultSelected() {
+          const el=document.getElementById("gf-vault-selected"); if(!el) return;
+          const vault=gptModalFiles.filter(f=>f.fromVault);
+          el.innerHTML=vault.length ? vault.map(f=>`<div class="file-list-item"><div class="file-list-name">📌 ${escHtml(f.file_name)}</div><span class="file-list-size">${fmtSize(f.file_size||0)}</span></div>`).join("") : '<div class="form-hint">연결된 보관함 파일이 없습니다.</div>';
+        }
+        document.getElementById("gf-pick-vault")?.addEventListener("click",()=>{ void pickVaultFiles(false); });
+        document.getElementById("gf-pick-vault-gguf")?.addEventListener("click",()=>{ void pickVaultFiles(true); });
+        renderVaultSelected();
 
         const closeBuilder = async () => {
           await discardUnsavedGPTFiles();
@@ -4178,10 +4695,43 @@
         overlay.addEventListener("click", (e) => {
           if (e.target === overlay) void closeBuilder();
         });
-        document
-          .getElementById("upload-zone")
-          .addEventListener("click", () => document.getElementById("gf-file-input").click());
-        document.getElementById("gf-file-input").addEventListener("change", handleGPTFileUpload);
+        const gptUploadZone = document.getElementById("upload-zone");
+        const gptFileInput = document.getElementById("gf-file-input");
+        gptUploadZone.addEventListener("click", () => {
+          if (window.GoldFireNative?.openGptBuilderFolder) {
+            window.GoldFireNative.openGptBuilderFolder();
+          } else {
+            gptFileInput.click();
+          }
+        });
+        gptFileInput.addEventListener("change", handleGPTFileUpload);
+        window.__goldfireNativeGptUploadDone = () => {
+          try {
+            const bridge = window.GoldFireNative;
+            const count = Number(bridge?.getGptBuilderUploadCount?.() || 0);
+            if (!count) return;
+            const transfer = new DataTransfer();
+            for (let index = 0; index < count; index += 1) {
+              const chunks = [];
+              for (let offset = 0; ; offset += 24576) {
+                const encoded = bridge.getGptBuilderUploadChunk(index, offset, 24576);
+                if (!encoded) break;
+                const binary = atob(encoded);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+                chunks.push(bytes);
+                if (encoded.length < 32768) break;
+              }
+              const name = bridge.getGptBuilderUploadName(index) || `folder-file-${index + 1}`;
+              const type = bridge.getGptBuilderUploadMime(index) || "application/octet-stream";
+              transfer.items.add(new File([new Blob(chunks, { type })], name, { type }));
+            }
+            gptFileInput.files = transfer.files;
+            gptFileInput.dispatchEvent(new Event("change", { bubbles: true }));
+          } catch (error) {
+            toast("전용 폴더 자료를 불러오지 못했습니다.", "error");
+          }
+        };
         document.getElementById("modal-save").addEventListener("click", async () => {
           const saveButton = document.getElementById("modal-save");
           const formData = {
@@ -4190,6 +4740,7 @@
             systemPrompt: document.getElementById("gf-sys").value.trim(),
             instructions: document.getElementById("gf-inst").value.trim(),
             avatarUrl: document.getElementById("gf-avatar").value.trim(),
+            localGgufModelId: document.getElementById("gf-gguf-model")?.value || "",
             isPublic: document.getElementById("gf-public").checked,
           };
           if (!formData.name || !formData.systemPrompt || !formData.instructions) {
@@ -4273,8 +4824,8 @@
           let total = alreadySelected;
           for (const file of files) {
             try {
-              if (!file.size || file.size > 10 * 1024 * 1024) throw new Error("파일당 10MB 이하만 첨부할 수 있습니다.");
-              if (total + file.size > 20 * 1024 * 1024) throw new Error("GPT 첨부 파일 총합은 20MB 이하만 저장할 수 있습니다.");
+              if (!file.size || file.size > 100 * 1024 * 1024) throw new Error("파일당 100MB 이하만 전용 폴더 자료로 읽을 수 있습니다.");
+              if (total + file.size > 500 * 1024 * 1024) throw new Error("전용 폴더 자료 총합은 500MB 이하만 읽을 수 있습니다.");
               const meta = await storeFileLF(file, { ownerId: S.user?.id, role: "custom-gpt-file" });
               gptModalFiles.push({
                 id: `pending-gpt-file-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`}`,
@@ -4423,10 +4974,8 @@
           });
         }
 
-        // Close dropdown on outside click
-        document.getElementById("content-area")?.addEventListener("click", () => {
-          if (S.dropdownOpen) setState({ dropdownOpen: false });
-        });
+        // document-level outside-click handler above already handles this.
+        // A second content-area handler would immediately close the menu after opening.
       }
 
       async function doSend() {
@@ -4559,7 +5108,36 @@
       // ═══════════════════════════════════════════════════════════════
       // 🌐  브라우저 오버레이
       // ═══════════════════════════════════════════════════════════════
-      const BROWSER_HOME_URL = "https://cdn.jsdelivr.net/gh/luckysexyqueen/AdultNsfwChatGptFullUnCensoredGoldFireDragonBrowser@a917d3c6dd66914167743aeb9c1ecea5f40d2ee3/GoldFireDragonBrowser.html";
+
+      async function openVpnSettings() {
+        document.getElementById("vpn-settings-modal")?.remove();
+        const native = window.GoldFireNative;
+        const modal = document.createElement("div");
+        modal.id = "vpn-settings-modal";
+        modal.style.cssText = "position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px;";
+        modal.innerHTML = `<div style="width:min(460px,100%);background:#202124;color:#fff;border:1px solid #555;border-radius:14px;padding:20px;box-shadow:0 20px 80px #000;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"><strong>VPN 설정</strong><button id="vpn-close" style="background:none;border:0;color:#fff;font-size:22px;cursor:pointer;">×</button></div>
+          <div id="vpn-status" style="font-size:13px;color:#bbb;margin-bottom:14px;">상태 확인 중…</div>
+          <label style="display:block;font-size:12px;color:#bbb;margin-bottom:6px;">VPN 프로필</label>
+          <select id="vpn-profile" style="width:100%;padding:10px;border-radius:8px;background:#303134;color:#fff;border:1px solid #666;"><option>프로필 불러오는 중…</option></select>
+          <div style="display:flex;gap:8px;margin-top:16px;"><button id="vpn-install" style="flex:1;padding:10px;border:0;border-radius:8px;background:#555;color:#fff;cursor:pointer;">OpenVPN 설치</button><button id="vpn-connect" style="flex:1;padding:10px;border:0;border-radius:8px;background:#10a37f;color:#fff;cursor:pointer;">연결</button><button id="vpn-stop" style="flex:1;padding:10px;border:0;border-radius:8px;background:#b33;color:#fff;cursor:pointer;">해제</button></div>
+          <div style="font-size:11px;color:#999;margin-top:12px;">Windows Electron에서는 내장 OpenVPN 프로필을 사용합니다. 브라우저/Android에서는 시스템 VPN 기능을 사용하세요.</div>
+        </div>`;
+        document.body.appendChild(modal);
+        const status=modal.querySelector("#vpn-status"), select=modal.querySelector("#vpn-profile");
+        modal.querySelector("#vpn-close").onclick=()=>modal.remove();
+        if (!native) { status.textContent="현재 브라우저 모드입니다. Windows 포터블 앱에서 VPN 기능을 사용할 수 있습니다."; select.innerHTML="<option>Windows 앱에서 프로필 사용</option>"; return; }
+        try {
+          const profiles=await native.getOvpnList();
+          select.innerHTML=Object.keys(profiles).map(n=>`<option value="${n.replace(/&/g,"&amp;").replace(/</g,"&lt;")}">${n}</option>`).join("") || '<option value="">프로필 없음</option>';
+          const state=await native.getVpnStatus(); status.textContent=`상태: ${state?.status || "DISCONNECTED"}`;
+        } catch(e) { status.textContent=`VPN 상태를 읽지 못했습니다: ${e.message}`; }
+        modal.querySelector("#vpn-install").onclick=async()=>{ const r=await native.installOpenVpn(); status.textContent=r.message||r.error||"설치 요청 완료"; };
+        modal.querySelector("#vpn-connect").onclick=async()=>{ const r=await native.startVpn(select.value); status.textContent=r.status||r.error||"연결 요청 완료"; };
+        modal.querySelector("#vpn-stop").onclick=async()=>{ const r=await native.stopVpn(); status.textContent=r.status||r.error||"해제 요청 완료"; };
+      }
+
+      const BROWSER_HOME_URL = "GoldFireDragonBrowser.html?gfd-build=20260909-background";
 
       function openBrowserOverlay() {
         const brow = document.getElementById("brow");
@@ -4649,17 +5227,17 @@
       // 🚀  BOOT
       // ═══════════════════════════════════════════════════════════════
       (async () => {
-        await supabaseReady; // anon key 해석 + Supabase 클라이언트 준비를 기다린다 (필요 시 입력폼 대기)
+        await withTimeout(supabaseReady, 2500, undefined); // 오프라인에서는 Supabase 준비를 기다리지 않고 로컬 모드로 진행
         bindBrowserOverlay();
         try {
           try {
-            await Promise.all([
+            await withTimeout(Promise.all([
               blobStore.ready(),
               metaStore.ready(),
               msgFileStore.ready(),
               convStore.ready(),
               msgStore.ready(),
-            ]);
+            ]), 2500, undefined);
           } catch (e) {
             console.warn("LocalForage init:", e);
           }
@@ -4668,11 +5246,31 @@
           if (S.user) {
             await withTimeout(loadUserData(), 8000, undefined);
           }
+          if (!navigator.onLine && window.LocalGGUF) {
+            await withTimeout(ensureLocalGGUFForFallback(""), 120000, false).catch((error) => console.warn("오프라인 GGUF 사전 로드 실패:", error));
+          }
         } catch (e) {
           console.warn("Boot error:", e);
         } finally {
           if (S.loading) setState({ loading: false, view: S.user ? "chat" : "auth" });
           render();
+          // 기존 버전에서 이미 저장된 파일도 v26 앱 내장 파일 인덱스로 자동 편입합니다.
+      async function migrateExistingFilesToEmbeddedIndex() {
+        try {
+          const existing = [];
+          await metaStore.iterate(v => { if (v?.id && (v.persistent || v.vault || v.local_file_id)) existing.push(v); });
+          for (const m of existing) {
+            if (!m.embeddedInApp || m.storageScope !== "app-internal") {
+              const next = { ...m, embeddedInApp: true, storageScope: "app-internal", vaultVersion: 1 };
+              await metaStore.setItem(m.id, next);
+              await embeddedFileIndexStore.setItem(m.id, { id:m.id, name:next.name, mimeType:next.mimeType, size:next.size, type:next.type, createdAt:next.createdAt, embeddedInApp:true, storageScope:"app-internal" });
+            }
+          }
+        } catch (e) { console.warn("내장 파일 인덱스 마이그레이션 실패:", e); }
+      }
+      try { await migrateExistingFilesToEmbeddedIndex(); } catch {}
+      window.__bootReady = true;
+          clearTimeout(window.__bootWatchdog);
           document.getElementById("loading-screen").classList.add("hidden");
         }
       })();
@@ -4684,5 +5282,31 @@
         });
       }
     </script>
-  </body>
+  <script>
+(function GoldFireAndroidLocalEngineGuard(){
+  const isAndroid=/Android|wv|WebView/i.test(navigator.userAgent||"");
+  if(!isAndroid) return;
+  const MODEL="sexygpt-uncensored-q3_k_m.gguf";
+  const MODEL_URL=()=>new URL("./models/"+MODEL,document.baseURI).href;
+  let timer=0;
+  async function boot(){
+    if(!window.LocalGGUF){ timer=setTimeout(boot,300); return; }
+    if(window.LocalGGUF.getStatus?.().ready) return;
+    try{
+      const r=await fetch(MODEL_URL(),{cache:"no-store"});
+      if(!r.ok && r.status!==0) throw new Error("내장 GGUF 읽기 실패: HTTP "+r.status);
+      const b=await r.blob();
+      const f=new File([b],MODEL,{type:"application/octet-stream"});
+      await window.LocalGGUF.load([f],{contextLength:1024,useGpu:false,onProgress:(m)=>window.dispatchEvent(new CustomEvent("goldfire-local-progress",{detail:String(m)}))});
+      window.dispatchEvent(new CustomEvent("goldfire-local-ready",{detail:window.LocalGGUF.getStatus()}));
+    }catch(e){
+      console.error("[GoldFire] Android local GGUF boot failed",e);
+      window.dispatchEvent(new CustomEvent("goldfire-local-error",{detail:String(e?.message||e)}));
+    }
+  }
+  window.addEventListener("goldfire-bundled-model-ready",()=>setTimeout(boot,0));
+  setTimeout(boot,800);
+})();
+</script>
+</body>
 </html>
