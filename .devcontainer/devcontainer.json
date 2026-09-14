@@ -1,0 +1,6 @@
+"ghcr.io/devcontainers-extra/features/browserify:2": {}
+"ghcr.io/helpers4/devcontainer/package-auto-install:1": {}
+"ghcr.io/devcontainers-extra/features/express-generator:2": {}
+"ghcr.io/devcontainers-extra/features/http-server:1": {}
+"ghcr.io/devcontainers-extra/features/live-server:1": {}
+
