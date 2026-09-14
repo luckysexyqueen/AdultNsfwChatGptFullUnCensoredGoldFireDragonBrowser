@@ -1,5 +1,5 @@
 const CACHE_NAME = 'ai-chat-v1';
-const STATIC_CACHE = 'static-v1';
+const STATIC_CACHE = 'static-v2';
 const DYNAMIC_CACHE = 'dynamic-v1';
 
 // 캐시할 정적 파일 목록
@@ -40,6 +40,11 @@ self.addEventListener('activate', (event) => {
 // Fetch 이벤트 - 네트워크 우선, 실패 시 캐시
 self.addEventListener('fetch', (event) => {
   const { request } = event;
+
+  // 앱 문서와 내장 브라우저는 항상 최신 수정본을 사용합니다.
+  if (request.destination === 'document' || request.url.includes('GoldFireDragonBrowser.html')) {
+    return;
+  }
   
   // API 요청은 캐싱하지 않음
   if (request.url.includes('/functions/v1/') || request.url.includes('/rest/v1/')) {

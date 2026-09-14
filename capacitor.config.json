@@ -1,0 +1,6 @@
+{
+	"appId": "com.goldfiredragon.browser",
+	"appName": "GoldFireDragon Browser",
+	"webDir": "dist",
+	"bundledWebRuntime": false
+}
