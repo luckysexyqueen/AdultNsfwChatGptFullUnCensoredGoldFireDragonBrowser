@@ -21,15 +21,15 @@
       });
     </script>
     <title>AI Chat - 무제한 대화</title>
-    <link rel="icon" type="image/png" href="/favicon.ico" />
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" href="./assets/icon-CV9Zx_iX.png" />
+    <link rel="manifest" href="./assets/manifest-BnsIcC0n.json" />
+    <link rel="apple-touch-icon" href="./assets/icon-CV9Zx_iX.png" />
     <!-- 선택 사항: 배포 환경의 Supabase 공개 키 설정. 파일이 없어도 로컬 모드로 계속 실행됩니다. -->
-    <script src="/vpn-index-control.js" defer></script>
-    <script src="/boot-guard.js" defer></script>
+    <script src="./vpn-index-control.js" defer></script>
+    <script src="./boot-guard.js" defer></script>
     <!-- 로컬 GGUF 런타임은 React/Vite 번들에서 로드합니다. standalone index에서 원본 TS를 직접 실행하지 않습니다. -->
-      <script src="/inapp-browser.js"></script>
-    <script type="module" src="/src/main.tsx"></script>
+      <script src="./inapp-browser.js"></script>
+    <script type="module" crossorigin src="./assets/index-5ZTgpfZO.js"></script>
     <script>
       // Install the bundled GGUF into the same IndexedDB vault used by the local AI UI.
       // The model is copied once; inference remains handled by the existing LocalGGUF/WASM runtime.
@@ -320,7 +320,7 @@
       })();
     </script>
     <!-- Lucide Icons -->
-    <script src="/offline/lucide.min.js"></script>
+    <script src="./offline/lucide.min.js"></script>
     <!-- Font Awesome (브라우저 오버레이 아이콘용) -->
     <link rel="stylesheet" href="./offline/fontawesome-6.5.1.css" />
     <link
@@ -2327,7 +2327,7 @@
         if (!config.url || !config.anonKey) return null;
         const key = `${config.url}|${config.anonKey}`;
         if (cloudClient && cloudClientKey === key) return cloudClient;
-        const { createClient } = await import("/offline/supabase.bundle.js");
+        const { createClient } = await import("./offline/supabase.bundle.js");
         cloudClient = createClient(config.url, config.anonKey, {
           auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
         });
@@ -4296,7 +4296,7 @@
         localGGUFLoadPromise = (async () => {
         if (!window.LocalGGUF) {
           try {
-            // LocalGGUF is loaded via main bundle
+            await import("./assets/index-5ZTgpfZO.js");
           } catch (error) {
             console.warn("내장 LocalGGUF 모듈 재초기화 실패:", error);
           }
