@@ -6,7 +6,7 @@
   if (window.__goldfireOfflineGGUFBoot) return;
   window.__goldfireOfflineGGUFBoot = true;
 
-  const modelName = "sexygpt-uncensored-q3_k_m.gguf";
+  const modelName = "sexygpt-uncensored-q4_0.gguf";
   const modelUrl = new URL("./models/" + modelName, document.baseURI).href;
   let started = false;
 
