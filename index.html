@@ -21,15 +21,15 @@
       });
     </script>
     <title>AI Chat - 무제한 대화</title>
-    <link rel="icon" type="image/png" href="/favicon.ico" />
-    <link rel="manifest" href="/manifest.json" />
-    <link rel="apple-touch-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" href="./assets/icon-CV9Zx_iX.png" />
+    <link rel="manifest" href="./assets/manifest-BnsIcC0n.json" />
+    <link rel="apple-touch-icon" href="./assets/icon-CV9Zx_iX.png" />
     <!-- 선택 사항: 배포 환경의 Supabase 공개 키 설정. 파일이 없어도 로컬 모드로 계속 실행됩니다. -->
-    <script src="/vpn-index-control.js" defer></script>
-    <script src="/boot-guard.js" defer></script>
-    <!-- 로컬 GGUF 런타임은 React/Vite 번들에서 로드합니다. standalone index에서 원본 TS를 직접 실행하지 않습니다. -->
-      <script src="/inapp-browser.js"></script>
-    <script type="module" src="/src/main.tsx"></script>
+    <script src="./vpn-index-control.js" defer=""></script>
+    <script src="./boot-guard.js" defer=""></script>
+    <!-- 로컬 GGUF 런타임은 위의 오프라인 파일 또는 아래의 로컬 번들에서만 로드합니다. -->
+    <script src="./inapp-browser.js"></script>
+    <script type="module" crossorigin="" src="./assets/index-5ZTgpfZO.js"></script>
     <script>
       // Install the bundled GGUF into the same IndexedDB vault used by the local AI UI.
       // The model is copied once; inference remains handled by the existing LocalGGUF/WASM runtime.
@@ -320,19 +320,15 @@
       })();
     </script>
     <!-- Lucide Icons -->
-    <script src="/offline/lucide.min.js"></script>
+    <script src="./offline/lucide.min.js"></script>
     <!-- Font Awesome (브라우저 오버레이 아이콘용) -->
     <link rel="stylesheet" href="./offline/fontawesome-6.5.1.css" />
-    <link
-      rel="stylesheet"
-      href="./offline/gamefont.css"
-    />
+    <link rel="stylesheet" href="./offline/gamefont.css" />
 
     <style>
       @font-face {
         font-family: "acutehoney";
-        src: url("./offline/fonts/acutehoney.woff")
-          format("woff");
+        src: url("./offline/fonts/acutehoney.woff") format("woff");
         font-weight: normal;
         font-style: normal;
         font-display: swap;
@@ -1657,7 +1653,7 @@
         </div>
         <iframe
           id="brow-iframe"
-          src="GoldFireDragonBrowser.html?gfd-build=20260909-background"
+          src="./GoldFireDragonBrowser.html?gfd-build=20260909-background"
           title="브라우저"
           allowfullscreen=""
           style="flex: 1; width: 100%; border: none"
@@ -4294,48 +4290,82 @@
       async function ensureLocalGGUFForFallback(preferredModelId = "") {
         if (localGGUFLoadPromise) return localGGUFLoadPromise;
         localGGUFLoadPromise = (async () => {
-        if (!window.LocalGGUF) {
-          try {
-            await import(/* @vite-ignore */ "/assets/index-5ZTgpfZO.js");
-          } catch (error) {
-            console.warn("내장 LocalGGUF 모듈 재초기화 실패:", error);
+          if (!window.LocalGGUF) {
+            try {
+              await import("./assets/index-5ZTgpfZO.js");
+            } catch (error) {
+              console.warn("내장 LocalGGUF 모듈 재초기화 실패:", error);
+            }
+            for (let i = 0; i < 120 && !window.LocalGGUF; i += 1)
+              await new Promise((resolve) => setTimeout(resolve, 250));
           }
-          for (let i = 0; i < 120 && !window.LocalGGUF; i += 1) await new Promise((resolve) => setTimeout(resolve, 250));
-        }
-        if (!window.LocalGGUF) throw new Error("내장 GGUF 엔진이 준비되지 않았습니다.");
-        if (S.localModel?.ready) return true;
-        await window.ensureBundledGGUFModel?.().catch((error) => console.warn("fallback bundled GGUF registration:", error));
-        let target = null;
-        let files = [];
-        try {
-          const savedModels = await getSavedGGUFModels();
-          target = savedModels.find((m) => m.id === preferredModelId) || savedModels.find((m) => /sexygpt-uncensored-q3_k_m\.gguf/i.test(m.name || "")) || savedModels[0];
-          if (target) files = await getSavedGGUFFiles(target);
-        } catch (error) { console.warn("영구 저장 모델 읽기 실패, APK 내장 파일로 전환:", error); }
-        if (!files.length) {
-          const response = await fetch(window.GoldFireOfflineConfig?.model || new URL("models/sexygpt-uncensored-q3_k_m.gguf", document.baseURI).href, { cache: "no-store" });
-          if (!response.ok && response.status !== 0) throw new Error("APK 내장 GGUF 파일을 읽지 못했습니다.");
-          files = [new File([await response.blob()], "sexygpt-uncensored-q3_k_m.gguf", { type: "application/octet-stream" })];
-        }
-        let status;
-        try {
-          status = await window.LocalGGUF.load(files, { contextLength: Number(localStorage.getItem("gfd-gguf-context") || 1024), useGpu: localStorage.getItem("gfd-gguf-gpu") === "1" });
-        } catch (savedError) {
-          // 손상된 IndexedDB 모델이 있어도 APK 내장 모델로 복구한다.
-          if (!target) throw savedError;
-          console.warn("저장된 GGUF 로드 실패, APK 내장 모델로 복구합니다:", savedError);
-          await window.LocalGGUF.unload?.().catch(() => {});
-          const embeddedUrl = window.GoldFireOfflineConfig?.model || new URL("models/sexygpt-uncensored-q3_k_m.gguf", document.baseURI).href;
-          const embeddedResponse = await fetch(embeddedUrl, { cache: "no-store" });
-          if (!embeddedResponse.ok && embeddedResponse.status !== 0) throw savedError;
-          const embeddedBlob = await embeddedResponse.blob();
-          const embeddedFile = new File([embeddedBlob], "sexygpt-uncensored-q3_k_m.gguf", { type: "application/octet-stream" });
-          status = await window.LocalGGUF.load([embeddedFile], { contextLength: Number(localStorage.getItem("gfd-gguf-context") || 1024), useGpu: false });
-          target = null;
-        }
-        setState({ localModel: { ...status, savedModelId: target?.id || "bundled-sexygpt-uncensored-q3_k_m" } });
-        return true;
-        })().catch((error) => { localGGUFLoadPromise = null; throw error; });
+          if (!window.LocalGGUF) throw new Error("내장 GGUF 엔진이 준비되지 않았습니다.");
+          // 이미 다른 모델이 로드된 상태에서 GPT를 바꾸면 기존 모델을 그대로 쓰지 않습니다.
+          // 모델 ID를 알 수 없는 내장 모델은 선호 모델이 지정된 경우에만 교체합니다.
+          if (S.localModel?.ready) {
+            const loadedId = S.localModel.savedModelId || "";
+            if (!preferredModelId || loadedId === preferredModelId) return true;
+            await window.LocalGGUF.unload?.().catch(() => {});
+            setState({ localModel: { ready: false, loading: false, generating: false, modelFiles: 0, savedModelId: "" } });
+          }
+          await window
+            .ensureBundledGGUFModel?.()
+            .catch((error) => console.warn("fallback bundled GGUF registration:", error));
+          let target = null;
+          let files = [];
+          try {
+            const savedModels = await getSavedGGUFModels();
+            target =
+              savedModels.find((m) => m.id === preferredModelId) ||
+              savedModels.find((m) => /sexygpt-uncensored-q3_k_m\.gguf/i.test(m.name || "")) ||
+              savedModels[0];
+            if (target) files = await getSavedGGUFFiles(target);
+          } catch (error) {
+            console.warn("영구 저장 모델 읽기 실패, APK 내장 파일로 전환:", error);
+          }
+          if (!files.length) {
+            const response = await fetch(
+              window.GoldFireOfflineConfig?.model ||
+                new URL("models/sexygpt-uncensored-q3_k_m.gguf", document.baseURI).href,
+              { cache: "no-store" },
+            );
+            if (!response.ok && response.status !== 0) throw new Error("APK 내장 GGUF 파일을 읽지 못했습니다.");
+            files = [
+              new File([await response.blob()], "sexygpt-uncensored-q3_k_m.gguf", { type: "application/octet-stream" }),
+            ];
+          }
+          let status;
+          try {
+            status = await window.LocalGGUF.load(files, {
+              contextLength: Number(localStorage.getItem("gfd-gguf-context") || 1024),
+              useGpu: localStorage.getItem("gfd-gguf-gpu") === "1",
+            });
+          } catch (savedError) {
+            // 손상된 IndexedDB 모델이 있어도 APK 내장 모델로 복구한다.
+            if (!target) throw savedError;
+            console.warn("저장된 GGUF 로드 실패, APK 내장 모델로 복구합니다:", savedError);
+            await window.LocalGGUF.unload?.().catch(() => {});
+            const embeddedUrl =
+              window.GoldFireOfflineConfig?.model ||
+              new URL("models/sexygpt-uncensored-q3_k_m.gguf", document.baseURI).href;
+            const embeddedResponse = await fetch(embeddedUrl, { cache: "no-store" });
+            if (!embeddedResponse.ok && embeddedResponse.status !== 0) throw savedError;
+            const embeddedBlob = await embeddedResponse.blob();
+            const embeddedFile = new File([embeddedBlob], "sexygpt-uncensored-q3_k_m.gguf", {
+              type: "application/octet-stream",
+            });
+            status = await window.LocalGGUF.load([embeddedFile], {
+              contextLength: Number(localStorage.getItem("gfd-gguf-context") || 1024),
+              useGpu: false,
+            });
+            target = null;
+          }
+          setState({ localModel: { ...status, savedModelId: target?.id || "bundled-sexygpt-uncensored-q3_k_m" } });
+          return true;
+        })().catch((error) => {
+          localGGUFLoadPromise = null;
+          throw error;
+        });
         return localGGUFLoadPromise;
       }
 
@@ -5137,7 +5167,7 @@
         modal.querySelector("#vpn-stop").onclick=async()=>{ const r=await native.stopVpn(); status.textContent=r.status||r.error||"해제 요청 완료"; };
       }
 
-      const BROWSER_HOME_URL = "GoldFireDragonBrowser.html?gfd-build=20260909-background";
+      const BROWSER_HOME_URL = "./GoldFireDragonBrowser.html?gfd-build=20260909-background";
 
       function openBrowserOverlay() {
         const brow = document.getElementById("brow");
