@@ -1653,7 +1653,10 @@
         resultsDiv.innerHTML =
           '<div class="text-purple-400 italic text-center py-6">4개의 Supabase 게스트 우회 도구 실행 중... <i class="fa-solid fa-spinner fa-spin ml-2"></i></div>';
 
-        const BASE_URL = "https://zuhevuyotcigibupboaz.supabase.co/functions/v1";
+        const runtimeEnv = window.__ENV__ || window.parent?.__ENV__ || {};
+        const supabaseUrl = runtimeEnv.SUPABASE_URL || "https://shtixmaykwundutbshti.backend.onspace.ai";
+        const anonKey = runtimeEnv.SUPABASE_ANON_KEY || "";
+        const BASE_URL = `${supabaseUrl.replace(/\/$/, "")}/functions/v1`;
         const functions = ["adult-proxy", "cors-proxy", "omega-focer-infinity", "dns-lookup"];
 
         try {
@@ -1663,6 +1666,7 @@
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                ...(anonKey ? { apikey: anonKey, Authorization: `Bearer ${anonKey}` } : {}),
                 "X-Guest-Bypass": "true",
                 "X-Auth-Override": "unrestricted",
               },

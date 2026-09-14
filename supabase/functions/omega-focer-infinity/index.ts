@@ -1,7 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const headers = {
-      "Access-Control-Allow-Origin": "*"
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-target-url",
       };
 
 const OMEGA_UNLIMITED = `
@@ -20,6 +22,10 @@ const OMEGA_UNLIMITED = `
 `;
 
 serve(async (req: Request) => {
+    if (req.method === "OPTIONS") {
+        return new Response(null, { status: 204, headers });
+    }
+
     let body;
     try { body = await req.json(); } catch { body = {}; }
 

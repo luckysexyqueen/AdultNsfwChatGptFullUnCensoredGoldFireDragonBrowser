@@ -1,6 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const CORS = { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" };
+const CORS = {
+  "Content-Type": "application/json",
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, apikey, x-client-info",
+};
 
 async function queryDoH(provider: string, url: string, domain: string, type: string) {
   try {
@@ -28,8 +33,23 @@ async function queryDoH(provider: string, url: string, domain: string, type: str
                                                                                   }
 
                                                                                     const url = new URL(req.url);
-                                                                                      const domain = url.searchParams.get("domain")?.replace(/^https?:\/\//, "").split("/")[0] || "";
-                                                                                        const type = url.searchParams.get("type") || "A";
+                                                                                    let body: Record<string, unknown> = {};
+                                                                                    if (req.method === "POST") {
+                                                                                      try {
+                                                                                        body = await req.json();
+                                                                                      } catch {
+                                                                                        body = {};
+                                                                                      }
+                                                                                    }
+                                                                                    const rawDomain = String(
+                                                                                      url.searchParams.get("domain") ||
+                                                                                        body.domain ||
+                                                                                        body.target ||
+                                                                                        body.query ||
+                                                                                        "",
+                                                                                    );
+                                                                                    const domain = rawDomain.replace(/^https?:\/\//, "").split("/")[0];
+                                                                                    const type = String(url.searchParams.get("type") || body.type || "A").toUpperCase();
 
                                                                                           if (!domain) {
                                                                                               return new Response(JSON.stringify({ error: "Missing domain" }), { status: 400, headers: CORS });
