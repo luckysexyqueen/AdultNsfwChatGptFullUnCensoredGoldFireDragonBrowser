@@ -76,16 +76,15 @@ export function ChatPage() {
   }, []);
 
   // 커스텀 GPT 변경 시 파일 로드
-  const currentGPTId = currentGPT?.id;
   useEffect(() => {
-    if (currentGPTId) {
-      fetchGPTFiles(currentGPTId)
+    if (currentGPT) {
+      fetchGPTFiles(currentGPT.id)
         .then(setCurrentGPTFiles)
         .catch((e) => console.error('GPT 파일 로드 실패:', e));
     } else {
       setCurrentGPTFiles([]);
     }
-  }, [currentGPTId, setCurrentGPTFiles]);
+  }, [currentGPT?.id]);
 
   // 메시지 스크롤
   useEffect(() => {
