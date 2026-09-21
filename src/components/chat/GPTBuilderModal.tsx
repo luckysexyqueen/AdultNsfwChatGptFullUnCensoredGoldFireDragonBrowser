@@ -40,7 +40,7 @@ export function GPTBuilderModal({ isOpen, onClose, userId, editingGPT }: GPTBuil
 
   useEffect(() => {
     if (isOpen && editingGPT) {
-      loadExistingFiles();
+      void loadExistingFiles();
     } else {
       setUploadedFiles([]);
     }

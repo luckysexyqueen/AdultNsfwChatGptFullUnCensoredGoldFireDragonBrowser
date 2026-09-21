@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { Message } from '@/types';
 import { Bot, User, FileText, Image as ImageIcon } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { getMessageFiles, createFileObjectUrl, StoredFileMetadata } from '@/lib/fileStorage';
+import { createFileObjectUrl, getFileMeta, StoredFileMetadata } from '@/lib/fileStorage';
 
 interface ChatMessageProps {
   message: Message;
@@ -17,78 +17,75 @@ function formatSize(bytes: number): string {
 
 export function ChatMessage({ message, isStreaming = false }: ChatMessageProps) {
   const isUser = message.role === 'user';
-  const messageId = message.id;
   const [attachedFiles, setAttachedFiles] = useState<StoredFileMetadata[]>([]);
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({});
-  const revokeListRef = useRef<string[]>([]);
-  const localFileIdsKey = message.localFileIds?.join(',') ?? '';
+  const localFileIds = message.localFileIds ?? [];
+  const fileKey = localFileIds.join(',');
 
-  // localforage에서 첨부 파일 로드
+  // 메시지 ID가 서버 ID로 바뀌기 전에도 localFileIds로 바로 파일을 찾습니다.
   useEffect(() => {
-    if (!localFileIdsKey) return;
+    let active = true;
+    const createdUrls: string[] = [];
+    const fileIds = fileKey ? fileKey.split(',') : [];
 
-    let mounted = true;
-    const urlsToRevoke: string[] = [];
+    const loadAttachments = async () => {
+      if (fileIds.length === 0) {
+        setAttachedFiles([]);
+        setImageUrls({});
+        return;
+      }
 
-    (async () => {
       try {
-        const files = await getMessageFiles(messageId);
-        if (!mounted) return;
-        setAttachedFiles(files);
-
-        // 이미지 Object URL 생성
+        const metadata = await Promise.all(fileIds.map((id) => getFileMeta(id)));
+        const files = metadata.filter((file): file is StoredFileMetadata => file !== null);
         const urls: Record<string, string> = {};
+
         for (const file of files) {
-          if (file.type === 'image') {
-            const url = await createFileObjectUrl(file.id);
-            if (url) {
-              urls[file.id] = url;
-              urlsToRevoke.push(url);
-            }
+          if (file.type !== 'image') continue;
+          const url = await createFileObjectUrl(file.id);
+          if (url) {
+            urls[file.id] = url;
+            createdUrls.push(url);
           }
         }
-        if (mounted) setImageUrls(urls);
-      } catch (err) {
-        console.error('[ChatMessage] 파일 로드 실패:', err);
+
+        if (!active) return;
+        setAttachedFiles(files);
+        setImageUrls(urls);
+      } catch (error) {
+        if (active) {
+          console.error('[ChatMessage] 파일 로드 실패:', error);
+          setAttachedFiles([]);
+          setImageUrls({});
+        }
       }
-    })();
-
-    return () => {
-      mounted = false;
-      urlsToRevoke.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [messageId, localFileIdsKey]);
 
-  // 언마운트 시 Object URL 해제
-  useEffect(() => {
-    const urls = revokeListRef.current;
+    void loadAttachments();
     return () => {
-      urls.forEach((url) => URL.revokeObjectURL(url));
+      active = false;
+      createdUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, []);
+  }, [fileKey]);
 
-  // 메시지 내용이 파일 표시 placeholder인지 확인
   const isFilePlaceholder =
     isUser &&
     attachedFiles.length > 0 &&
     (message.content.startsWith('📷') || message.content.startsWith('📎'));
 
-  const imageFiles = attachedFiles.filter((f) => f.type === 'image');
-  const nonImageFiles = attachedFiles.filter((f) => f.type !== 'image');
+  const imageFiles = attachedFiles.filter((file) => file.type === 'image');
+  const nonImageFiles = attachedFiles.filter((file) => file.type !== 'image');
 
   return (
     <div className={`py-6 px-4 ${!isUser ? 'bg-muted/30' : ''}`}>
       <div className="max-w-3xl mx-auto flex gap-4">
         <Avatar className="h-8 w-8 flex-shrink-0">
-          <AvatarFallback
-            className={isUser ? 'bg-primary text-primary-foreground' : 'bg-accent'}
-          >
+          <AvatarFallback className={isUser ? 'bg-primary text-primary-foreground' : 'bg-accent'}>
             {isUser ? <User className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
           </AvatarFallback>
         </Avatar>
 
         <div className="flex-1 space-y-2 overflow-hidden">
-          {/* ── 이미지 첨부 표시 ── */}
           {imageFiles.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-1">
               {imageFiles.map((file) =>
@@ -105,7 +102,6 @@ export function ChatMessage({ message, isStreaming = false }: ChatMessageProps) 
                     />
                   </div>
                 ) : (
-                  /* 로딩 중 스켈레톤 */
                   <div
                     key={file.id}
                     className="w-32 h-32 rounded-xl bg-muted/40 animate-pulse flex items-center justify-center"
@@ -117,7 +113,6 @@ export function ChatMessage({ message, isStreaming = false }: ChatMessageProps) 
             </div>
           )}
 
-          {/* ── 기타 파일 첨부 표시 ── */}
           {nonImageFiles.length > 0 && (
             <div className="flex flex-wrap gap-2 mb-1">
               {nonImageFiles.map((file) => (
@@ -135,7 +130,6 @@ export function ChatMessage({ message, isStreaming = false }: ChatMessageProps) 
             </div>
           )}
 
-          {/* ── 텍스트 내용 ── */}
           {!isFilePlaceholder && (
             <div className="prose prose-sm dark:prose-invert max-w-none">
               <p className="whitespace-pre-wrap break-words m-0 text-foreground leading-relaxed">
@@ -147,7 +141,6 @@ export function ChatMessage({ message, isStreaming = false }: ChatMessageProps) 
             </div>
           )}
 
-          {/* 파일만 전송된 경우 스트리밍 커서 */}
           {isFilePlaceholder && isStreaming && (
             <span className="inline-block w-2 h-4 bg-foreground ml-1 animate-pulse rounded-sm" />
           )}

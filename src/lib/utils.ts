@@ -1,19 +1,7 @@
-type ClassValue = string | undefined | null | false | Record<string, boolean | undefined>;
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
 
-// Utility function for combining class names and conditional class maps.
+/** Tailwind 충돌을 정리하면서 조건부 클래스 값을 안전하게 결합합니다. */
 export function cn(...inputs: ClassValue[]) {
-  return inputs
-    .filter(Boolean)
-    .map((input) => {
-      if (typeof input === 'string') return input;
-      if (typeof input === 'object') {
-        return Object.entries(input)
-          .filter(([, enabled]) => enabled)
-          .map(([className]) => className)
-          .join(' ');
-      }
-      return '';
-    })
-    .filter(Boolean)
-    .join(' ');
+  return twMerge(clsx(inputs));
 }
