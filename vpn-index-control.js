@@ -20,17 +20,16 @@
     const status = modal.querySelector('#gfd-vpn-status');
     const select = modal.querySelector('#gfd-vpn-select');
     modal.querySelector('#gfd-vpn-x').onclick = () => modal.remove();
-    if (!native) { status.textContent = 'Windows 포터블 앱에서만 VPN 연결 기능을 사용할 수 있습니다.'; return; }
     try {
-      const profiles = await native.getOvpnList();
+      const profiles = native ? await native.getOvpnList() : await fetch('./vpn-profiles.json').then((response) => response.ok ? response.json() : {});
       const names = Object.keys(profiles || {});
       select.innerHTML = names.length ? names.map((name) => `<option value="${name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}">${name}</option>`).join('') : '<option value="">내장 VPN 프로필 없음</option>';
-      const state = await native.getVpnStatus();
+      const state = native ? await native.getVpnStatus() : { status: '브라우저 미연결 모드' };
       status.textContent = `상태: ${state?.status || 'DISCONNECTED'}`;
     } catch (error) { status.textContent = `VPN 프로필 오류: ${error.message}`; }
-    modal.querySelector('#gfd-vpn-install').onclick = async () => { const r = await native.installOpenVpn(); status.textContent = r.message || r.error || '설치 요청 완료'; };
-    modal.querySelector('#gfd-vpn-start').onclick = async () => { if (!select.value) { status.textContent = 'VPN 프로필을 먼저 선택하세요.'; return; } const r = await native.startVpn(select.value); status.textContent = r.status || r.error || '연결 요청 완료'; };
-    modal.querySelector('#gfd-vpn-stop').onclick = async () => { const r = await native.stopVpn(); status.textContent = r.status || r.error || '해제 요청 완료'; };
+    modal.querySelector('#gfd-vpn-install').onclick = async () => { if (!native) { status.textContent = '브라우저에서는 VPN 연결을 사용할 수 없습니다.'; return; } const r = await native.installOpenVpn(); status.textContent = r.message || r.error || '설치 요청 완료'; };
+    modal.querySelector('#gfd-vpn-start').onclick = async () => { if (!select.value) { status.textContent = 'VPN 프로필을 먼저 선택하세요.'; return; } if (!native) { status.textContent = '프로필은 선택되었지만 실제 연결은 Android 앱에서 사용할 수 있습니다.'; return; } const r = await native.startVpn(select.value); status.textContent = r.status || r.error || '연결 요청 완료'; };
+    modal.querySelector('#gfd-vpn-stop').onclick = async () => { if (!native) { status.textContent = '브라우저에서는 VPN 연결을 사용할 수 없습니다.'; return; } const r = await native.stopVpn(); status.textContent = r.status || r.error || '해제 요청 완료'; };
   }
   window.__gfdOpenVpn = openVpn;
   function bind() { document.getElementById('vpn-settings-btn')?.addEventListener('click', openVpn); }
