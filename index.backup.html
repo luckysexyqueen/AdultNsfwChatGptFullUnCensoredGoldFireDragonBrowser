@@ -1,0 +1,4803 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#10a37f" />
+    <meta name="description" content="제한 없는 AI 채팅 애플리케이션" />
+    <title>AI Chat - 무제한 대화</title>
+    <link rel="icon" type="image/png" href="./icon.png" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="apple-touch-icon" href="./icon.png" />
+    <!-- 선택 사항: 배포 환경의 Supabase 공개 키 설정. 파일이 없어도 로컬 모드로 계속 실행됩니다. -->
+    <script type="module" src="./env-config.js" onerror="console.info('[env-config] 파일 없음 — 로컬 모드로 계속합니다.')"></script>
+    <!-- 로컬 GGUF 런타임은 React/Vite 번들에서 로드합니다. standalone index에서 원본 TS를 직접 실행하지 않습니다. -->
+      <script src="./inapp-browser.js"></script>
+  </head>
+  <body>
+    <!-- LocalForage: CDN 제거, 네이티브 IndexedDB 기반 자체 구현으로 대체 (오프라인/WebView 안전) -->
+    <script>
+      /* ═══════════════════════════════════════════════════════════════
+         🗄️  NATIVE INDEXEDDB POLYFILL (localforage 대체)
+         - 외부 CDN 의존성 완전 제거 → 오프라인/APK WebView에서도 100% 동작
+         - localforage와 동일한 API 제공: getItem/setItem/removeItem/iterate/ready/createInstance
+         - 전역 window.localforage 로 노출하여 기존 코드 수정 없이 호환
+         ═══════════════════════════════════════════════════════════════ */
+      (function () {
+        "use strict";
+
+        function openDb(dbName, storeName) {
+          return new Promise((resolve, reject) => {
+            if (!window.indexedDB) {
+              reject(new Error("IndexedDB unsupported"));
+              return;
+            }
+            const req = indexedDB.open(dbName, 1);
+            req.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains(storeName)) {
+                db.createObjectStore(storeName);
+              }
+            };
+            req.onsuccess = (e) => resolve(e.target.result);
+            req.onerror = (e) => reject(e.target.error || new Error("IndexedDB open failed"));
+          });
+        }
+
+        // 메모리 폴백 (IndexedDB 자체를 못 쓰는 극단적 환경 대비)
+        function memoryInstance() {
+          const mem = new Map();
+          return {
+            async getItem(key) {
+              return mem.has(key) ? mem.get(key) : null;
+            },
+            async setItem(key, value) {
+              mem.set(key, value);
+              return value;
+            },
+            async removeItem(key) {
+              mem.delete(key);
+            },
+            async clear() {
+              mem.clear();
+            },
+            async keys() {
+              return Array.from(mem.keys());
+            },
+            async iterate(cb) {
+              let i = 0;
+              for (const [k, v] of mem.entries()) {
+                const res = cb(v, k, ++i);
+                if (res !== undefined) return res;
+              }
+            },
+            async ready() {
+              return true;
+            },
+          };
+        }
+
+        function createInstance(opts) {
+          opts = opts || {};
+          const dbName = opts.name || "localforage";
+          const storeName = opts.storeName || "keyvaluepairs";
+          let dbPromise = null;
+          let failed = false;
+
+          function getDb() {
+            if (failed) return Promise.reject(new Error("indexeddb-unavailable"));
+            if (!dbPromise) {
+              dbPromise = openDb(dbName, storeName).catch((err) => {
+                failed = true;
+                console.warn("[IndexedDB] 사용 불가, 메모리 저장소로 대체:", err && err.message);
+                throw err;
+              });
+            }
+            return dbPromise;
+          }
+
+          const fallback = memoryInstance();
+          let useFallback = false;
+
+          function withStore(mode, fn) {
+            if (useFallback) return fn(null);
+            return getDb()
+              .then((db) => {
+                return new Promise((resolve, reject) => {
+                  try {
+                    const tx = db.transaction(storeName, mode);
+                    const store = tx.objectStore(storeName);
+                    const result = fn(store);
+                    tx.oncomplete = () => resolve(result && result.__val !== undefined ? result.__val : result);
+                    tx.onerror = () => reject(tx.error);
+                  } catch (err) {
+                    reject(err);
+                  }
+                });
+              })
+              .catch((err) => {
+                useFallback = true;
+                return fn(null);
+              });
+          }
+
+          return {
+            async getItem(key) {
+              if (useFallback) return fallback.getItem(key);
+              try {
+                return await getDb().then(
+                  (db) =>
+                    new Promise((resolve, reject) => {
+                      const tx = db.transaction(storeName, "readonly");
+                      const req = tx.objectStore(storeName).get(key);
+                      req.onsuccess = () => resolve(req.result === undefined ? null : req.result);
+                      req.onerror = () => reject(req.error);
+                    }),
+                );
+              } catch (e) {
+                useFallback = true;
+                return fallback.getItem(key);
+              }
+            },
+            async setItem(key, value) {
+              if (useFallback) return fallback.setItem(key, value);
+              try {
+                await getDb().then(
+                  (db) =>
+                    new Promise((resolve, reject) => {
+                      const tx = db.transaction(storeName, "readwrite");
+                      tx.objectStore(storeName).put(value, key);
+                      tx.oncomplete = () => resolve();
+                      tx.onerror = () => reject(tx.error);
+                    }),
+                );
+                return value;
+              } catch (e) {
+                useFallback = true;
+                return fallback.setItem(key, value);
+              }
+            },
+            async removeItem(key) {
+              if (useFallback) return fallback.removeItem(key);
+              try {
+                await getDb().then(
+                  (db) =>
+                    new Promise((resolve, reject) => {
+                      const tx = db.transaction(storeName, "readwrite");
+                      tx.objectStore(storeName).delete(key);
+                      tx.oncomplete = () => resolve();
+                      tx.onerror = () => reject(tx.error);
+                    }),
+                );
+              } catch (e) {
+                useFallback = true;
+                return fallback.removeItem(key);
+              }
+            },
+            async clear() {
+              if (useFallback) return fallback.clear();
+              try {
+                await getDb().then(
+                  (db) =>
+                    new Promise((resolve, reject) => {
+                      const tx = db.transaction(storeName, "readwrite");
+                      tx.objectStore(storeName).clear();
+                      tx.oncomplete = () => resolve();
+                      tx.onerror = () => reject(tx.error);
+                    }),
+                );
+              } catch (e) {
+                useFallback = true;
+                return fallback.clear();
+              }
+            },
+            async keys() {
+              if (useFallback) return fallback.keys();
+              try {
+                return await getDb().then(
+                  (db) =>
+                    new Promise((resolve, reject) => {
+                      const tx = db.transaction(storeName, "readonly");
+                      const req = tx.objectStore(storeName).getAllKeys();
+                      req.onsuccess = () => resolve(req.result || []);
+                      req.onerror = () => reject(req.error);
+                    }),
+                );
+              } catch (e) {
+                useFallback = true;
+                return fallback.keys();
+              }
+            },
+            async iterate(cb) {
+              if (useFallback) return fallback.iterate(cb);
+              try {
+                return await getDb().then(
+                  (db) =>
+                    new Promise((resolve, reject) => {
+                      const tx = db.transaction(storeName, "readonly");
+                      const store = tx.objectStore(storeName);
+                      const req = store.openCursor();
+                      let i = 0;
+                      req.onsuccess = (e) => {
+                        const cursor = e.target.result;
+                        if (cursor) {
+                          const res = cb(cursor.value, cursor.key, ++i);
+                          if (res !== undefined) {
+                            resolve(res);
+                            return;
+                          }
+                          cursor.continue();
+                        } else {
+                          resolve(undefined);
+                        }
+                      };
+                      req.onerror = () => reject(req.error);
+                    }),
+                );
+              } catch (e) {
+                useFallback = true;
+                return fallback.iterate(cb);
+              }
+            },
+            async ready() {
+              try {
+                await getDb();
+              } catch (e) {
+                useFallback = true;
+              }
+              return true;
+            },
+          };
+        }
+
+        // 기본(default) 인스턴스 — localforage.getItem(...) 형태의 전역 직접 호출 호환용
+        const defaultInstance = createInstance({ name: "localforage", storeName: "keyvaluepairs" });
+
+        window.localforage = {
+          getItem: (k) => defaultInstance.getItem(k),
+          setItem: (k, v) => defaultInstance.setItem(k, v),
+          removeItem: (k) => defaultInstance.removeItem(k),
+          clear: () => defaultInstance.clear(),
+          keys: () => defaultInstance.keys(),
+          iterate: (cb) => defaultInstance.iterate(cb),
+          ready: () => defaultInstance.ready(),
+          createInstance: createInstance,
+        };
+      })();
+    </script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <!-- Font Awesome (브라우저 오버레이 아이콘용) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/luckysexysuccubusqueen135age/GoldFireDragonFullUnCensoredGoogleProxyInAndroidWebBrowserAppHomePage@refs/heads/codespace-super-robot-xrwp9jp647v62v74v/fonts/gamefont.css"
+    />
+
+    <style>
+      @font-face {
+        font-family: "acutehoney";
+        src: url("https://cdn.jsdelivr.net/gh/luckysexyqueen/GoldFireDragonUnCensoredBrowser/fonts/a%ED%81%90%ED%8B%B0%ED%97%88%EB%8B%88.woff")
+          format("woff");
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+      *,
+      *::before,
+      *::after,
+      input,
+      button,
+      textarea,
+      select {
+        font-family: "acutehoney", sans-serif !important;
+      }
+    </style>
+
+    <style>
+      /* ===== RESET & BASE ===== */
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+      html,
+      body {
+        height: 100%;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      body {
+        background: #212121;
+        color: #fff;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+      }
+      #app {
+        flex: 1;
+        min-height: 0;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        overflow: hidden;
+      }
+
+      /* ===== VARIABLES ===== */
+      :root {
+        --bg: #212121;
+        --bg2: #2f2f2f;
+        --bg3: #343541;
+        --bg4: #40414f;
+        --border: rgba(255, 255, 255, 0.1);
+        --accent: #10a37f;
+        --accent-hover: #0d8968;
+        --text: #fff;
+        --text-muted: rgba(255, 255, 255, 0.5);
+        --text-dim: rgba(255, 255, 255, 0.25);
+        --danger: #ef4444;
+      }
+
+      /* ── 브라우저 패널 (채팅 화면과 항상 함께 보이는 분할 패널) ──
+         portrait(세로): 위/아래 반반, landscape(가로): 좌/우 반반 */
+      #brow {
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column; /* portrait 기본값: 내용 위, 핸들 아래 */
+        width: 100%;
+        height: 0;
+        min-width: 0;
+        min-height: 0;
+        background: #0a0b0f;
+        overflow: hidden;
+        transition: height 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      #brow.open {
+        height: 50vh;
+        border-bottom: 1px solid #1e1f2e;
+      }
+      #brow.resizing {
+        transition: none;
+      }
+      #brow-content {
+        flex: 1;
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      #brow-resize {
+        flex-shrink: 0;
+        height: 14px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: row-resize;
+        background: #0e0f14;
+        touch-action: none;
+      }
+      #brow-resize::after {
+        content: "";
+        width: 40px;
+        height: 4px;
+        border-radius: 2px;
+        background: #3a3c4a;
+      }
+      /* landscape(가로 모드): 채팅과 브라우저를 좌우로 반반 배치 */
+      @media (orientation: landscape) {
+        body {
+          flex-direction: row;
+        }
+        #app {
+          min-width: 0;
+        }
+        #brow {
+          flex-direction: row; /* 내용 왼쪽, 핸들 오른쪽 */
+          width: 0;
+          height: 100%;
+          transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #brow.open {
+          width: 50vw;
+          height: 100%;
+          border-bottom: none;
+          border-right: 1px solid #1e1f2e;
+        }
+        #brow-resize {
+          width: 14px;
+          height: 100%;
+          cursor: col-resize;
+        }
+        #brow-resize::after {
+          width: 4px;
+          height: 40px;
+        }
+      }
+      #brow-tb {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: #0e0f14;
+        border-bottom: 1px solid #1e1f2e;
+      }
+      #brow-url {
+        flex: 1;
+        background: #16171f;
+        border: 1px solid #2d2f3e;
+        border-radius: 7px;
+        padding: 5px 10px;
+        font-size: 11px;
+        color: #9ca3af;
+        font-family: "JetBrains Mono", monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      #brow-iframe {
+        flex: 1;
+        width: 100%;
+        border: none;
+      }
+
+      /* ===== SCROLLBAR ===== */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.15);
+        border-radius: 3px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: rgba(255, 255, 255, 0.25);
+      }
+
+      /* ===== LAYOUT ===== */
+      #main-layout {
+        display: flex;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      /* ===== SIDEBAR ===== */
+      #sidebar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 260px;
+        min-width: 260px;
+        background: var(--bg2);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        z-index: 300;
+        transform: translateX(-100%);
+        transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 2px 0 24px rgba(0, 0, 0, 0.4);
+      }
+      #sidebar.open {
+        transform: translateX(0);
+      }
+      #sidebar-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 290;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      #sidebar-backdrop.open {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .sidebar-toggle-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        color: #fff;
+        cursor: pointer;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition:
+          background 0.15s,
+          border-color 0.15s;
+      }
+      .sidebar-toggle-btn:hover {
+        background: var(--bg4);
+      }
+      .sidebar-toggle-btn.active {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .sidebar-top {
+        padding: 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      .btn-new-chat {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        cursor: pointer;
+        font-size: 14px;
+        transition: background 0.15s;
+      }
+      .btn-new-chat:hover {
+        background: var(--bg3);
+      }
+      .sidebar-section {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px;
+      }
+      .sidebar-label {
+        font-size: 11px;
+        color: var(--text-muted);
+        padding: 8px 10px 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+      .conv-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.15s;
+        position: relative;
+      }
+      .conv-item:hover {
+        background: var(--bg3);
+      }
+      .conv-item.active {
+        background: var(--bg4);
+      }
+      .conv-item-title {
+        flex: 1;
+        font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .conv-item-del {
+        opacity: 0;
+        background: none;
+        border: none;
+        color: var(--danger);
+        cursor: pointer;
+        padding: 2px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .conv-item:hover .conv-item-del {
+        opacity: 1;
+      }
+
+      /* GPT List */
+      .gpt-section {
+        border-bottom: 1px solid var(--border);
+        padding: 8px;
+      }
+      .gpt-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 10px;
+      }
+      .gpt-header-title {
+        font-size: 14px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .btn-create-gpt {
+        font-size: 12px;
+        padding: 4px 10px;
+        background: var(--accent);
+        border: none;
+        border-radius: 6px;
+        color: white;
+        cursor: pointer;
+      }
+      .btn-create-gpt:hover {
+        background: var(--accent-hover);
+      }
+      .gpt-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.15s;
+        position: relative;
+      }
+      .gpt-item:hover {
+        background: var(--bg3);
+      }
+      .gpt-avatar {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #8b5cf6, #ec4899);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-weight: bold;
+        font-size: 14px;
+      }
+      .gpt-avatar img {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        object-fit: cover;
+      }
+      .gpt-info {
+        flex: 1;
+        min-width: 0;
+      }
+      .gpt-name {
+        font-size: 13px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .gpt-desc {
+        font-size: 11px;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .gpt-actions {
+        display: none;
+        gap: 2px;
+      }
+      .gpt-item:hover .gpt-actions {
+        display: flex;
+      }
+      .gpt-action-btn {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+      }
+      .gpt-action-btn:hover {
+        background: var(--bg4);
+        color: var(--text);
+      }
+      .gpt-empty {
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 12px;
+        padding: 16px 8px;
+      }
+
+      /* ===== HEADER ===== */
+      #header {
+        height: 56px;
+        min-height: 56px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 24px;
+        background: var(--bg2);
+      }
+      .header-title {
+        font-size: 18px;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .guest-badge {
+        font-size: 11px;
+        background: rgba(234, 179, 8, 0.2);
+        color: #eab308;
+        padding: 2px 8px;
+        border-radius: 9999px;
+      }
+      .header-right {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .browser-toggle-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        color: #fff;
+        cursor: pointer;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition:
+          background 0.15s,
+          border-color 0.15s;
+      }
+      .browser-toggle-btn:hover {
+        background: var(--bg4);
+      }
+      .browser-toggle-btn.active {
+        background: var(--accent);
+        border-color: var(--accent);
+      }
+      .user-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: var(--accent);
+        border: none;
+        color: white;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .dropdown {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        min-width: 200px;
+        overflow: hidden;
+        z-index: 100;
+        display: none;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      }
+      .dropdown.open {
+        display: block;
+      }
+      .dropdown-header {
+        padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      .dropdown-user-name {
+        font-size: 13px;
+        font-weight: 500;
+      }
+      .dropdown-user-email {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 2px;
+      }
+      .dropdown-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: background 0.15s;
+      }
+      .dropdown-item:hover {
+        background: var(--bg4);
+      }
+      .dropdown-item.danger {
+        color: var(--danger);
+      }
+      .dropdown-sep {
+        height: 1px;
+        background: var(--border);
+        margin: 4px 0;
+      }
+
+      /* ===== GPT BANNER ===== */
+      #gpt-banner {
+        background: linear-gradient(to right, rgba(139, 92, 246, 0.2), rgba(236, 72, 153, 0.2));
+        border-bottom: 1px solid var(--border);
+        padding: 10px 24px;
+        display: none;
+        align-items: center;
+        gap: 12px;
+      }
+      #gpt-banner.visible {
+        display: flex;
+      }
+      .gpt-banner-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #8b5cf6, #ec4899);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 13px;
+        flex-shrink: 0;
+      }
+
+      /* ===== CHAT AREA ===== */
+      #content-area {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      #messages-area {
+        flex: 1;
+        overflow-y: auto;
+      }
+      .messages-inner {
+        padding-bottom: 16px;
+      }
+
+      /* Empty state */
+      #empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        padding: 40px 20px;
+        text-align: center;
+      }
+      .empty-logo {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 20px;
+      }
+      .empty-title {
+        font-size: 24px;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+      .empty-sub {
+        color: var(--text-muted);
+        font-size: 14px;
+      }
+
+      /* Message */
+      .message {
+        padding: 20px 16px;
+      }
+      .message.assistant {
+        background: rgba(255, 255, 255, 0.03);
+      }
+      .message-inner {
+        max-width: 720px;
+        margin: 0 auto;
+        display: flex;
+        gap: 14px;
+      }
+      .msg-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+      }
+      .msg-avatar.user {
+        background: var(--accent);
+      }
+      .msg-avatar.assistant {
+        background: var(--bg4);
+      }
+      .msg-body {
+        flex: 1;
+        min-width: 0;
+        padding-top: 4px;
+      }
+      .msg-text {
+        font-size: 15px;
+        line-height: 1.7;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: var(--text);
+      }
+      .msg-cursor {
+        display: inline-block;
+        width: 8px;
+        height: 16px;
+        background: var(--text);
+        border-radius: 2px;
+        margin-left: 3px;
+        animation: blink 0.8s infinite;
+      }
+      @keyframes blink {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0;
+        }
+      }
+
+      /* File attachments in messages */
+      .msg-files {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .msg-img-thumb {
+        max-width: 280px;
+        max-height: 200px;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+      }
+      .msg-img-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+      }
+      .msg-file-chip {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 12px;
+        max-width: 220px;
+      }
+      .msg-file-chip .fc-name {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .msg-file-chip .fc-size {
+        color: var(--text-muted);
+        font-size: 10px;
+        margin-top: 1px;
+      }
+
+      /* ===== CHAT INPUT ===== */
+      #chat-input-area {
+        border-top: 1px solid var(--border);
+        background: var(--bg);
+        padding: 12px 16px 14px;
+      }
+      .input-wrap {
+        max-width: 720px;
+        margin: 0 auto;
+      }
+      #file-previews {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+      .fp-img {
+        position: relative;
+        width: 76px;
+        height: 76px;
+        border-radius: 10px;
+        overflow: hidden;
+        border: 1px solid var(--border);
+      }
+      .fp-img img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+      .fp-img-name {
+        position: absolute;
+        bottom: 0;
+        inset-x: 0;
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+        font-size: 9px;
+        padding: 4px 3px 2px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .fp-chip {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 6px 10px;
+        max-width: 190px;
+      }
+      .fp-chip-name {
+        font-size: 11px;
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .fp-chip-size {
+        font-size: 9px;
+        color: var(--text-muted);
+      }
+      .fp-remove {
+        background: rgba(0, 0, 0, 0.6);
+        border: none;
+        color: #fff;
+        cursor: pointer;
+        border-radius: 50%;
+        width: 18px;
+        height: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        top: 3px;
+        right: 3px;
+        font-size: 10px;
+      }
+      .fp-chip .fp-remove {
+        position: static;
+        background: none;
+        color: var(--text-muted);
+        font-size: 12px;
+      }
+      .input-box {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+        background: var(--bg2);
+        border-radius: 14px;
+        border: 1px solid var(--border);
+        padding: 10px 14px;
+      }
+      .input-box-btn {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px;
+        border-radius: 6px;
+        transition: color 0.15s;
+        flex-shrink: 0;
+        margin-bottom: 2px;
+      }
+      .input-box-btn:hover {
+        color: var(--text);
+      }
+      .input-box-btn:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+      }
+      #msg-input {
+        flex: 1;
+        background: none;
+        border: none;
+        outline: none;
+        color: var(--text);
+        font-size: 14px;
+        line-height: 1.6;
+        resize: none;
+        min-height: 24px;
+        max-height: 180px;
+        overflow-y: auto;
+        font-family: inherit;
+      }
+      #msg-input::placeholder {
+        color: var(--text-dim);
+      }
+      .send-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: var(--accent);
+        border: none;
+        color: white;
+        cursor: pointer;
+        flex-shrink: 0;
+        margin-bottom: 2px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s;
+      }
+      .send-btn:hover {
+        background: var(--accent-hover);
+      }
+      .send-btn:disabled {
+        opacity: 0.25;
+        cursor: not-allowed;
+      }
+      .input-hint {
+        font-size: 11px;
+        color: var(--text-dim);
+        text-align: center;
+        margin-top: 6px;
+      }
+
+      /* ===== AUTH PAGE ===== */
+      #auth-page {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);
+        padding: 16px;
+      }
+      .auth-card {
+        width: 100%;
+        max-width: 400px;
+        background: var(--bg2);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 32px 28px;
+      }
+      .auth-logo {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: rgba(16, 163, 127, 0.15);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px;
+      }
+      .auth-title {
+        font-size: 22px;
+        font-weight: 700;
+        text-align: center;
+        margin-bottom: 6px;
+      }
+      .auth-sub {
+        font-size: 13px;
+        color: var(--text-muted);
+        text-align: center;
+        margin-bottom: 24px;
+      }
+      .auth-input {
+        width: 100%;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 14px;
+        color: var(--text);
+        font-size: 14px;
+        outline: none;
+        margin-bottom: 10px;
+        transition: border-color 0.15s;
+      }
+      .auth-input:focus {
+        border-color: var(--accent);
+      }
+      .auth-input:disabled {
+        opacity: 0.5;
+      }
+      .auth-btn {
+        width: 100%;
+        padding: 11px;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s;
+        margin-bottom: 10px;
+      }
+      .auth-btn.primary {
+        background: var(--accent);
+        color: white;
+      }
+      .auth-btn.primary:hover {
+        background: var(--accent-hover);
+      }
+      .auth-btn.primary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .auth-btn.outline {
+        background: transparent;
+        color: var(--text);
+        border: 2px solid rgba(16, 163, 127, 0.5);
+      }
+      .auth-btn.outline:hover {
+        background: rgba(16, 163, 127, 0.1);
+      }
+      .auth-divider {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 12px 0;
+      }
+      .auth-divider::before,
+      .auth-divider::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+      }
+      .auth-divider span {
+        font-size: 11px;
+        color: var(--text-muted);
+        white-space: nowrap;
+      }
+      .auth-switch {
+        text-align: center;
+        font-size: 13px;
+        color: var(--text-muted);
+        cursor: pointer;
+      }
+      .auth-switch:hover {
+        color: var(--text);
+      }
+
+      /* ===== GPT BUILDER MODAL ===== */
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 400;
+        padding: 16px;
+      }
+      .modal-overlay.hidden {
+        display: none;
+      }
+      .modal-box {
+        background: var(--bg2);
+        border-radius: 14px;
+        width: 100%;
+        max-width: 640px;
+        max-height: 90vh;
+        overflow-y: auto;
+      }
+      .modal-header {
+        position: sticky;
+        top: 0;
+        background: var(--bg2);
+        border-bottom: 1px solid var(--border);
+        padding: 20px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        z-index: 1;
+      }
+      .modal-title {
+        font-size: 20px;
+        font-weight: 700;
+      }
+      .modal-close {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 6px;
+        display: flex;
+      }
+      .modal-close:hover {
+        color: var(--text);
+      }
+      .modal-body {
+        padding: 24px;
+      }
+      .form-group {
+        margin-bottom: 20px;
+      }
+      .form-label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        margin-bottom: 7px;
+      }
+      .form-label .req {
+        color: var(--danger);
+        margin-left: 3px;
+      }
+      .form-input {
+        width: 100%;
+        background: var(--bg4);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px 14px;
+        color: var(--text);
+        font-size: 14px;
+        outline: none;
+        font-family: inherit;
+        transition: border-color 0.15s;
+      }
+      .form-input:focus {
+        border-color: var(--accent);
+      }
+      .form-textarea {
+        min-height: 100px;
+        resize: vertical;
+      }
+      .upload-zone {
+        border: 2px dashed var(--border);
+        border-radius: 10px;
+        padding: 28px;
+        text-align: center;
+        cursor: pointer;
+        transition:
+          border-color 0.15s,
+          background 0.15s;
+      }
+      .upload-zone:hover {
+        border-color: rgba(255, 255, 255, 0.3);
+        background: rgba(255, 255, 255, 0.02);
+      }
+      .upload-zone-text {
+        color: var(--text-muted);
+        font-size: 13px;
+        margin-top: 8px;
+      }
+      .upload-zone-hint {
+        color: var(--text-dim);
+        font-size: 11px;
+        margin-top: 4px;
+      }
+      .file-list {
+        margin-top: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .file-list-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        background: var(--bg4);
+        border-radius: 8px;
+        padding: 8px 12px;
+      }
+      .file-list-name {
+        flex: 1;
+        font-size: 13px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .file-list-size {
+        font-size: 11px;
+        color: var(--text-muted);
+      }
+      .file-list-del {
+        background: none;
+        border: none;
+        color: var(--danger);
+        cursor: pointer;
+        padding: 2px;
+        display: flex;
+        border-radius: 4px;
+      }
+      .checkbox-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .checkbox-row input {
+        width: 16px;
+        height: 16px;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+      .modal-footer {
+        display: flex;
+        gap: 10px;
+        padding-top: 8px;
+      }
+      .modal-footer .btn-cancel {
+        flex: 1;
+        padding: 11px;
+        background: var(--bg4);
+        border: none;
+        color: var(--text);
+        border-radius: 8px;
+        font-size: 14px;
+        cursor: pointer;
+      }
+      .modal-footer .btn-save {
+        flex: 1;
+        padding: 11px;
+        background: var(--accent);
+        border: none;
+        color: white;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .modal-footer .btn-save:hover {
+        background: var(--accent-hover);
+      }
+      .modal-footer .btn-save:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      /* ===== TOAST ===== */
+      #toast-container {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        z-index: 9999;
+        pointer-events: none;
+      }
+      .toast {
+        padding: 10px 18px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        animation: slideIn 0.25s ease;
+        pointer-events: auto;
+        max-width: 320px;
+        text-align: center;
+      }
+      .toast.success {
+        background: #1a3a2f;
+        border: 1px solid var(--accent);
+        color: #4ade80;
+      }
+      .toast.error {
+        background: #3a1a1a;
+        border: 1px solid var(--danger);
+        color: #f87171;
+      }
+      .toast.info {
+        background: #1a2a3a;
+        border: 1px solid #3b82f6;
+        color: #93c5fd;
+      }
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* ===== SPINNER ===== */
+      .spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid rgba(255, 255, 255, 0.15);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      #loading-screen {
+        position: fixed;
+        inset: 0;
+        background: var(--bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 999;
+      }
+      #loading-screen.hidden {
+        display: none;
+      }
+
+      /* ===== SUPABASE ANON KEY 최초 실행 입력 모달 (자동 설정 기능) ===== */
+      #sb-key-overlay {
+        z-index: 10000; /* #loading-screen(999)보다 위에 떠야 함 */
+      }
+      #sb-key-overlay .form-hint {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin: -2px 0 10px;
+        line-height: 1.5;
+      }
+      #sb-key-overlay .sb-key-error {
+        font-size: 12px;
+        color: var(--danger);
+        min-height: 16px;
+        margin: 4px 0 2px;
+      }
+    </style>
+
+    <div id="loading-screen"><div class="spinner"></div></div>
+    <div id="toast-container"></div>
+
+    <!-- ── 브라우저 패널 (사용자가 🌐 버튼을 눌렀을 때만 표시) ── -->
+    <div id="brow">
+      <div id="brow-content">
+        <div id="brow-tb">
+          <button id="brow-back" class="input-box-btn" style="border-radius: 7px; min-height: 34px; color: #fff">
+            <i class="fa-solid fa-xmark"></i>
+            &nbsp;닫기
+          </button>
+          <div id="brow-url">
+            <i class="fa-solid fa-lock" style="color: #4ade80; margin-right: 4px"></i>
+            GoldFireDragonBrowser
+          </div>
+          <button
+            id="brow-reload"
+            class="input-box-btn"
+            style="width: 32px; height: 32px; color: #fff"
+            title="새로고침"
+          >
+            <i class="fa-solid fa-rotate-right"></i>
+          </button>
+          <button
+            id="brow-newtab"
+            class="input-box-btn"
+            style="width: 32px; height: 32px; color: #fff"
+            title="새 탭에서 열기"
+          >
+            <i class="fa-solid fa-arrow-up-right-from-square"></i>
+          </button>
+        </div>
+        <iframe
+          id="brow-iframe"
+          src="about:blank"
+          title="브라우저"
+          allowfullscreen=""
+          style="flex: 1; width: 100%; border: none"
+        ></iframe>
+      </div>
+      <div id="brow-resize" title="드래그하여 크기 조절"></div>
+    </div>
+
+    <div id="app"></div>
+
+    <script>
+      // ═══════════════════════════════════════════════════════════════
+      // 🛡️  최우선 안전망 — CDN 로딩 실패 등 어떤 예외가 나도
+      //     로딩 화면이 무한정 떠 있지 않도록 강제로 처리한다.
+      // ═══════════════════════════════════════════════════════════════
+      window.__bootFailed = false;
+      window.__bootReady = false;
+      window.addEventListener("error", function (e) {
+        // 선택적 CDN/런타임/iframe 리소스 하나가 실패해도 index 전체를 죽이지 않습니다.
+        // 실제 부팅 지연은 아래 watchdog이 처리합니다.
+        console.warn("Optional resource/runtime error:", e.error || e.message || e.filename || "unknown");
+      });
+      // 8초 안에 부팅이 끝나지 않으면(로딩 화면이 안 사라지면) 강제로 에러 처리
+      window.__bootWatchdog = setTimeout(function () {
+        var ls = document.getElementById("loading-screen");
+        var waitingForKeyInput = document.getElementById("sb-key-overlay");
+        if (ls && !ls.classList.contains("hidden") && !window.__bootFailed && !waitingForKeyInput) {
+          window.__bootFailed = true;
+          ls.innerHTML =
+            '<div style="text-align:center;padding:24px;color:#fff;font-family:-apple-system,sans-serif;">' +
+            '<div style="font-size:16px;font-weight:600;margin-bottom:8px;">로딩이 너무 오래 걸립니다</div>' +
+            '<div style="font-size:13px;color:rgba(255,255,255,0.6);margin-bottom:16px;">네트워크 연결을 확인하고 새로고침해주세요.</div>' +
+            '<button onclick="location.reload()" style="padding:10px 20px;background:#10a37f;border:none;border-radius:8px;color:#fff;font-size:14px;cursor:pointer;">새로고침</button>' +
+            "</div>";
+        }
+      }, 12000);
+
+      // ═══════════════════════════════════════════════════════════════
+      // ⚙️  설정 — Supabase URL
+      // ═══════════════════════════════════════════════════════════════
+      const SUPABASE_URL = "https://shtixmaykwundutbshti.backend.onspace.ai";
+      const EDGE_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/chat-stream`;
+
+      // ═══════════════════════════════════════════════════════════════
+      // 🔑  SUPABASE_ANON_KEY 자동 설정 (하드코딩 불필요)
+      //     우선순위: ① /env-config.js  (.env의 VITE_SUPABASE_ANON_KEY → generate-env-config.js가 빌드 시 생성)
+      //              ② localStorage    (이 기기에 이전에 저장된 값)
+      //              ③ 최초 실행 입력폼 (제출 시 localStorage에 저장 → 다음부터는 자동으로 재사용)
+      // ═══════════════════════════════════════════════════════════════
+      const SB_KEY_STORAGE_NAME = "SUPABASE_ANON_KEY";
+
+      function getEnvAnonKey() {
+        try {
+          return (window.__ENV__ && window.__ENV__.SUPABASE_ANON_KEY) || "";
+        } catch (e) {
+          return "";
+        }
+      }
+
+      function getSavedAnonKey() {
+        try {
+          return localStorage.getItem(SB_KEY_STORAGE_NAME) || "";
+        } catch (e) {
+          return "";
+        }
+      }
+
+      function saveAnonKey(key) {
+        try {
+          localStorage.setItem(SB_KEY_STORAGE_NAME, key);
+        } catch (e) {
+          console.warn("localStorage 저장 실패:", e);
+        }
+      }
+
+      function askAnonKeyViaModal() {
+        return new Promise((resolve) => {
+          const overlay = document.createElement("div");
+          overlay.id = "sb-key-overlay";
+          overlay.className = "modal-overlay";
+          overlay.innerHTML = `
+                  <div class="modal-box" style="max-width:420px;">
+                    <div class="modal-header">
+                      <div class="modal-title">Supabase 연결 설정</div>
+                    </div>
+                    <div class="modal-body">
+                      <div class="form-group">
+                        <label class="form-label">Supabase Anon Key<span class="req">*</span></label>
+                        <div class="form-hint">최초 1회만 입력하면 이 기기에 저장되어 다음부터 자동으로 사용됩니다.</div>
+                        <input class="form-input" id="sb-key-input" type="text" placeholder="eyJhbGciOi..." autocomplete="off" spellcheck="false" />
+                        <div class="sb-key-error" id="sb-key-error"></div>
+                      </div>
+                      <button class="auth-btn primary" id="sb-key-submit">저장하고 시작하기</button>
+                    </div>
+                  </div>`;
+          document.body.appendChild(overlay);
+
+          const input = overlay.querySelector("#sb-key-input");
+          const errEl = overlay.querySelector("#sb-key-error");
+
+          function submit() {
+            const val = input.value.trim();
+            if (!val) {
+              errEl.textContent = "Anon Key를 입력해주세요.";
+              input.focus();
+              return;
+            }
+            saveAnonKey(val);
+            overlay.remove();
+            resolve(val);
+          }
+
+          overlay.querySelector("#sb-key-submit").addEventListener("click", submit);
+          input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") submit();
+          });
+          setTimeout(() => input.focus(), 50);
+        });
+      }
+
+      async function resolveAnonKey() {
+        const fromEnv = getEnvAnonKey();
+        if (fromEnv) return fromEnv;
+        const fromStorage = getSavedAnonKey();
+        if (fromStorage) return fromStorage;
+        return await askAnonKeyViaModal();
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 💾  LOCAL STORAGE PROVIDER (Supabase Mock - Robust Version)
+      // ═══════════════════════════════════════════════════════════════
+      const LocalDB = {
+        async get(store) {
+          return (await localforage.getItem(store)) || [];
+        },
+        async save(store, data) {
+          await localforage.setItem(store, data);
+        },
+      };
+
+      let sb;
+      const supabaseReady = (async function initLocalSB() {
+        window.addEventListener("online", () => {
+          setState({ isOnline: true, syncStatus: "연결 복구됨" });
+          void flushSyncQueue();
+        });
+        window.addEventListener("offline", () => setState({ isOnline: false, syncStatus: "오프라인 · 기기에 저장 중" }));
+
+        const chain = (table) => {
+          let filters = [];
+          let sortCol = "created_at";
+          let ascending = false;
+
+          const p = {
+            select: () => p,
+            insert: (row) => ({
+              select: () => ({
+                single: () => ({
+                  then: async (resolve) => {
+                    const data = await LocalDB.get(table);
+                    const newRow = {
+                      id: row.id || "id-" + Date.now() + "-" + Math.random().toString(36).slice(2),
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                      ...row,
+                    };
+                    data.unshift(newRow);
+                    await LocalDB.save(table, data);
+                    if (resolve) resolve({ data: newRow, error: null });
+                    return { data: newRow, error: null };
+                  },
+                }),
+              }),
+            }),
+            update: (updates) => ({
+              eq: (col, val) => ({
+                then: async (resolve) => {
+                  const data = await LocalDB.get(table);
+                  const idx = data.findIndex((x) => x[col] === val);
+                  if (idx !== -1) {
+                    data[idx] = { ...data[idx], ...updates, updated_at: new Date().toISOString() };
+                    await LocalDB.save(table, data);
+                    if (resolve) resolve({ data: data[idx], error: null });
+                    return { data: data[idx], error: null };
+                  } else {
+                    if (resolve) resolve({ data: null, error: { message: "Not found" } });
+                    return { data: null, error: { message: "Not found" } };
+                  }
+                },
+              }),
+            }),
+            delete: () => ({
+              eq: (col, val) => ({
+                then: async (resolve) => {
+                  const data = await LocalDB.get(table);
+                  const filtered = data.filter((x) => x[col] !== val);
+                  await LocalDB.save(table, filtered);
+                  if (resolve) resolve({ error: null });
+                  return { error: null };
+                },
+              }),
+            }),
+            eq: (k, v) => {
+              filters.push({ k, v });
+              return p;
+            },
+            or: (query) => {
+              filters.push({ or: query });
+              return p;
+            },
+            order: (col, opts) => {
+              sortCol = col;
+              ascending = opts?.ascending || false;
+              return p;
+            },
+            single: () => ({
+              then: async (resolve) => {
+                const { data, error } = await p.then((r) => r);
+                const res = { data: data ? data[0] : null, error };
+                if (resolve) resolve(res);
+                return res;
+              },
+            }),
+            then: async (resolve) => {
+              let data = await LocalDB.get(table);
+              for (const f of filters) {
+                if (f.or) {
+                  data = data.filter((x) => x.user_id === S.user?.id || x.is_public === true);
+                } else {
+                  data = data.filter((x) => x[f.k] === f.v);
+                }
+              }
+              data.sort((a, b) => {
+                const va = a[sortCol],
+                  vb = b[sortCol];
+                if (va < vb) return ascending ? -1 : 1;
+                if (va > vb) return ascending ? 1 : -1;
+                return 0;
+              });
+              if (resolve) resolve({ data, error: null });
+              return { data, error: null };
+            },
+          };
+          return p;
+        };
+
+        sb = {
+          auth: {
+            getSession: async () => {
+              const user = await localforage.getItem("local_user");
+              const access_token = getEnvAnonKey() || getSavedAnonKey() || "";
+              return { data: { session: user ? { user, access_token } : null } };
+            },
+            onAuthStateChange: (cb) => {
+              return { data: { subscription: { unsubscribe() {} } } };
+            },
+            signInWithPassword: async ({ email }) => {
+              const user = { id: "u-" + Date.now(), email, user_metadata: { username: email.split("@")[0] } };
+              await localforage.setItem("local_user", user);
+              return { data: { user }, error: null };
+            },
+            signInWithOtp: () => Promise.resolve({ error: null }),
+            verifyOtp: async ({ email }) => {
+              const user = { id: "u-" + Date.now(), email, user_metadata: { username: email.split("@")[0] } };
+              await localforage.setItem("local_user", user);
+              return { data: { user }, error: null };
+            },
+            updateUser: async ({ data }) => {
+              const user = await localforage.getItem("local_user");
+              const newUser = { ...user, user_metadata: { ...user.user_metadata, ...data } };
+              await localforage.setItem("local_user", newUser);
+              return { data: { user: newUser }, error: null };
+            },
+            signOut: async () => {
+              await localforage.removeItem("local_user");
+              return { error: null };
+            },
+          },
+          from: (table) => chain(table),
+          storage: {
+            from: (bucket) => ({
+              upload: async (path, file) => {
+                const id = "storage-" + path.replace(/[^a-zA-Z0-9]/g, "_");
+                await localforage.setItem(id, file);
+                return { data: { path }, error: null };
+              },
+              remove: async (paths) => {
+                for (const p of paths) {
+                  const id = "storage-" + p.replace(/[^a-zA-Z0-9]/g, "_");
+                  await localforage.removeItem(id);
+                }
+                return { error: null };
+              },
+              createSignedUrl: async (path) => {
+                const id = "storage-" + path.replace(/[^a-zA-Z0-9]/g, "_");
+                const blob = await localforage.getItem(id);
+                return { data: { signedUrl: blob ? URL.createObjectURL(blob) : "" }, error: null };
+              },
+            }),
+          },
+        };
+
+        // 무인증 기기 프로필은 initAuth()에서 단일 경로로 복원합니다.
+      })();
+
+      // ═══════════════════════════════════════════════════════════════
+      // 📦  LOCALFORAGE STORES (파일 영구 저장) — CDN 실패 대비 폴백 포함
+      // ═══════════════════════════════════════════════════════════════
+      function makeStore(opts) {
+        if (typeof localforage !== "undefined" && localforage.createInstance) {
+          return localforage.createInstance(opts);
+        }
+        // localforage 로드 실패 시: 메모리 기반 더미 스토어로 대체 (새로고침 시 사라짐)
+        const mem = new Map();
+        return {
+          async getItem(k) {
+            return mem.has(k) ? mem.get(k) : null;
+          },
+          async setItem(k, v) {
+            mem.set(k, v);
+            return v;
+          },
+          async removeItem(k) {
+            mem.delete(k);
+          },
+          async iterate(cb) {
+            let i = 0;
+            for (const [k, v] of mem.entries()) {
+              cb(v, k, ++i);
+            }
+          },
+          async ready() {
+            return true;
+          },
+        };
+      }
+      const blobStore = makeStore({ name: "aichat-files", storeName: "blobs" });
+      const metaStore = makeStore({ name: "aichat-files", storeName: "meta" });
+      const msgFileStore = makeStore({ name: "aichat-files", storeName: "msg_files" });
+      const convStore = makeStore({ name: "aichat-offline", storeName: "conversations" });
+      const msgStore = makeStore({ name: "aichat-offline", storeName: "messages" });
+      // GPT 빌더는 Supabase 설정 여부와 무관하게 이 전용 LocalForage 저장소를 기준으로 동작합니다.
+      const localGPTStore = makeStore({ name: "aichat-gpt-builder", storeName: "gpts" });
+      const localGPTFileStore = makeStore({ name: "aichat-gpt-builder", storeName: "files" });
+
+      const TEXT_EXTS = new Set([
+        "txt",
+        "md",
+        "csv",
+        "json",
+        "log",
+        "xml",
+        "yaml",
+        "yml",
+        "ts",
+        "tsx",
+        "js",
+        "jsx",
+        "py",
+        "css",
+        "html",
+        "sh",
+        "env",
+        "ini",
+        "toml",
+        "sql",
+        "rs",
+        "go",
+        "java",
+        "kt",
+        "swift",
+        "c",
+        "cpp",
+        "h",
+        "cs",
+        "php",
+        "rb",
+      ]);
+      function fileType(file) {
+        if (file.type.startsWith("image/")) return "image";
+        if (file.type.startsWith("text/") || file.type === "application/json") return "text";
+        const e = file.name.split(".").pop()?.toLowerCase() || "";
+        return TEXT_EXTS.has(e) ? "text" : "other";
+      }
+      function fmtSize(b) {
+        if (b < 1024) return b + "B";
+        if (b < 1048576) return (b / 1024).toFixed(1) + "KB";
+        return (b / 1048576).toFixed(1) + "MB";
+      }
+
+      async function storeFileLF(file, ctx = {}) {
+        const id = `f-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+        const type = fileType(file);
+        let textContent;
+        if (type === "text") {
+          try {
+            const raw = await file.text();
+            textContent = raw.length > 50000 ? raw.slice(0, 50000) + "\n...(생략)" : raw;
+          } catch {}
+        }
+        const meta = {
+          id,
+          name: file.name,
+          mimeType: file.type || "application/octet-stream",
+          size: file.size,
+          type,
+          textContent,
+          createdAt: new Date().toISOString(),
+          ...ctx,
+        };
+        await blobStore.setItem(id, file.slice(0, file.size, file.type));
+        await metaStore.setItem(id, meta);
+        return meta;
+      }
+      async function getFileBlob(id) {
+        try {
+          return await blobStore.getItem(id);
+        } catch {
+          return null;
+        }
+      }
+      async function getFileMeta(id) {
+        try {
+          return await metaStore.getItem(id);
+        } catch {
+          return null;
+        }
+      }
+      async function createObjUrl(id) {
+        const b = await getFileBlob(id);
+        return b ? URL.createObjectURL(b) : null;
+      }
+      async function fileToBase64(id) {
+        const b = await getFileBlob(id);
+        if (!b) return null;
+        return new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = (e) => res(e.target.result);
+          r.onerror = rej;
+          r.readAsDataURL(b);
+        });
+      }
+      async function setMsgFiles(msgId, ids) {
+        if (!msgId || !ids.length) return;
+        await msgFileStore.setItem(msgId, ids);
+      }
+      async function getMsgFiles(msgId) {
+        try {
+          return (await msgFileStore.getItem(msgId)) || [];
+        } catch {
+          return [];
+        }
+      }
+      async function getMsgFileMetas(msgId) {
+        const ids = await getMsgFiles(msgId);
+        if (!ids.length) return [];
+        const r = await Promise.all(ids.map(getFileMeta));
+        return r.filter(Boolean);
+      }
+
+      // Offline cache
+      async function cacheConv(c) {
+        try {
+          await convStore.setItem(c.id, c);
+          await queueSync("conversation", c);
+        } catch (error) {
+          console.warn("대화 로컬 저장 실패:", error);
+        }
+      }
+      async function getCachedConvs(uid) {
+        const res = [];
+        await convStore.iterate((v) => {
+          if (v.user_id === uid) res.push(v);
+        });
+        return res.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+      }
+      async function delCachedConv(id) {
+        try {
+          await convStore.removeItem(id);
+          await msgStore.iterate(async (v, k) => {
+            if (v.conversation_id === id) await msgStore.removeItem(k);
+          });
+        } catch {}
+      }
+      async function cacheMsgLF(m) {
+        try {
+          await msgStore.setItem(m.id, m);
+          await queueSync("message", m);
+        } catch (error) {
+          console.warn("메시지 로컬 저장 실패:", error);
+        }
+      }
+      async function getCachedMsgs(cid) {
+        const res = [];
+        await msgStore.iterate((v) => {
+          if (v.conversation_id === cid) res.push(v);
+        });
+        return res.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 🤖  LOCAL GPT BUILDER STORAGE
+      // ═══════════════════════════════════════════════════════════════
+      function newLocalGPTId() {
+        return `local-gpt-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`;
+      }
+
+      async function getLocalGPTs(ownerId = S.user?.id) {
+        const gpts = [];
+        await localGPTStore.iterate((gpt) => {
+          if (gpt?.user_id === ownerId) gpts.push(gpt);
+        });
+        return gpts.sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+      }
+
+      async function saveLocalGPT(record) {
+        const next = { ...record, storage: "local", updated_at: new Date().toISOString() };
+        await localGPTStore.setItem(next.id, next);
+        return next;
+      }
+
+      async function getLocalGPTFiles(gptId) {
+        const files = [];
+        await localGPTFileStore.iterate((file) => {
+          if (file?.custom_gpt_id === gptId) files.push({ ...file, isExisting: true, isLocal: true });
+        });
+        return files.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+      }
+
+      async function saveLocalGPTFile(gptId, file) {
+        const record = {
+          id: file.id || `local-gpt-file-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`,
+          custom_gpt_id: gptId,
+          file_name: file.file_name,
+          file_size: file.file_size || 0,
+          mime_type: file.mime_type || "application/octet-stream",
+          file_content: file.file_content || "",
+          local_file_id: file.local_file_id || "",
+          created_at: file.created_at || new Date().toISOString(),
+          storage: "local",
+        };
+        await localGPTFileStore.setItem(record.id, record);
+        return { ...record, isExisting: true, isLocal: true };
+      }
+
+      async function deleteLocalGPTFile(file) {
+        if (!file?.id) return;
+        await localGPTFileStore.removeItem(file.id).catch(() => {});
+        if (file.local_file_id) {
+          await blobStore.removeItem(file.local_file_id).catch(() => {});
+          await metaStore.removeItem(file.local_file_id).catch(() => {});
+        }
+      }
+
+      async function deleteLocalGPT(gptId) {
+        const files = await getLocalGPTFiles(gptId);
+        for (const file of files) await deleteLocalGPTFile(file);
+        await localGPTStore.removeItem(gptId);
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 💾  DEVICE PROFILE & OPTIONAL CLOUD SYNC
+      // ═══════════════════════════════════════════════════════════════
+      const profileStore = makeStore({ name: "aichat-profile", storeName: "profile" });
+      const syncStore = makeStore({ name: "aichat-profile", storeName: "sync_queue" });
+      const DEVICE_PROFILE_KEY = "device-profile-v2";
+      const CLOUD_CONFIG_KEY = "cloud-config-v1";
+      let cloudClient = null;
+      let cloudClientKey = "";
+
+      function newDeviceId() {
+        return `device-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`;
+      }
+
+      async function getDeviceProfile() {
+        let profile = await profileStore.getItem(DEVICE_PROFILE_KEY).catch(() => null);
+        if (!profile || typeof profile.id !== "string") {
+          profile = {
+            id: newDeviceId(),
+            username: "사용자",
+            email: "",
+            avatar: "",
+            bio: "",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            isAnonymous: true,
+          };
+          await profileStore.setItem(DEVICE_PROFILE_KEY, profile);
+        }
+        return profile;
+      }
+
+      async function saveDeviceProfile(changes) {
+        const current = await getDeviceProfile();
+        const next = { ...current, ...changes, updated_at: new Date().toISOString() };
+        // Object URL은 현재 탭에서만 유효하므로 IndexedDB에는 파일 ID와 메타데이터만 저장합니다.
+        const persistent = { ...next };
+        delete persistent.avatarPreview;
+        await profileStore.setItem(DEVICE_PROFILE_KEY, persistent);
+        // 기존 로컬 스토리지 어댑터와의 호환성을 유지합니다.
+        await localforage.setItem("local_user", persistent).catch(() => {});
+        return next;
+      }
+
+      async function hydrateProfileMedia(profile) {
+        if (!profile?.avatarFileId) return profile;
+        const avatarPreview = await createObjUrl(profile.avatarFileId).catch(() => null);
+        return avatarPreview ? { ...profile, avatarPreview } : profile;
+      }
+
+      function profileAvatarSrc(profile) {
+        return profile?.avatarPreview || profile?.avatar || "";
+      }
+
+      async function getProfileDocuments(profile = S.user) {
+        const documents = Array.isArray(profile?.documents) ? profile.documents : [];
+        return documents.filter((document) => document?.id && document?.name);
+      }
+
+      async function getCloudConfig() {
+        const stored = await profileStore.getItem(CLOUD_CONFIG_KEY).catch(() => null);
+        const env = window.__ENV__ || {};
+        return {
+          url: stored?.url || env.SUPABASE_URL || "",
+          anonKey: stored?.anonKey || env.SUPABASE_ANON_KEY || "",
+        };
+      }
+
+      async function saveCloudConfig(url, anonKey) {
+        const normalizedUrl = String(url || "").trim().replace(/\/$/, "");
+        const normalizedKey = String(anonKey || "").trim();
+        if (!/^https:\/\//i.test(normalizedUrl) || !normalizedKey) {
+          throw new Error("유효한 HTTPS Supabase URL과 Anon Key를 입력하세요.");
+        }
+        await profileStore.setItem(CLOUD_CONFIG_KEY, { url: normalizedUrl, anonKey: normalizedKey });
+        cloudClient = null;
+        cloudClientKey = "";
+      }
+
+      async function getCloudClient() {
+        const config = await getCloudConfig();
+        if (!config.url || !config.anonKey) return null;
+        const key = `${config.url}|${config.anonKey}`;
+        if (cloudClient && cloudClientKey === key) return cloudClient;
+        const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.49.8");
+        cloudClient = createClient(config.url, config.anonKey, {
+          auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+        });
+        cloudClientKey = key;
+        return cloudClient;
+      }
+
+      async function updateSyncCount() {
+        let count = 0;
+        await syncStore.iterate(() => {
+          count += 1;
+        }).catch(() => {});
+        if (typeof S !== "undefined") setState({ syncPending: count });
+        return count;
+      }
+
+      async function queueSync(kind, record) {
+        if (!record?.id) return;
+        await syncStore.setItem(`${kind}:${record.id}`, {
+          kind,
+          record: { ...record },
+          queued_at: new Date().toISOString(),
+          attempts: 0,
+        });
+        await updateSyncCount();
+        if (navigator.onLine) void flushSyncQueue();
+      }
+
+      async function flushSyncQueue() {
+        if (!navigator.onLine || !S?.account?.connected || S.syncing) return false;
+        const client = await getCloudClient().catch(() => null);
+        if (!client) return false;
+        setState({ syncing: true, syncStatus: "동기화 중" });
+        let failed = false;
+        try {
+          const { data: sessionData } = await client.auth.getSession();
+          const accountId = sessionData?.session?.user?.id;
+          if (!accountId) return false;
+          const jobs = [];
+          await syncStore.iterate((job, key) => jobs.push({ job, key }));
+          // 프로필 파일을 먼저 올린 뒤 프로필 메타데이터를 반영합니다.
+          jobs.sort((a, b) => (a.job.kind === "profileFile" ? -1 : 0) - (b.job.kind === "profileFile" ? -1 : 0));
+          for (const { job, key } of jobs) {
+            try {
+              let error = null;
+              if (job.kind === "conversation") {
+                ({ error } = await client.from("conversations").upsert({ ...job.record, user_id: accountId }, { onConflict: "id" }));
+              } else if (job.kind === "message") {
+                ({ error } = await client.from("messages").upsert(job.record, { onConflict: "id" }));
+              } else if (job.kind === "profileFile") {
+                const blob = await getFileBlob(job.record.id);
+                if (!blob) throw new Error("프로필 파일을 이 기기에서 찾지 못했습니다.");
+                const safeName = String(job.record.name || "file").replace(/[^a-zA-Z0-9._-]/g, "_");
+                const path = `${accountId}/profile/${job.record.id}-${safeName}`;
+                ({ error } = await client.storage.from("chat-files").upload(path, blob, {
+                  upsert: true,
+                  contentType: job.record.mimeType || "application/octet-stream",
+                }));
+                if (!error) {
+                  const profile = await getDeviceProfile();
+                  const changes = job.record.role === "profile-avatar"
+                    ? { avatarCloudPath: path }
+                    : { documents: (profile.documents || []).map((document) => document.id === job.record.id ? { ...document, cloudPath: path } : document) };
+                  const updated = await saveDeviceProfile(changes);
+                  await queueSync("profile", updated);
+                }
+              } else if (job.kind === "profile") {
+                ({ error } = await client.auth.updateUser({
+                  data: {
+                    username: job.record.username,
+                    avatar_url: job.record.avatar || "",
+                    avatar_path: job.record.avatarCloudPath || "",
+                    bio: job.record.bio || "",
+                    documents: (job.record.documents || []).map(({ id, name, mimeType, size, cloudPath }) => ({ id, name, mimeType, size, cloudPath: cloudPath || "" })),
+                  },
+                }));
+              }
+              if (error) throw error;
+              await syncStore.removeItem(key);
+            } catch (error) {
+              failed = true;
+              await syncStore.setItem(key, { ...job, attempts: (job.attempts || 0) + 1, last_error: String(error?.message || error) });
+            }
+          }
+          const pending = await updateSyncCount();
+          setState({ syncStatus: failed ? "일부 동기화 대기" : pending ? "동기화 대기" : "동기화 완료" });
+          return !failed;
+        } finally {
+          setState({ syncing: false });
+        }
+      }
+
+      async function pullCloudData() {
+        if (!S?.account?.connected) return false;
+        const client = await getCloudClient().catch(() => null);
+        if (!client) return false;
+        const { data: sessionData } = await client.auth.getSession();
+        const accountId = sessionData?.session?.user?.id;
+        if (!accountId || !S.user?.id) return false;
+        const { data: remoteConversations, error: conversationsError } = await client
+          .from("conversations")
+          .select("*")
+          .eq("user_id", accountId)
+          .order("updated_at", { ascending: false });
+        if (conversationsError) throw conversationsError;
+        for (const conversation of remoteConversations || []) {
+          await convStore.setItem(conversation.id, { ...conversation, user_id: S.user.id });
+          const { data: remoteMessages, error: messagesError } = await client
+            .from("messages")
+            .select("*")
+            .eq("conversation_id", conversation.id)
+            .order("created_at", { ascending: true });
+          if (messagesError) throw messagesError;
+          for (const message of remoteMessages || []) await msgStore.setItem(message.id, message);
+        }
+        const conversations = await getCachedConvs(S.user.id);
+        const currentMessages = S.currentConvId ? await getCachedMsgs(S.currentConvId) : S.messages;
+        setState({ conversations, messages: currentMessages, syncStatus: "동기화 완료" });
+        return true;
+      }
+
+      async function refreshCloudAccount() {
+        const client = await getCloudClient().catch(() => null);
+        if (!client) return null;
+        const { data } = await client.auth.getSession();
+        const remoteUser = data?.session?.user;
+        if (!remoteUser) return null;
+        const device = await getDeviceProfile();
+        const linked = await saveDeviceProfile({
+          accountId: remoteUser.id,
+          email: remoteUser.email || "",
+          username: remoteUser.user_metadata?.username || device.username,
+          avatar: remoteUser.user_metadata?.avatar_url || device.avatar || "",
+          bio: remoteUser.user_metadata?.bio || device.bio || "",
+          isAnonymous: false,
+        });
+        setState({ user: linked, account: { connected: true, provider: remoteUser.app_metadata?.provider || "email" } });
+        await queueSync("profile", linked);
+        await flushSyncQueue();
+        await pullCloudData().catch((error) => console.warn("원격 데이터 수신 동기화 실패:", error));
+        return linked;
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 🔄  STATE
+      // ═══════════════════════════════════════════════════════════════
+      const S = {
+        user: null,
+        loading: true,
+        conversations: [],
+        currentConvId: null,
+        messages: [],
+        streamingMsg: "",
+        isStreaming: false,
+        customGPTs: [],
+        currentGPT: null,
+        currentGPTFiles: [],
+        isOnline: navigator.onLine,
+        view: "chat", // 'chat' | 'auth'
+        // modals
+        gptBuilderOpen: false,
+        gptBuilderEditing: null,
+        // tmp attached files (before send)
+        attachedFiles: [],
+        // dropdown open
+        dropdownOpen: false,
+        // browser panel open (split view with chat)
+        browserOpen: false,
+        // sidebar drawer open
+        sidebarOpen: false,
+        // 브라우저 메모리에서 실행되는 로컬 GGUF 모델 상태
+        localModel: { ready: false, loading: false, generating: false, modelFiles: 0, savedModelId: "" },
+        account: { connected: false, provider: "" },
+        syncPending: 0,
+        syncing: false,
+        syncStatus: "기기에 안전하게 저장됨",
+      };
+
+      let renderScheduled = false;
+      function setState(updates) {
+        Object.assign(S, updates);
+        if (!renderScheduled) {
+          renderScheduled = true;
+          requestAnimationFrame(() => {
+            renderScheduled = false;
+            render();
+          });
+        }
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 🔔  TOAST
+      // ═══════════════════════════════════════════════════════════════
+      function toast(msg, type = "info", dur = 3000) {
+        const el = document.createElement("div");
+        el.className = `toast ${type}`;
+        el.textContent = msg;
+        const c = document.getElementById("toast-container");
+        if (!c) return;
+        c.appendChild(el);
+        setTimeout(() => {
+          el.style.opacity = "0";
+          el.style.transition = "opacity 0.3s";
+          setTimeout(() => el.remove(), 300);
+        }, dur);
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 🔐  AUTH
+      // ═══════════════════════════════════════════════════════════════
+      function mapUser(u) {
+        const email = u?.email || "";
+        return {
+          id: u?.id || `local-${Date.now()}`,
+          email,
+          username: u?.user_metadata?.username || u?.user_metadata?.full_name || (email ? email.split("@")[0] : "사용자"),
+          avatar: u?.user_metadata?.avatar_url,
+        };
+      }
+
+      function isValidLocalUser(user) {
+        return !!user && typeof user.id === "string" && typeof user.username === "string";
+      }
+
+      // 네트워크 요청이 응답 없이 멈추는 경우를 대비한 타임아웃 헬퍼
+      function withTimeout(promise, ms, fallback) {
+        return new Promise((resolve) => {
+          let done = false;
+          const timer = setTimeout(() => {
+            if (!done) {
+              done = true;
+              resolve(fallback);
+            }
+          }, ms);
+          promise.then(
+            (v) => {
+              if (!done) {
+                done = true;
+                clearTimeout(timer);
+                resolve(v);
+              }
+            },
+            () => {
+              if (!done) {
+                done = true;
+                clearTimeout(timer);
+                resolve(fallback);
+              }
+            },
+          );
+        });
+      }
+
+      async function initAuth() {
+        // 기본 모드는 무인증입니다. 기기 프로필과 대화는 IndexedDB에 영구 보관됩니다.
+        try {
+          const deviceProfile = await getDeviceProfile();
+          const linkedProfile = await refreshCloudAccount().catch(() => null);
+          const profile = await hydrateProfileMedia(linkedProfile || deviceProfile);
+          setState({
+            user: profile,
+            loading: false,
+            view: "chat",
+            account: linkedProfile ? S.account : { connected: false, provider: "" },
+          });
+          await updateSyncCount();
+          await loadUserData();
+          if (navigator.onLine) void flushSyncQueue();
+        } catch (error) {
+          console.warn("기기 프로필 초기화 오류:", error);
+          const fallback = { id: newDeviceId(), username: "사용자", email: "", avatar: "", bio: "", isAnonymous: true };
+          setState({ user: fallback, loading: false, view: "chat", account: { connected: false, provider: "" } });
+        }
+      }
+      // (인증 상태 리스너는 supabaseReady 안, sb 생성 직후로 이동되었습니다)
+
+      async function doLogout() {
+        try {
+          await sb.auth.signOut();
+        } catch (e) {
+          console.warn("logout error:", e);
+        }
+        try {
+          await localforage.removeItem("local_user");
+        } catch (e) {
+          console.warn("local guest cleanup error:", e);
+        }
+        setState({
+          user: null,
+          view: "auth",
+          conversations: [],
+          messages: [],
+          customGPTs: [],
+          currentConvId: null,
+          currentGPT: null,
+          currentGPTFiles: [],
+          attachedFiles: [],
+          isStreaming: false,
+          streamingMsg: "",
+          dropdownOpen: false,
+        });
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 📂  DATA LOADING
+      // ═══════════════════════════════════════════════════════════════
+      async function loadUserData() {
+        if (!S.user) return;
+        await Promise.all([loadConversations(), loadCustomGPTs()]);
+      }
+
+      async function loadConversations() {
+        const uid = S.user?.id;
+        if (!uid) return;
+        // 대화는 항상 우선 기기 저장소에서 복원해 오프라인에서도 즉시 표시합니다.
+        setState({ conversations: await getCachedConvs(uid) });
+        if (S.account?.connected && navigator.onLine) {
+          void pullCloudData().catch((error) => console.warn("대화 수신 동기화 실패:", error));
+        }
+      }
+
+      async function loadCustomGPTs() {
+        const uid = S.user?.id;
+        if (!uid) return;
+        // GPT 빌더는 기본적으로 LocalForage를 사용하므로 Supabase 미설정·오프라인에서도 즉시 복원됩니다.
+        try {
+          setState({ customGPTs: await getLocalGPTs(uid) });
+        } catch (error) {
+          console.warn("로컬 GPT 목록 복원 실패:", error);
+          setState({ customGPTs: [] });
+        }
+      }
+
+      async function loadMessages(convId) {
+        if (!convId) {
+          setState({ messages: [] });
+          return;
+        }
+        // 메시지도 기기 캐시가 기준입니다. 계정이 연결된 경우 pullCloudData()가 캐시를 병합합니다.
+        setState({ messages: await getCachedMsgs(convId) });
+        if (S.account?.connected && navigator.onLine) {
+          void pullCloudData().catch((error) => console.warn("메시지 수신 동기화 실패:", error));
+        }
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 💬  CHAT
+      // ═══════════════════════════════════════════════════════════════
+      async function processFiles(files, convId) {
+        const attachments = [];
+        for (const file of files) {
+          try {
+            const meta = await storeFileLF(file, { conversationId: convId });
+            if (meta.type === "image") {
+              if (!navigator.onLine) {
+                const b64 = await fileToBase64(meta.id);
+                if (b64)
+                  attachments.push({
+                    name: file.name,
+                    mimeType: file.type,
+                    type: "image",
+                    base64: b64,
+                    localId: meta.id,
+                  });
+              } else {
+                const safe = file.name.replace(/[^a-zA-Z0-9._\-]/g, "_");
+                const path = `${S.user.id}/chat/${Date.now()}_${safe}`;
+                const { data, error } = await sb.storage.from("chat-files").upload(path, file);
+                if (error) {
+                  const b64 = await fileToBase64(meta.id);
+                  if (b64)
+                    attachments.push({
+                      name: file.name,
+                      mimeType: file.type,
+                      type: "image",
+                      base64: b64,
+                      localId: meta.id,
+                    });
+                } else {
+                  const { data: signed, error: signedError } = await sb.storage
+                    .from("chat-files")
+                    .createSignedUrl(data.path, 3600);
+                  if (signedError || !signed?.signedUrl) {
+                    const b64 = await fileToBase64(meta.id);
+                    if (b64) {
+                      attachments.push({
+                        name: file.name,
+                        mimeType: file.type,
+                        type: "image",
+                        base64: b64,
+                        localId: meta.id,
+                      });
+                    }
+                  } else {
+                    attachments.push({
+                      name: file.name,
+                      mimeType: file.type,
+                      type: "image",
+                      url: signed.signedUrl,
+                      localId: meta.id,
+                    });
+                  }
+                }
+              }
+            } else if (meta.type === "text") {
+              attachments.push({
+                name: file.name,
+                mimeType: file.type,
+                type: "text",
+                textContent: meta.textContent,
+                localId: meta.id,
+              });
+            } else {
+              attachments.push({ name: file.name, mimeType: file.type, type: "other", localId: meta.id });
+            }
+          } catch (e) {
+            console.error(e);
+            toast(`파일 처리 실패: ${file.name}`, "error");
+          }
+        }
+        return attachments;
+      }
+
+      async function finalizeAssistantResponse(full, convId, isGuest, currentMsgs, trimmed, displayContent) {
+        const assistantMessage = {
+          id: `tmp-${Date.now()}`,
+          conversation_id: convId,
+          role: "assistant",
+          content: full,
+          created_at: new Date().toISOString(),
+        };
+
+        if (isGuest) {
+          assistantMessage.id = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+          setState({ messages: [...S.messages, assistantMessage], streamingMsg: "", isStreaming: false });
+          await cacheMsgLF(assistantMessage).catch(() => {});
+        } else {
+          const { data, error } = await sb
+            .from("messages")
+            .insert({ conversation_id: convId, role: "assistant", content: full })
+            .select()
+            .single();
+          const finalMessage = error ? assistantMessage : { ...data };
+          setState({ messages: [...S.messages, finalMessage], streamingMsg: "", isStreaming: false });
+          if (!error) await cacheMsgLF(finalMessage).catch(() => {});
+        }
+
+        if (currentMsgs.length === 1) {
+          const newTitle = trimmed.slice(0, 50) || displayContent.slice(0, 50);
+          if (!isGuest) {
+            sb.from("conversations")
+              .update({ title: newTitle, updated_at: new Date().toISOString() })
+              .eq("id", convId)
+              .then(() => {});
+          }
+          const updatedAt = new Date().toISOString();
+          const updatedConversations = S.conversations.map((conversation) =>
+            conversation.id === convId ? { ...conversation, title: newTitle, updated_at: updatedAt } : conversation,
+          );
+          setState({ conversations: updatedConversations });
+          const updatedConversation = updatedConversations.find((conversation) => conversation.id === convId);
+          if (updatedConversation) await cacheConv(updatedConversation).catch(() => {});
+        }
+      }
+
+      async function sendMessage(content, filesToSend = []) {
+        if (!S.user) {
+          toast("게스트 로그인 또는 로그인이 필요합니다", "error");
+          return false;
+        }
+        const trimmed = content.trim();
+        if (!trimmed && filesToSend.length === 0) return false;
+        if (S.isStreaming) return false;
+
+        let convId = S.currentConvId;
+        let savedMsgId = null;
+        const tempId = `temp-${Date.now()}`;
+        const isGuest = true;
+
+        // Determine system prompt / instructions
+        let sysPrompt = S.currentGPT?.system_prompt;
+        let instructions = S.currentGPT?.instructions;
+        if (convId && !S.currentGPT) {
+          const cv = S.conversations.find((c) => c.id === convId);
+          if (cv) {
+            sysPrompt = cv.system_prompt;
+            instructions = cv.instructions;
+          }
+        }
+
+        // Create conversation if needed
+        if (!convId) {
+          const title = trimmed.slice(0, 50) || filesToSend[0]?.name || "새 대화";
+          if (isGuest) {
+            const nc = {
+              id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+              user_id: S.user.id,
+              title,
+              custom_gpt_id: S.currentGPT?.id || null,
+              system_prompt: sysPrompt || "",
+              instructions: instructions || "",
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            };
+            convId = nc.id;
+            setState({ conversations: [nc, ...S.conversations], currentConvId: convId });
+            await cacheConv(nc).catch(() => {});
+          } else {
+            const { data, error } = await sb
+              .from("conversations")
+              .insert({
+                user_id: S.user.id,
+                title,
+                custom_gpt_id: S.currentGPT?.id || null,
+                system_prompt: sysPrompt || "",
+                instructions: instructions || "",
+              })
+              .select()
+              .single();
+            if (error) {
+              toast("대화 생성 실패", "error");
+              return;
+            }
+            convId = data.id;
+            setState({ conversations: [data, ...S.conversations], currentConvId: convId });
+            await cacheConv(data).catch(() => {});
+          }
+        }
+
+        // Process files
+        let chatAttachments = [];
+        if (filesToSend.length > 0) {
+          chatAttachments = await processFiles(filesToSend, convId);
+        }
+        const localFileIds = chatAttachments.map((a) => a.localId).filter(Boolean);
+
+        // Build display content
+        const imgCnt = chatAttachments.filter((a) => a.type === "image").length;
+        const displayContent = trimmed || (imgCnt > 0 ? `📷 이미지 ${imgCnt}개` : `📎 파일 ${filesToSend.length}개`);
+
+        const userMsg = {
+          id: tempId,
+          conversation_id: convId,
+          role: "user",
+          content: displayContent,
+          created_at: new Date().toISOString(),
+          localFileIds: localFileIds.length > 0 ? localFileIds : undefined,
+        };
+        const currentMsgs = [...S.messages, userMsg];
+        setState({ messages: currentMsgs, isStreaming: true, streamingMsg: "", attachedFiles: [] });
+
+        // Save user message
+        if (isGuest) {
+          savedMsgId = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+          const savedMsg = { ...userMsg, id: savedMsgId };
+          await cacheMsgLF(savedMsg).catch(() => {});
+          setState({ messages: S.messages.map((m) => (m.id === tempId ? savedMsg : m)) });
+        } else {
+          const { data, error } = await sb
+            .from("messages")
+            .insert({ conversation_id: convId, role: "user", content: displayContent })
+            .select()
+            .single();
+          if (!error) {
+            savedMsgId = data.id;
+            const savedMsg = { ...data, localFileIds: localFileIds.length > 0 ? localFileIds : undefined };
+            await cacheMsgLF(savedMsg).catch(() => {});
+            setState({ messages: S.messages.map((m) => (m.id === tempId ? savedMsg : m)) });
+          }
+        }
+
+        // Link files to message
+        if (localFileIds.length > 0 && savedMsgId) {
+          await setMsgFiles(savedMsgId, localFileIds).catch(() => {});
+        }
+
+        // 오프라인/API 장애 대비: 현재 GPT에 연결된 GGUF → 앱 저장 GGUF 순으로 자동 폴백합니다.
+        if (!S.isOnline && !S.localModel?.ready) {
+          try { await ensureLocalGGUFForFallback(S.currentGPT?.local_gguf_model_id || ""); } catch (e) { console.warn("offline GGUF fallback 준비 실패:", e); }
+        }
+        if (!S.isOnline && !S.localModel?.ready) {
+          setState({ isStreaming: false, streamingMsg: "" });
+          toast("오프라인 상태입니다. 저장된 GGUF 모델이 없어서 메시지를 로컬에 보관했습니다.", "info");
+          return true;
+        }
+
+        // 선택된 로컬 GGUF 모델은 네트워크 요청 없이 현재 브라우저에서 실행합니다.
+        if (S.localModel?.ready && window.LocalGGUF) {
+          try {
+            const localMessages = [];
+            if (sysPrompt) localMessages.push({ role: "system", content: sysPrompt });
+            if (instructions) localMessages.push({ role: "system", content: instructions });
+            localMessages.push(...currentMsgs.map((message) => ({ role: message.role, content: message.content })));
+
+            const textAttachments = chatAttachments
+              .filter((attachment) => attachment.type === "text" && attachment.textContent)
+              .map((attachment) => `\n\n[첨부 파일: ${attachment.name}]\n${attachment.textContent.slice(0, 8000)}`)
+              .join("");
+            if (textAttachments && localMessages.length) {
+              localMessages[localMessages.length - 1].content += textAttachments;
+            }
+            if (chatAttachments.some((attachment) => attachment.type === "image")) {
+              toast("현재 로컬 텍스트 모델은 이미지 입력을 분석하지 않습니다. 이미지 없이 텍스트로 응답합니다.", "info", 4500);
+            }
+
+            const full = await window.LocalGGUF.generate(localMessages, {
+              onToken: (token) => setState({ streamingMsg: `${S.streamingMsg}${token}` }),
+            });
+            await finalizeAssistantResponse(full, convId, isGuest, currentMsgs, trimmed, displayContent);
+            setState({ localModel: window.LocalGGUF.getStatus() });
+            return true;
+          } catch (error) {
+            console.error("local GGUF error:", error);
+            setState({ isStreaming: false, streamingMsg: "", localModel: window.LocalGGUF.getStatus() });
+            toast(error instanceof Error ? error.message : "로컬 모델 응답 생성에 실패했습니다.", "error", 6000);
+            // 사용자 메시지는 이미 로컬에 저장되었으므로 중복 전송을 막기 위해 입력은 비웁니다.
+            return !!savedMsgId;
+          }
+        }
+
+        // Stream from AI
+        try {
+          const {
+            data: { session },
+          } = await sb.auth.getSession();
+          let token = session?.access_token || "";
+          if (!token || token === "local-token" || token === "guest-token") {
+            token = getEnvAnonKey() || getSavedAnonKey();
+          }
+          if (!token) token = await resolveAnonKey();
+          if (!token) throw new Error("Supabase Anon Key가 필요합니다. 설정 후 다시 시도하세요.");
+
+          const resp = await fetch(EDGE_FUNCTION_URL, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: currentMsgs.map((m) => ({ role: m.role, content: m.content })),
+              systemPrompt: sysPrompt,
+              instructions,
+              gptFiles: S.currentGPTFiles.length > 0 ? S.currentGPTFiles : undefined,
+              chatAttachments: chatAttachments.length > 0 ? chatAttachments : undefined,
+              lastUserContent: trimmed,
+            }),
+          });
+
+          if (!resp.ok) {
+            let errMsg = "AI 응답 실패";
+            try {
+              const t = await resp.text();
+              try {
+                const j = JSON.parse(t);
+                errMsg = j.error || j.message || errMsg;
+              } catch {
+                errMsg = t.slice(0, 150) || errMsg;
+              }
+            } catch {}
+            if (resp.status === 402) errMsg = "AI 서비스 크레딧이 부족합니다. 관리자에게 문의하세요";
+            else if (resp.status === 429) errMsg = "요청이 너무 많습니다. 잠시 후 다시 시도해주세요";
+            else if (resp.status >= 500) errMsg = "서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요";
+            throw new Error(errMsg);
+          }
+
+          if (!resp.body) throw new Error("AI 응답 스트림을 받지 못했습니다");
+          const reader = resp.body.getReader();
+          const dec = new TextDecoder();
+          let full = "",
+            buf = "";
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += dec.decode(value, { stream: true });
+            const lines = buf.split("\n");
+            buf = lines.pop() || "";
+            for (const line of lines) {
+              if (!line.includes("data:")) continue;
+              const js = line.replace(/^data:\s*/, "").trim();
+              if (js === "[DONE]") continue;
+              try {
+                const p = JSON.parse(js);
+                const d = p.choices?.[0]?.delta?.content || "";
+                if (d) {
+                  full += d;
+                  setState({ streamingMsg: full });
+                }
+              } catch {}
+            }
+          }
+
+          // 마지막 청크가 줄바꿈 없이 종료된 SSE 응답도 처리합니다.
+          const remaining = (buf + dec.decode()).trim();
+          if (remaining.startsWith("data:")) {
+            try {
+              const pending = JSON.parse(remaining.replace(/^data:\\s*/, "").trim());
+              const delta = pending.choices?.[0]?.delta?.content || "";
+              if (delta) {
+                full += delta;
+                setState({ streamingMsg: full });
+              }
+            } catch {}
+          }
+
+          if (!full.trim()) throw new Error("AI가 응답을 생성하지 못했습니다");
+
+          await finalizeAssistantResponse(full, convId, isGuest, currentMsgs, trimmed, displayContent);
+          return true;
+        } catch (err) {
+          console.error("sendMessage API error:", err);
+          // API 실패/타임아웃/서버 오류를 로컬 GGUF로 자동 대체합니다.
+          try {
+            if (!S.localModel?.ready) await ensureLocalGGUFForFallback(S.currentGPT?.local_gguf_model_id || "");
+            if (S.localModel?.ready && window.LocalGGUF) {
+              const fallbackMessages = [];
+              if (sysPrompt) fallbackMessages.push({ role: "system", content: sysPrompt });
+              if (instructions) fallbackMessages.push({ role: "system", content: instructions });
+              fallbackMessages.push(...currentMsgs.map((m) => ({ role: m.role, content: m.content })));
+              const full = await generateWithLocalGGUF(fallbackMessages, chatAttachments);
+              await finalizeAssistantResponse(full, convId, isGuest, currentMsgs, trimmed, displayContent);
+              setState({ localModel: window.LocalGGUF.getStatus() });
+              toast("API를 사용할 수 없어 저장된 GGUF 모델로 전환했습니다.", "info", 3500);
+              return true;
+            }
+          } catch (fallbackError) {
+            console.error("GGUF fallback error:", fallbackError);
+          }
+          setState({ isStreaming: false, streamingMsg: "" });
+          if (!savedMsgId) setState({ messages: S.messages.filter((m) => m.id !== tempId) });
+          toast(err instanceof Error ? err.message : "메시지 전송에 실패했습니다", "error");
+          // 사용자 메시지가 이미 저장된 경우 입력을 보존하면 같은 메시지가 중복 전송될 수 있습니다.
+          return !!savedMsgId;
+        }
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 🤖  GPT BUILDER
+      // ═══════════════════════════════════════════════════════════════
+      let gptBuilderFiles = []; // tmp before save
+      let gptModalPendingDeletes = []; // 기존 DB 파일 중 삭제 예정 목록
+
+      async function discardUnsavedGPTFiles() {
+        for (const file of gptModalFiles || []) {
+          if (!file.isExisting && file.local_file_id) {
+            await blobStore.removeItem(file.local_file_id).catch(() => {});
+            await metaStore.removeItem(file.local_file_id).catch(() => {});
+          }
+        }
+        gptBuilderFiles = [];
+        gptModalFiles = [];
+        gptModalPendingDeletes = [];
+      }
+
+      // 커스텀 GPT 파일은 Supabase가 없어도 LocalForage에서 즉시 복원됩니다.
+      async function loadGPTFiles(gptId) {
+        try {
+          return await getLocalGPTFiles(gptId);
+        } catch (error) {
+          console.error("로컬 GPT 파일 로드 실패:", error);
+          return [];
+        }
+      }
+
+      async function deleteGPTFileFromDB(file) {
+        try {
+          await deleteLocalGPTFile(file);
+        } catch (error) {
+          console.error("로컬 GPT 파일 삭제 실패:", error);
+        }
+      }
+
+      async function saveGPT(formData) {
+        const uid = S.user?.id;
+        if (!uid) {
+          toast("기기 프로필을 준비한 뒤 다시 시도하세요.", "error");
+          return false;
+        }
+        const editing = S.gptBuilderEditing;
+        try {
+          const now = new Date().toISOString();
+          const gpt = await saveLocalGPT({
+            ...(editing || { id: newLocalGPTId(), user_id: uid, created_at: now }),
+            user_id: uid,
+            name: formData.name,
+            description: formData.description,
+            system_prompt: formData.systemPrompt,
+            instructions: formData.instructions,
+            avatar_url: formData.avatarUrl || "",
+            local_gguf_model_id: formData.localGgufModelId || "",
+            is_public: false, // 로컬 모드에서는 다른 기기·사용자와 자동 공유하지 않습니다.
+            updated_at: now,
+          });
+          for (const file of gptModalPendingDeletes) await deleteGPTFileFromDB(file);
+          for (const file of gptBuilderFiles) {
+            if (!file.isExisting) await saveLocalGPTFile(gpt.id, file);
+          }
+          const customGPTs = await getLocalGPTs(uid);
+          gptBuilderFiles = [];
+          gptModalFiles = [];
+          gptModalPendingDeletes = [];
+          setState({ customGPTs, gptBuilderOpen: false, gptBuilderEditing: null });
+          toast(editing ? "커스텀 GPT를 이 기기에 수정했습니다." : "커스텀 GPT를 이 기기에 생성했습니다.", "success");
+          return true;
+        } catch (error) {
+          toast(`GPT를 기기에 저장하지 못했습니다: ${error instanceof Error ? error.message : "알 수 없는 오류"}`, "error", 6000);
+          return false;
+        }
+      }
+
+      async function deleteGPT(id) {
+        if (!confirm("이 커스텀 GPT와 연결된 로컬 파일을 이 기기에서 삭제하시겠습니까?")) return;
+        try {
+          await deleteLocalGPT(id);
+          setState({ customGPTs: S.customGPTs.filter((g) => g.id !== id) });
+          if (S.currentGPT?.id === id) setState({ currentGPT: null, currentGPTFiles: [] });
+          toast("커스텀 GPT를 이 기기에서 삭제했습니다.", "success");
+        } catch (error) {
+          toast(error instanceof Error ? error.message : "GPT 삭제에 실패했습니다.", "error");
+        }
+      }
+
+      async function startGPTChat(gpt) {
+        const files = await loadGPTFiles(gpt.id);
+        if (gpt.local_gguf_model_id && !S.localModel?.ready) {
+          try { await ensureLocalGGUFForFallback(gpt.local_gguf_model_id); }
+          catch (error) { toast("연결된 GGUF 모델을 자동 로드하지 못했습니다. 설정에서 다시 불러오세요.", "error", 5000); }
+        }
+        const now = new Date().toISOString();
+        const conversation = {
+          id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          user_id: S.user.id,
+          title: `${gpt.name} 대화`,
+          custom_gpt_id: gpt.id,
+          system_prompt: gpt.system_prompt || "",
+          instructions: gpt.instructions || "",
+          created_at: now,
+          updated_at: now,
+        };
+        setState({ currentGPT: gpt, currentGPTFiles: files, conversations: [conversation, ...S.conversations], currentConvId: conversation.id, messages: [] });
+        await cacheConv(conversation).catch(() => {});
+        toast(`${gpt.name}과(와) 로컬 대화를 시작합니다.`, "success");
+      }
+
+      async function deleteConv(id) {
+        await sb
+          .from("conversations")
+          .delete()
+          .eq("id", id)
+          .then(() => {});
+        await delCachedConv(id).catch(() => {});
+        const next = S.currentConvId === id ? null : S.currentConvId;
+        setState({
+          conversations: S.conversations.filter((c) => c.id !== id),
+          currentConvId: next,
+          messages: next ? S.messages : [],
+        });
+        toast("대화가 삭제되었습니다", "success");
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 🎨  RENDER HELPERS
+      // ═══════════════════════════════════════════════════════════════
+      function iconSvg(name, size = 16) {
+        // Use lucide if available
+        if (window.lucide && window.lucide[name]) {
+          const tmp = document.createElement("div");
+          tmp.innerHTML = window.lucide.createIcons && window.lucide.icons ? "" : "";
+          // fallback: emoji map
+        }
+        const icons = {
+          Plus: '<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+          MessageSquare:
+            '<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+          Trash2:
+            '<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>',
+          Bot: '<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/><circle cx="12" cy="5" r="1"/><circle cx="8.5" cy="15" r="1.5"/><circle cx="15.5" cy="15" r="1.5"/></svg>',
+          User: '<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+          LogOut:
+            '<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+          Send: '<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>',
+          Paperclip:
+            '<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>',
+          X: '<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+          Edit2:
+            '<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>',
+          Upload:
+            '<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>',
+          FileText:
+            '<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>',
+          MessageSquarePlus:
+            '<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><line x1="12" y1="8" x2="12" y2="14"/><line x1="9" y1="11" x2="15" y2="11"/></svg>',
+          Wrench:
+            '<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>',
+        };
+        return (
+          icons[name] ||
+          `<svg xmlns="http://www.w3.org/2000/svg" width="SIZE" height="SIZE" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>`
+        ).replaceAll("SIZE", size);
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 🖼️  RENDER
+      // ═══════════════════════════════════════════════════════════════
+      const app = document.getElementById("app");
+
+      // ── AUTH PAGE ────────────────────────────────────────────────
+      let authState = { isLogin: true, email: "", pw: "", otp: "", otpSent: false, loading: false };
+
+      function renderAuth() {
+        app.innerHTML = `
+        <div id="auth-page">
+          <div class="auth-card">
+            <div class="auth-logo">${iconSvg("MessageSquare", 24)}</div>
+            <div class="auth-title" id="auth-title">${authState.isLogin ? "로그인" : "회원가입"}</div>
+            <div class="auth-sub">ChatGPT 스타일 AI 채팅을 시작하세요</div>
+            <input class="auth-input" type="email" id="auth-email" placeholder="이메일" value="${authState.email}" ${authState.loading || authState.otpSent ? "disabled" : ""}>
+            <div id="auth-extra"></div>
+            <div class="auth-switch" id="auth-switch">${authState.isLogin ? "계정이 없으신가요? 회원가입" : "이미 계정이 있으신가요? 로그인"}</div>
+          </div>
+        </div>`;
+
+        renderAuthExtra();
+        bindAuth();
+      }
+
+      function renderAuthExtra() {
+        const el = document.getElementById("auth-extra");
+        if (!el) return;
+        if (authState.isLogin) {
+          el.innerHTML = `
+            <input class="auth-input" type="password" id="auth-pw" placeholder="비밀번호" value="${authState.pw}" ${authState.loading ? "disabled" : ""}>
+            <button class="auth-btn primary" id="btn-login" ${authState.loading ? "disabled" : ""}>
+              ${authState.loading ? "로그인 중..." : "로그인"}
+            </button>
+            <div class="auth-divider">
+              <span>또는</span>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="auth-btn outline" id="btn-guest" style="flex: 1; margin-bottom: 0;">게스트 로그인</button>
+              <button class="auth-btn outline" id="btn-skip" style="flex: 1; margin-bottom: 0;">로그인 스킵</button>
+            </div>`;
+          el.querySelector("#auth-pw").addEventListener("input", (e) => {
+            authState.pw = e.target.value;
+          });
+          el.querySelector("#btn-login").addEventListener("click", doLogin);
+          el.querySelector("#btn-guest").addEventListener("click", doGuestLogin);
+          el.querySelector("#btn-skip").addEventListener("click", doSkipLogin);
+        } else if (!authState.otpSent) {
+          el.innerHTML = `<button class="auth-btn primary" id="btn-otp" ${authState.loading ? "disabled" : ""}>
+            ${authState.loading ? "전송 중..." : "인증 코드 받기"}
+          </button>`;
+          el.querySelector("#btn-otp").addEventListener("click", doSendOtp);
+        } else {
+          el.innerHTML = `
+            <input class="auth-input" placeholder="인증 코드 (4자리)" id="auth-otp" maxlength="4" value="${authState.otp}" ${authState.loading ? "disabled" : ""}>
+            <input class="auth-input" type="password" id="auth-pw2" placeholder="비밀번호 설정" value="${authState.pw}" ${authState.loading ? "disabled" : ""}>
+            <button class="auth-btn primary" id="btn-register" ${authState.loading ? "disabled" : ""}>
+              ${authState.loading ? "가입 중..." : "회원가입 완료"}
+            </button>`;
+          el.querySelector("#auth-otp").addEventListener("input", (e) => {
+            authState.otp = e.target.value;
+          });
+          el.querySelector("#auth-pw2").addEventListener("input", (e) => {
+            authState.pw = e.target.value;
+          });
+          el.querySelector("#btn-register").addEventListener("click", doRegister);
+        }
+      }
+
+      function bindAuth() {
+        document.getElementById("auth-email")?.addEventListener("input", (e) => {
+          authState.email = e.target.value;
+        });
+        document.getElementById("auth-switch")?.addEventListener("click", () => {
+          authState.isLogin = !authState.isLogin;
+          authState.otpSent = false;
+          authState.otp = "";
+          renderAuth();
+        });
+      }
+
+      async function doSendOtp() {
+        authState.loading = true;
+        renderAuthExtra();
+        const { error } = await sb.auth.signInWithOtp({ email: authState.email, options: { shouldCreateUser: true } });
+        authState.loading = false;
+        if (error) {
+          toast(error.message, "error");
+          renderAuthExtra();
+          return;
+        }
+        authState.otpSent = true;
+        toast("인증 코드가 이메일로 전송되었습니다", "success");
+        renderAuthExtra();
+      }
+
+      async function doRegister() {
+        authState.loading = true;
+        renderAuthExtra();
+        const { data, error } = await sb.auth.verifyOtp({
+          email: authState.email,
+          token: authState.otp,
+          type: "email",
+        });
+        if (error) {
+          authState.loading = false;
+          toast(error.message, "error");
+          renderAuthExtra();
+          return;
+        }
+        const { error: ue } = await sb.auth.updateUser({
+          password: authState.pw,
+          data: { username: authState.email.split("@")[0] },
+        });
+        if (ue) {
+          authState.loading = false;
+          toast(ue.message, "error");
+          renderAuthExtra();
+          return;
+        }
+        setState({ user: mapUser(data.user), view: "chat" });
+        await loadUserData();
+        authState.loading = false;
+      }
+
+      async function doLogin() {
+        authState.loading = true;
+        renderAuthExtra();
+        const { data, error } = await sb.auth.signInWithPassword({ email: authState.email, password: authState.pw });
+        if (error) {
+          authState.loading = false;
+          toast(error.message, "error");
+          renderAuthExtra();
+          return;
+        }
+        setState({ user: mapUser(data.user), view: "chat" });
+        await loadUserData();
+        authState.loading = false;
+      }
+
+      async function doGuestLogin() {
+        try {
+          const device = await getDeviceProfile();
+          const user = await saveDeviceProfile({
+            ...device,
+            username: device.username && device.username !== "사용자" ? device.username : "게스트",
+            email: device.email || "guest@example.com",
+            isAnonymous: true,
+          });
+          await localforage.setItem("local_user", user);
+          setState({ user, view: "chat", account: { connected: false, provider: "" } });
+          toast("게스트로 로그인했습니다", "success");
+          await loadUserData();
+        } catch (error) {
+          console.error("guest login error:", error);
+          toast("게스트 모드 준비에 실패했습니다. 다시 시도해주세요.", "error");
+        }
+      }
+
+      async function doSkipLogin() {
+        try {
+          const device = await getDeviceProfile();
+          const user = await saveDeviceProfile({ ...device, isAnonymous: true });
+          await localforage.setItem("local_user", user);
+          setState({ user, view: "chat", account: { connected: false, provider: "" } });
+          toast("로그인 없이 이 기기에서 계속 사용합니다.", "info");
+          await loadUserData();
+        } catch (error) {
+          console.error("skip login error:", error);
+          toast("기기 전용 모드를 준비하지 못했습니다.", "error");
+        }
+      }
+
+      // ── PROFILE & OPTIONAL ACCOUNT MODALS ─────────────────────────
+      function closeModalById(id) {
+        document.getElementById(id)?.remove();
+      }
+
+      const PROFILE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+      const PROFILE_DOCUMENT_MAX_BYTES = 10 * 1024 * 1024;
+      const PROFILE_DOCUMENT_TOTAL_MAX_BYTES = 25 * 1024 * 1024;
+      const PROFILE_DOCUMENT_MAX_COUNT = 10;
+
+      async function saveProfileAvatar(file) {
+        if (!file?.type?.startsWith("image/")) throw new Error("프로필 이미지는 이미지 파일만 사용할 수 있습니다.");
+        if (!file.size || file.size > PROFILE_IMAGE_MAX_BYTES) throw new Error("프로필 이미지는 5MB 이하만 사용할 수 있습니다.");
+        const oldAvatarId = S.user?.avatarFileId;
+        const meta = await storeFileLF(file, { profileId: S.user?.id, role: "profile-avatar" });
+        await queueSync("profileFile", { ...meta, role: "profile-avatar" });
+        const avatarPreview = await createObjUrl(meta.id);
+        if (oldAvatarId && oldAvatarId !== meta.id) {
+          await blobStore.removeItem(oldAvatarId).catch(() => {});
+          await metaStore.removeItem(oldAvatarId).catch(() => {});
+          await syncStore.removeItem(`profileFile:${oldAvatarId}`).catch(() => {});
+        }
+        return { avatarFileId: meta.id, avatarPreview: avatarPreview || "", avatar: "" };
+      }
+
+      async function addProfileDocuments(files) {
+        const existing = await getProfileDocuments();
+        const accepted = [];
+        let total = existing.reduce((sum, document) => sum + (document.size || 0), 0);
+        for (const file of Array.from(files || [])) {
+          if (existing.length + accepted.length >= PROFILE_DOCUMENT_MAX_COUNT) break;
+          if (!file.size || file.size > PROFILE_DOCUMENT_MAX_BYTES) continue;
+          if (total + file.size > PROFILE_DOCUMENT_TOTAL_MAX_BYTES) break;
+          const meta = await storeFileLF(file, { profileId: S.user?.id, role: "profile-document" });
+          await queueSync("profileFile", { ...meta, role: "profile-document" });
+          accepted.push({ id: meta.id, name: meta.name, mimeType: meta.mimeType, size: meta.size, type: meta.type, createdAt: meta.createdAt });
+          total += file.size;
+        }
+        if (!accepted.length && files?.length) throw new Error("문서는 파일당 10MB, 총 25MB, 최대 10개까지 저장할 수 있습니다.");
+        return [...existing, ...accepted];
+      }
+
+      async function removeProfileDocument(documentId) {
+        const documents = await getProfileDocuments();
+        const nextDocuments = documents.filter((document) => document.id !== documentId);
+        await blobStore.removeItem(documentId).catch(() => {});
+        await metaStore.removeItem(documentId).catch(() => {});
+        await syncStore.removeItem(`profileFile:${documentId}`).catch(() => {});
+        await updateSyncCount();
+        return nextDocuments;
+      }
+
+      function renderProfileModal() {
+        closeModalById("profile-modal");
+        const profile = S.user || {};
+        const overlay = document.createElement("div");
+        overlay.id = "profile-modal";
+        overlay.className = "modal-overlay";
+        overlay.innerHTML = `
+          <div class="modal-box" style="max-width:500px;">
+            <div class="modal-header"><div class="modal-title">프로필 편집</div><button class="modal-close" id="profile-close">${iconSvg("X", 20)}</button></div>
+            <div class="modal-body">
+              <div class="form-hint" style="margin-bottom:14px;">로그인하지 않아도 이미지와 문서를 이 기기에 즉시 저장합니다.${S.account?.connected ? " 연결된 계정에는 파일 메타데이터와 프로필 변경이 다음 동기화 때 반영됩니다." : ""}</div>
+              <div class="form-group"><label class="form-label">표시 이름</label><input class="form-input" id="profile-name" maxlength="40" value="${escHtml(profile.username || "사용자")}"></div>
+              <div class="form-group">
+                <label class="form-label">프로필 이미지 (선택)</label>
+                <div style="display:flex;align-items:center;gap:12px;">
+                  <div style="width:48px;height:48px;border-radius:50%;background:#2f2f2f;display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none;">${profileAvatarSrc(profile) ? `<img src="${profileAvatarSrc(profile)}" style="width:100%;height:100%;object-fit:cover;">` : escHtml((profile.username || "?").charAt(0).toUpperCase())}</div>
+                  <input class="form-input" id="profile-image-file" type="file" accept="image/*" style="padding:8px;">
+                </div>
+                <div class="form-hint">이미지 파일은 5MB 이하이며, 이 기기에 저장됩니다.</div>
+              </div>
+              <div class="form-group"><label class="form-label">아바타 이미지 URL (선택)</label><input class="form-input" id="profile-avatar" type="url" maxlength="2048" value="${escHtml(profile.avatar || "")}" placeholder="https://..."></div>
+              <div class="form-group"><label class="form-label">소개 (선택)</label><textarea class="form-input" id="profile-bio" maxlength="280" style="min-height:90px;resize:vertical;">${escHtml(profile.bio || "")}</textarea></div>
+              <div class="form-group">
+                <label class="form-label">프로필 문서 (선택)</label>
+                <input class="form-input" id="profile-doc-files" type="file" multiple accept=".pdf,.txt,.md,.csv,.json,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.rtf" style="padding:8px;">
+                <div class="form-hint">파일당 최대 10MB, 총 25MB, 최대 10개입니다. 문서는 이 기기에 저장됩니다.</div>
+                <div id="profile-doc-list" style="margin-top:8px;display:flex;flex-direction:column;gap:6px;">${(profile.documents || []).map((document) => `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;background:rgba(255,255,255,.05);padding:7px 9px;border-radius:6px;font-size:12px;"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(document.name)} · ${fmtSize(document.size || 0)}</span><button type="button" class="profile-doc-remove" data-id="${escHtml(document.id)}" style="border:0;background:none;color:#f87171;cursor:pointer;">삭제</button></div>`).join("") || '<span class="form-hint">저장된 문서가 없습니다.</span>'}</div>
+              </div>
+              <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:18px;"><button class="auth-btn outline" id="profile-cancel" style="width:auto;margin:0;padding:10px 14px;">취소</button><button class="auth-btn primary" id="profile-save" style="width:auto;margin:0;padding:10px 14px;">저장</button></div>
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+        const close = () => closeModalById("profile-modal");
+        overlay.querySelector("#profile-close")?.addEventListener("click", close);
+        overlay.querySelector("#profile-cancel")?.addEventListener("click", close);
+        overlay.addEventListener("click", (event) => { if (event.target === overlay) close(); });
+        overlay.querySelectorAll(".profile-doc-remove").forEach((button) => {
+          button.addEventListener("click", async () => {
+            try {
+              const documents = await removeProfileDocument(button.dataset.id);
+              const saved = await saveDeviceProfile({ documents });
+              setState({ user: saved });
+              await queueSync("profile", saved);
+              renderProfileModal();
+              toast("문서를 이 기기에서 삭제했습니다.", "success");
+            } catch (error) {
+              toast(error instanceof Error ? error.message : "문서를 삭제하지 못했습니다.", "error");
+            }
+          });
+        });
+        overlay.querySelector("#profile-save")?.addEventListener("click", async () => {
+          const saveButton = overlay.querySelector("#profile-save");
+          const username = overlay.querySelector("#profile-name").value.trim();
+          const avatarUrl = overlay.querySelector("#profile-avatar").value.trim();
+          const bio = overlay.querySelector("#profile-bio").value.trim();
+          const avatarFile = overlay.querySelector("#profile-image-file").files?.[0];
+          const documentFiles = overlay.querySelector("#profile-doc-files").files;
+          if (!username) {
+            toast("표시 이름을 입력하세요.", "error");
+            return;
+          }
+          if (avatarUrl && !/^https:\/\//i.test(avatarUrl)) {
+            toast("아바타 URL은 HTTPS 주소여야 합니다.", "error");
+            return;
+          }
+          saveButton.disabled = true;
+          try {
+            const avatarChanges = avatarFile ? await saveProfileAvatar(avatarFile) : {};
+            const documents = documentFiles?.length ? await addProfileDocuments(documentFiles) : await getProfileDocuments();
+            const saved = await saveDeviceProfile({
+              username,
+              // 업로드한 파일이 있으면 로컬 파일이 외부 URL보다 우선합니다.
+              avatar: avatarFile ? "" : avatarUrl,
+              bio,
+              documents,
+              ...avatarChanges,
+            });
+            setState({ user: saved });
+            await queueSync("profile", saved);
+            if (S.account?.connected) void flushSyncQueue();
+            toast("프로필 이미지·문서를 이 기기에 저장했습니다.", "success");
+            close();
+          } catch (error) {
+            toast(error instanceof Error ? error.message : "프로필을 저장하지 못했습니다.", "error", 5000);
+          } finally {
+            saveButton.disabled = false;
+          }
+        });
+      }
+
+      async function renderAccountModal() {
+        closeModalById("account-modal");
+        const config = await getCloudConfig();
+        const overlay = document.createElement("div");
+        overlay.id = "account-modal";
+        overlay.className = "modal-overlay";
+        overlay.innerHTML = `
+          <div class="modal-box" style="max-width:540px;">
+            <div class="modal-header"><div class="modal-title">선택적 계정 연결</div><button class="modal-close" id="account-close">${iconSvg("X", 20)}</button></div>
+            <div class="modal-body">
+              <div class="form-hint" style="margin-bottom:14px;line-height:1.6;">계정 없이도 모든 기능을 사용할 수 있습니다. 계정을 연결하면 이 기기에 쌓인 대화·프로필 변경 대기열을 개인 Supabase 계정으로 동기화할 수 있습니다. Google 공급자와 이메일 가입은 연결한 Supabase 프로젝트에서 활성화되어 있어야 합니다.</div>
+              <div class="form-group"><label class="form-label">Supabase URL</label><input class="form-input" id="account-url" type="url" value="${escHtml(config.url)}" placeholder="https://project.supabase.co"></div>
+              <div class="form-group"><label class="form-label">Supabase Anon Key</label><input class="form-input" id="account-key" type="password" value="${escHtml(config.anonKey)}" placeholder="eyJ..."></div>
+              <div style="display:flex;gap:8px;margin:14px 0 12px;"><button class="auth-btn outline" id="account-google" style="flex:1;margin:0;padding:10px;">Google로 연결</button><button class="auth-btn outline" id="account-sync" style="flex:1;margin:0;padding:10px;">지금 동기화</button></div>
+              <div class="auth-divider"><span>또는 이메일 계정</span></div>
+              <div class="form-group"><label class="form-label">이메일</label><input class="form-input" id="account-email" type="email" autocomplete="email" placeholder="name@example.com"></div>
+              <div class="form-group"><label class="form-label">비밀번호</label><input class="form-input" id="account-password" type="password" autocomplete="current-password" minlength="6" placeholder="6자 이상"></div>
+              <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;"><button class="auth-btn outline" id="account-signin" style="width:auto;margin:0;padding:10px 14px;">로그인</button><button class="auth-btn primary" id="account-signup" style="width:auto;margin:0;padding:10px 14px;">회원가입</button></div>
+              <div id="account-status" class="form-hint" style="margin-top:14px;min-height:20px;">${S.account?.connected ? `연결됨 · ${escHtml(S.user?.email || S.account.provider || "계정")}` : `기기 전용 모드 · 동기화 대기 ${S.syncPending || 0}건`}</div>
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+        const close = () => closeModalById("account-modal");
+        overlay.querySelector("#account-close")?.addEventListener("click", close);
+        overlay.addEventListener("click", (event) => { if (event.target === overlay) close(); });
+        const status = overlay.querySelector("#account-status");
+        const prepareClient = async () => {
+          const url = overlay.querySelector("#account-url").value;
+          const key = overlay.querySelector("#account-key").value;
+          await saveCloudConfig(url, key);
+          const client = await getCloudClient();
+          if (!client) throw new Error("동기화 연결을 준비하지 못했습니다.");
+          return client;
+        };
+        overlay.querySelector("#account-google")?.addEventListener("click", async () => {
+          try {
+            status.textContent = "Google 로그인 페이지로 이동합니다…";
+            const client = await prepareClient();
+            const { error } = await client.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.href } });
+            if (error) throw error;
+          } catch (error) {
+            status.textContent = error instanceof Error ? error.message : "Google 연결을 시작하지 못했습니다.";
+          }
+        });
+        overlay.querySelector("#account-signin")?.addEventListener("click", async () => {
+          try {
+            const client = await prepareClient();
+            const email = overlay.querySelector("#account-email").value.trim();
+            const password = overlay.querySelector("#account-password").value;
+            const { error } = await client.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            await refreshCloudAccount();
+            status.textContent = "계정을 연결하고 동기화했습니다.";
+            toast("계정이 연결되었습니다.", "success");
+            close();
+          } catch (error) {
+            status.textContent = error instanceof Error ? error.message : "로그인에 실패했습니다.";
+          }
+        });
+        overlay.querySelector("#account-signup")?.addEventListener("click", async () => {
+          try {
+            const client = await prepareClient();
+            const email = overlay.querySelector("#account-email").value.trim();
+            const password = overlay.querySelector("#account-password").value;
+            if (!email || password.length < 6) throw new Error("유효한 이메일과 6자 이상 비밀번호를 입력하세요.");
+            const { data, error } = await client.auth.signUp({ email, password, options: { data: { username: S.user?.username || "사용자" }, emailRedirectTo: window.location.href } });
+            if (error) throw error;
+            if (data.session) {
+              await refreshCloudAccount();
+              toast("회원가입과 계정 연결이 완료되었습니다.", "success");
+              close();
+            } else {
+              status.textContent = "확인 이메일을 보냈습니다. 메일의 링크를 연 뒤 이 페이지로 돌아오면 자동 연결됩니다.";
+            }
+          } catch (error) {
+            status.textContent = error instanceof Error ? error.message : "회원가입에 실패했습니다.";
+          }
+        });
+        overlay.querySelector("#account-sync")?.addEventListener("click", async () => {
+          try {
+            await prepareClient();
+            const profile = await refreshCloudAccount();
+            if (!profile) throw new Error("먼저 Google 또는 이메일 계정으로 로그인하세요.");
+            await flushSyncQueue();
+            status.textContent = `동기화 완료 · 남은 대기 ${S.syncPending || 0}건`;
+          } catch (error) {
+            status.textContent = error instanceof Error ? error.message : "동기화에 실패했습니다.";
+          }
+        });
+      }
+
+      async function disconnectAccount() {
+        try {
+          const client = await getCloudClient();
+          await client?.auth.signOut();
+        } catch (error) {
+          console.warn("계정 연결 해제 실패:", error);
+        }
+        const local = await saveDeviceProfile({ accountId: "", email: "", isAnonymous: true });
+        setState({ user: local, account: { connected: false, provider: "" }, dropdownOpen: false, syncStatus: "기기 전용 모드" });
+        toast("계정 연결만 해제했습니다. 이 기기의 대화와 프로필은 그대로 유지됩니다.", "info", 5000);
+      }
+
+      // ── MAIN LAYOUT ──────────────────────────────────────────────
+      function renderMain() {
+        app.innerHTML = `
+        <div id="sidebar-backdrop" class="${S.sidebarOpen ? "open" : ""}"></div>
+        <div id="main-layout">
+          <div id="sidebar" class="${S.sidebarOpen ? "open" : ""}">
+            <div class="sidebar-top" style="display:flex;flex-direction:column;gap:8px;">
+              <button class="btn-new-chat" id="btn-new-chat">
+                ${iconSvg("Plus", 16)} 새 채팅
+              </button>
+            </div>
+            <div id="gpt-section" class="gpt-section"></div>
+            <div class="sidebar-section" id="conv-list">
+              <div class="sidebar-label">최근 대화</div>
+            </div>
+          </div>
+          <div id="content-area">
+            <div id="header">
+              <div class="header-title" style="display:flex;align-items:center;gap:12px;">
+                <button class="sidebar-toggle-btn ${S.sidebarOpen ? "active" : ""}" id="btn-toggle-sidebar" title="사이드바 열기/닫기">
+                  ☰
+                </button>
+                <span style="display:flex;align-items:center;gap:10px;">${iconSvg("MessageSquare", 20)} AI Chat</span>
+              </div>
+              <div class="header-right">
+                <button class="browser-toggle-btn ${S.browserOpen ? "active" : ""}" id="btn-open-browser" title="브라우저 열기/닫기">
+                  🌐
+                </button>
+                <button class="user-btn" id="user-btn" title="${S.user?.username || ""}">
+                  ${profileAvatarSrc(S.user) ? `<img src="${profileAvatarSrc(S.user)}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;">` : (S.user?.username || "?").charAt(0).toUpperCase()}
+                </button>
+                <div class="dropdown ${S.dropdownOpen ? "open" : ""}" id="user-dropdown">
+                  <div class="dropdown-header">
+                    <div class="dropdown-user-name">${S.user?.username || ""}</div>
+                    <div class="dropdown-user-email">${S.user?.email || ""}</div>
+                  </div>
+                  <div class="dropdown-item" id="dd-profile">${iconSvg("User", 14)} 프로필 편집</div>
+                  <div class="dropdown-item" id="dd-account">${iconSvg("Settings", 14)} ${S.account?.connected ? "계정·동기화 관리" : "계정 연결·동기화"}</div>
+                  <div class="dropdown-item" id="dd-sync">${iconSvg("RefreshCw", 14)} ${S.syncing ? "동기화 중…" : `동기화 대기 ${S.syncPending || 0}건`}</div>
+                  <div class="dropdown-item" id="dd-local-model">${iconSvg("Bot", 14)} 로컬 GGUF 모델</div>
+                  ${S.account?.connected ? `<div class="dropdown-sep"></div><div class="dropdown-item danger" id="dd-disconnect">${iconSvg("LogOut", 14)} 계정 연결 해제</div>` : ""}
+                </div>
+              </div>
+            </div>
+            <div id="gpt-banner" class="${S.currentGPT ? "visible" : ""}">
+              ${
+                S.currentGPT
+                  ? `
+                <div class="gpt-banner-avatar">
+                  ${S.currentGPT.avatar_url ? `<img src="${S.currentGPT.avatar_url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : S.currentGPT.name[0] || "?"}
+                </div>
+                <div>
+                  <div style="font-weight:600;">${S.currentGPT.name}</div>
+                  ${S.currentGPT.description ? `<div style="font-size:13px;color:rgba(255,255,255,0.6);">${S.currentGPT.description}</div>` : ""}
+                </div>`
+                  : ""
+              }
+            </div>
+            <div id="messages-area">
+              ${S.messages.length === 0 && !S.currentConvId ? renderEmptyState() : '<div class="messages-inner" id="messages-inner"></div>'}
+            </div>
+            <div id="chat-input-area">
+              <div class="input-wrap">
+                <div id="file-previews"></div>
+                <div class="input-box">
+                  <button class="input-box-btn" id="btn-attach" title="파일 첨부" ${S.isStreaming ? "disabled" : ""}>
+                    ${iconSvg("Paperclip", 20)}
+                  </button>
+                  <input type="file" id="file-input" multiple style="display:none;">
+                  <textarea id="msg-input" rows="1"
+                    placeholder="${S.attachedFiles.length > 0 ? "파일에 대해 질문하거나 Enter로 전송..." : "메시지를 입력하세요..."}"
+                    ${S.isStreaming ? "disabled" : ""}
+                    style="height:auto;min-height:24px;"></textarea>
+                  <button class="send-btn" id="btn-send" ${S.isStreaming ? "disabled" : ""} title="전송">
+                    ${iconSvg("Send", 15)}
+                  </button>
+                </div>
+                <div class="input-hint">${S.localModel?.ready ? `로컬 모델 사용 중: ${escHtml(S.localModel.modelName || "GGUF")} · 기기에서만 추론합니다` : "이미지·PDF·텍스트 등 파일 첨부 지원 · 파일당 최대 10MB, 전체 최대 20MB"}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-overlay hidden" id="gpt-modal"></div>
+        `;
+
+        renderConvList();
+        renderGPTSection();
+        renderMessages();
+        renderFilePreviews();
+        bindMain();
+        if (S.gptBuilderOpen) renderGPTModal();
+      }
+
+      function renderEmptyState() {
+        return `<div id="empty-state">
+          <div class="empty-logo">${iconSvg("MessageSquare", 28)}</div>
+          <div class="empty-title">무엇이든 물어보세요</div>
+          <div class="empty-sub">AI와 자유롭게 대화하세요. 이미지와 파일도 첨부할 수 있습니다.</div>
+        </div>`;
+      }
+
+      function renderConvList() {
+        const el = document.getElementById("conv-list");
+        if (!el) return;
+        let html = `<div class="sidebar-label">최근 대화</div>`;
+        if (S.conversations.length === 0) {
+          html += `<div style="text-align:center;color:var(--text-muted);font-size:12px;padding:16px 8px;">아직 대화가 없습니다</div>`;
+        }
+        for (const cv of S.conversations) {
+          html += `<div class="conv-item ${S.currentConvId === cv.id ? "active" : ""}" data-cid="${cv.id}">
+            ${iconSvg("MessageSquare", 14)}
+            <span class="conv-item-title">${escHtml(cv.title || "새 대화")}</span>
+            <button class="conv-item-del" data-del="${cv.id}" title="삭제">${iconSvg("Trash2", 13)}</button>
+          </div>`;
+        }
+        el.innerHTML = html;
+        el.querySelectorAll(".conv-item").forEach((item) => {
+          item.addEventListener("click", (e) => {
+            if (e.target.closest("[data-del]")) return;
+            const cid = item.dataset.cid;
+            setState({ currentConvId: cid });
+            loadMessages(cid);
+          });
+        });
+        el.querySelectorAll("[data-del]").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteConv(btn.dataset.del);
+          });
+        });
+      }
+
+      function openGPTBuilder(editing = null) {
+        gptBuilderFiles = [];
+        gptModalFiles = [];
+        S.gptBuilderOpen = true;
+        S.gptBuilderEditing = editing;
+        const showModal = () => {
+          const overlay = document.getElementById("gpt-modal");
+          if (!overlay || !S.gptBuilderOpen) return;
+          // 렌더 큐와 무관하게 즉시 표시하고, 이어서 입력 폼을 채웁니다.
+          overlay.classList.remove("hidden");
+          void renderGPTModal();
+        };
+        showModal();
+        setState({ gptBuilderOpen: true, gptBuilderEditing: editing });
+        requestAnimationFrame(showModal);
+      }
+
+      function renderGPTSection() {
+        const el = document.getElementById("gpt-section");
+        if (!el) return;
+        let html = `<div class="gpt-header">
+          <span class="gpt-header-title">${iconSvg("Bot", 16)} 커스텀 GPT</span>
+          <button class="btn-create-gpt" id="btn-create-gpt">+ 만들기</button>
+        </div>`;
+        if (S.customGPTs.length === 0) {
+          html += `<div class="gpt-empty">아직 커스텀 GPT가 없습니다<br>위 버튼을 눌러 만들어보세요!</div>`;
+        } else {
+          for (const g of S.customGPTs) {
+            html += `<div class="gpt-item" data-gid="${g.id}">
+              <div class="gpt-avatar">${g.avatar_url ? `<img src="${g.avatar_url}" alt="${escHtml(g.name)}">` : g.name[0] || "?"}</div>
+              <div class="gpt-info">
+                <div class="gpt-name">${escHtml(g.name)}</div>
+                ${g.description ? `<div class="gpt-desc">${escHtml(g.description)}</div>` : ""}
+                ${g.local_gguf_model_id ? `<div class="gpt-desc" style="color:#60a5fa;">🤖 로컬 GGUF 연결됨</div>` : ""}
+              </div>
+              <div class="gpt-actions">
+                <button class="gpt-action-btn" data-gpt-chat="${g.id}" title="대화 시작">${iconSvg("MessageSquarePlus", 14)}</button>
+                <button class="gpt-action-btn" data-gpt-edit="${g.id}" title="수정">${iconSvg("Edit2", 14)}</button>
+                <button class="gpt-action-btn" data-gpt-del="${g.id}" title="삭제" style="color:var(--danger)">${iconSvg("Trash2", 14)}</button>
+              </div>
+            </div>`;
+          }
+        }
+        el.innerHTML = html;
+        const createGPTButton = document.getElementById("btn-create-gpt");
+        if (createGPTButton) {
+          createGPTButton.onclick = (event) => {
+            event.preventDefault();
+            openGPTBuilder(null);
+          };
+        }
+        el.querySelectorAll("[data-gpt-chat]").forEach((b) =>
+          b.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const g = S.customGPTs.find((x) => x.id === b.dataset.gptChat);
+            if (g) startGPTChat(g);
+          }),
+        );
+        el.querySelectorAll("[data-gpt-edit]").forEach((b) =>
+          b.addEventListener("click", (e) => {
+            e.stopPropagation();
+            const g = S.customGPTs.find((x) => x.id === b.dataset.gptEdit);
+            if (g) openGPTBuilder(g);
+          }),
+        );
+        el.querySelectorAll("[data-gpt-del]").forEach((b) =>
+          b.addEventListener("click", (e) => {
+            e.stopPropagation();
+            deleteGPT(b.dataset.gptDel);
+          }),
+        );
+        el.querySelectorAll(".gpt-item").forEach((item) => {
+          item.addEventListener("click", () => {
+            const g = S.customGPTs.find((x) => x.id === item.dataset.gid);
+            if (g) startGPTChat(g);
+          });
+        });
+      }
+
+      // 사이드바 부분 렌더로 개별 버튼 리스너가 교체되어도 생성 동작을 보장합니다.
+      document.addEventListener("click", (event) => {
+        const target = event.target instanceof Element ? event.target.closest("#btn-create-gpt") : null;
+        if (!target) return;
+        event.preventDefault();
+        event.stopPropagation();
+        openGPTBuilder(null);
+      }, true);
+
+      // Messages render (incremental append)
+      const _renderedMsgIds = new Set();
+      function renderMessages() {
+        const area = document.getElementById("messages-area");
+        if (!area) return;
+        const allMsgs = [...S.messages];
+        if (S.streamingMsg)
+          allMsgs.push({
+            id: "__streaming__",
+            conversation_id: S.currentConvId,
+            role: "assistant",
+            content: S.streamingMsg,
+            created_at: new Date().toISOString(),
+            _streaming: true,
+          });
+
+        if (allMsgs.length === 0) {
+          area.innerHTML = renderEmptyState();
+          _renderedMsgIds.clear();
+          return;
+        }
+
+        // Ensure messages-inner exists
+        let inner = document.getElementById("messages-inner");
+        if (!inner || area.querySelector("#empty-state")) {
+          area.innerHTML = '<div class="messages-inner" id="messages-inner"></div>';
+          inner = document.getElementById("messages-inner");
+          _renderedMsgIds.clear();
+        }
+
+        // Remove old streaming element
+        const oldStream = inner.querySelector("[data-streaming]");
+        if (oldStream && !S.streamingMsg) oldStream.remove();
+
+        // Append new messages
+        for (const msg of allMsgs) {
+          if (_renderedMsgIds.has(msg.id)) {
+            // Update streaming message
+            if (msg.id === "__streaming__") {
+              const el = inner.querySelector("[data-streaming]");
+              if (el) {
+                el.querySelector(".msg-text").textContent = msg.content;
+              }
+            }
+            continue;
+          }
+          _renderedMsgIds.add(msg.id);
+          const el = createMsgEl(msg);
+          inner.appendChild(el);
+          if (msg.localFileIds?.length > 0) loadMsgFiles(msg.id, el);
+        }
+
+        // Scroll to bottom
+        area.scrollTop = area.scrollHeight;
+      }
+
+      function createMsgEl(msg) {
+        const div = document.createElement("div");
+        div.className = `message ${msg.role}`;
+        div.setAttribute("data-mid", msg.id);
+        if (msg._streaming) div.setAttribute("data-streaming", "1");
+        const avatarClass = msg.role === "user" ? "user" : "assistant";
+        const avatarIcon = msg.role === "user" ? iconSvg("User", 16) : iconSvg("Bot", 16);
+        div.innerHTML = `<div class="message-inner">
+          <div class="msg-avatar ${avatarClass}">${avatarIcon}</div>
+          <div class="msg-body">
+            <div class="msg-files" data-files-placeholder></div>
+            <div class="msg-text">${escHtml(msg.content)}${msg._streaming ? '<span class="msg-cursor"></span>' : ""}</div>
+          </div>
+        </div>`;
+        return div;
+      }
+
+      async function loadMsgFiles(msgId, msgEl) {
+        const metas = await getMsgFileMetas(msgId);
+        if (!metas.length) return;
+        const fp = msgEl.querySelector("[data-files-placeholder]");
+        if (!fp) return;
+        fp.innerHTML = "";
+        for (const meta of metas) {
+          if (meta.type === "image") {
+            const url = await createObjUrl(meta.id);
+            if (url) {
+              const d = document.createElement("div");
+              d.className = "msg-img-thumb";
+              const img = document.createElement("img");
+              img.src = url;
+              img.alt = meta.name;
+              d.appendChild(img);
+              fp.appendChild(d);
+            }
+          } else {
+            const d = document.createElement("div");
+            d.className = "msg-file-chip";
+            d.innerHTML = `${iconSvg("FileText", 14)}<div><div class="fc-name">${escHtml(meta.name)}</div><div class="fc-size">${fmtSize(meta.size)}</div></div>`;
+            fp.appendChild(d);
+          }
+        }
+      }
+
+      function renderFilePreviews() {
+        const el = document.getElementById("file-previews");
+        if (!el) return;
+        el.innerHTML = "";
+        for (const lf of S.attachedFiles) {
+          const d = document.createElement("div");
+          if (lf.previewUrl) {
+            d.className = "fp-img";
+            d.innerHTML = `<img src="${lf.previewUrl}" alt="${escHtml(lf.file.name)}">
+              <div class="fp-img-name">${escHtml(lf.file.name)}</div>
+              <button class="fp-remove" data-fid="${lf.id}">×</button>`;
+          } else {
+            d.className = "fp-chip";
+            d.innerHTML = `${iconSvg("FileText", 14)}
+              <div><div class="fp-chip-name">${escHtml(lf.file.name)}</div><div class="fp-chip-size">${fmtSize(lf.file.size)}</div></div>
+              <button class="fp-remove" data-fid="${lf.id}" style="position:static;background:none;color:var(--text-muted)">×</button>`;
+          }
+          d.querySelector("[data-fid]").addEventListener("click", () => {
+            removeAttachedFile(lf.id);
+          });
+          el.appendChild(d);
+        }
+      }
+
+      function removeAttachedFile(id) {
+        const f = S.attachedFiles.find((x) => x.id === id);
+        if (f?.previewUrl) URL.revokeObjectURL(f.previewUrl);
+        setState({ attachedFiles: S.attachedFiles.filter((x) => x.id !== id) });
+      }
+
+      // ── LOCAL GGUF MODEL MODAL ───────────────────────────────────
+      const ggufModelStore = makeStore({ name: "aichat-gguf", storeName: "models" });
+      const ggufModelFileStore = makeStore({ name: "aichat-gguf", storeName: "model_files" });
+      const MAX_PERSISTED_GGUF_FILE_BYTES = 2 * 1024 * 1024 * 1024;
+
+      function newSavedGGUFId() {
+        return `saved-gguf-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`;
+      }
+
+      async function getSavedGGUFModels() {
+        const models = [];
+        await ggufModelStore.iterate((model) => { if (model?.id) models.push(model); });
+        return models.sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
+      }
+
+      async function validateGGUFFiles(files) {
+        if (!files.length) throw new Error("하나 이상의 GGUF 파일을 선택하세요.");
+        const sorted = [...files].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+        if (sorted.some((file) => !/\.gguf(?:\.part\d+)?$/i.test(file.name) && !/-\d{5}-of-\d{5}$/i.test(file.name))) {
+          throw new Error("GGUF 파일과 분할 GGUF 조각만 저장할 수 있습니다.");
+        }
+        if (sorted.some((file) => !file.size || file.size > MAX_PERSISTED_GGUF_FILE_BYTES)) {
+          throw new Error("빈 파일 또는 2GB를 초과하는 GGUF 파일은 브라우저에 저장할 수 없습니다.");
+        }
+        const header = new Uint8Array(await sorted[0].slice(0, 4).arrayBuffer());
+        if (header.length !== 4 || header[0] !== 0x47 || header[1] !== 0x47 || header[2] !== 0x55 || header[3] !== 0x46) {
+          throw new Error("선택한 첫 파일이 유효한 GGUF 헤더를 포함하지 않습니다.");
+        }
+        const totalBytes = sorted.reduce((sum, file) => sum + file.size, 0);
+        const estimate = await navigator.storage?.estimate?.().catch(() => null);
+        if (estimate?.quota && estimate.usage + totalBytes > estimate.quota * 0.9) {
+          throw new Error(`기기 저장 공간이 부족합니다. 현재 브라우저에 약 ${formatModelSize(Math.max(0, estimate.quota - estimate.usage))}만 남아 있습니다.`);
+        }
+        return { sorted, totalBytes };
+      }
+
+      async function persistGGUFModel(files) {
+        const { sorted, totalBytes } = await validateGGUFFiles(files);
+        const id = newSavedGGUFId();
+        const now = new Date().toISOString();
+        const parts = [];
+        try {
+          for (let index = 0; index < sorted.length; index += 1) {
+            const file = sorted[index];
+            const key = `${id}:${index}`;
+            await ggufModelFileStore.setItem(key, file.slice(0, file.size, file.type || "application/octet-stream"));
+            parts.push({ key, name: file.name, size: file.size, type: file.type || "application/octet-stream", lastModified: file.lastModified || Date.now() });
+          }
+          const model = { id, name: sorted[0].name, totalBytes, fileCount: sorted.length, parts, created_at: now, updated_at: now, storage: "localforage" };
+          await ggufModelStore.setItem(id, model);
+          // 가능한 브라우저에서는 저장소가 자동 정리되지 않도록 지속 저장을 요청합니다.
+          await navigator.storage?.persist?.().catch(() => false);
+          return model;
+        } catch (error) {
+          for (const part of parts) await ggufModelFileStore.removeItem(part.key).catch(() => {});
+          await ggufModelStore.removeItem(id).catch(() => {});
+          throw new Error(`GGUF 파일을 기기에 저장하지 못했습니다: ${error instanceof Error ? error.message : "저장 공간 또는 브라우저 오류"}`);
+        }
+      }
+
+      async function getSavedGGUFFiles(model) {
+        if (!model?.parts?.length) throw new Error("저장된 GGUF 파일 정보를 찾지 못했습니다.");
+        const files = [];
+        for (const part of model.parts) {
+          const blob = await ggufModelFileStore.getItem(part.key);
+          if (!blob) throw new Error(`저장된 모델 조각을 찾지 못했습니다: ${part.name}`);
+          files.push(new File([blob], part.name, { type: part.type || "application/octet-stream", lastModified: part.lastModified || Date.now() }));
+        }
+        return files;
+      }
+
+      async function deleteSavedGGUFModel(model) {
+        for (const part of model?.parts || []) await ggufModelFileStore.removeItem(part.key).catch(() => {});
+        if (model?.id) await ggufModelStore.removeItem(model.id);
+      }
+
+      function formatModelSize(bytes) {
+        if (!bytes) return "";
+        return bytes < 1024 * 1024 * 1024
+          ? `${(bytes / 1024 / 1024).toFixed(1)}MB`
+          : `${(bytes / 1024 / 1024 / 1024).toFixed(2)}GB`;
+      }
+
+      function updateLocalModelHint() {
+        const hint = document.querySelector(".input-hint");
+        if (!hint) return;
+        hint.textContent = S.localModel?.ready
+          ? `로컬 모델 사용 중: ${S.localModel.modelName || "GGUF"} · 기기에서만 추론합니다`
+          : "이미지·PDF·텍스트 등 파일 첨부 지원 · 파일당 최대 10MB, 전체 최대 20MB";
+      }
+
+      async function ensureLocalGGUFForFallback(preferredModelId = "") {
+        if (!window.LocalGGUF) throw new Error("로컬 GGUF 런타임이 아직 준비되지 않았습니다. 잠시 후 다시 시도하세요.");
+        if (S.localModel?.ready) return true;
+        const savedModels = await getSavedGGUFModels();
+        if (!savedModels.length) return false;
+        const target = savedModels.find((m) => m.id === preferredModelId) || savedModels[0];
+        const files = await getSavedGGUFFiles(target);
+        const status = await window.LocalGGUF.load(files, {
+          contextLength: Number(localStorage.getItem("gfd-gguf-context") || 2048),
+          useGpu: localStorage.getItem("gfd-gguf-gpu") !== "0",
+        });
+        setState({ localModel: { ...status, savedModelId: target.id } });
+        return true;
+      }
+
+      async function generateWithLocalGGUF(messages, attachments = []) {
+        if (!window.LocalGGUF) throw new Error("로컬 GGUF 런타임이 준비되지 않았습니다.");
+        const textAttachments = attachments
+          .filter((a) => a.type === "text" && a.textContent)
+          .map((a) => `\n\n[첨부 파일: ${a.name}]\n${a.textContent.slice(0, 8000)}`)
+          .join("");
+        const localMessages = messages.map((m) => ({ ...m }));
+        if (textAttachments && localMessages.length) localMessages[localMessages.length - 1].content += textAttachments;
+        return window.LocalGGUF.generate(localMessages, {
+          onToken: (token) => setState({ streamingMsg: `${S.streamingMsg}${token}` }),
+        });
+      }
+
+      async function renderLocalModelModal() {
+        const old = document.getElementById("local-model-modal");
+        if (old) old.remove();
+
+        const overlay = document.createElement("div");
+        overlay.id = "local-model-modal";
+        overlay.className = "modal-overlay";
+        const status = S.localModel || {};
+        const savedModels = await getSavedGGUFModels().catch(() => []);
+        overlay.innerHTML = `
+          <div class="modal-box" style="max-width:560px;">
+            <div class="modal-header">
+              <div class="modal-title">로컬 GGUF 모델</div>
+              <button class="modal-close" id="local-model-close">${iconSvg("X", 20)}</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-hint" style="margin-bottom:14px;line-height:1.6;">
+                선택한 GGUF 파일은 서버로 업로드되지 않고 이 브라우저의 LocalForage 저장소에 보관됩니다. 새로고침·오프라인 후에도 아래 목록에서 다시 불러올 수 있습니다. 분할 모델은 모든 조각을 함께 선택하세요.
+              </div>
+              <div class="form-group">
+                <label class="form-label">새 GGUF 파일 저장</label>
+                <input class="form-input" id="local-model-files" type="file" accept=".gguf,.GGUF" multiple />
+                <div class="form-hint">개별 파일 최대 2GB입니다. 브라우저 저장 공간과 실행 메모리가 충분해야 합니다.</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">이 기기에 저장된 모델</label>
+                <div id="saved-gguf-list" style="display:flex;flex-direction:column;gap:7px;">${savedModels.length ? savedModels.map((model) => `<div style="display:flex;gap:8px;align-items:center;padding:8px 9px;border-radius:7px;background:rgba(255,255,255,.05);"><div style="min-width:0;flex:1;"><div style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(model.name)}</div><div class="form-hint" style="margin:2px 0 0;">${model.fileCount}개 · ${formatModelSize(model.totalBytes)}</div></div><button type="button" class="auth-btn outline saved-gguf-load" data-id="${escHtml(model.id)}" style="width:auto;margin:0;padding:7px 9px;font-size:12px;">불러오기</button><button type="button" class="saved-gguf-delete" data-id="${escHtml(model.id)}" style="border:0;background:none;color:#f87171;cursor:pointer;padding:6px;">삭제</button></div>`).join("") : '<div class="form-hint">기기에 저장된 GGUF 모델이 없습니다.</div>'}</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">컨텍스트 길이</label>
+                <select class="form-input" id="local-model-context">
+                  <option value="1024">1,024 · 저메모리</option>
+                  <option value="2048" selected>2,048 · 기본</option>
+                  <option value="4096">4,096 · 더 많은 메모리 필요</option>
+                  <option value="8192">8,192 · 고사양 기기 권장</option>
+                </select>
+              </div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:14px;cursor:pointer;">
+                <input type="checkbox" id="local-model-gpu" checked> 가능하면 WebGPU 가속 사용
+              </label>
+              <div id="local-model-status" class="form-hint" style="min-height:22px;line-height:1.5;">
+                ${status.ready ? `현재 로드됨: ${escHtml(status.modelName || "GGUF")} ${status.modelSize ? `(${formatModelSize(status.modelSize)})` : ""}` : "아직 로컬 모델이 로드되지 않았습니다."}
+              </div>
+              <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
+                ${status.ready ? '<button class="auth-btn outline" id="local-model-unload" style="width:auto;margin:0;padding:10px 14px;">모델 해제</button>' : ""}
+                <button class="auth-btn primary" id="local-model-load" style="width:auto;margin:0;padding:10px 14px;">저장하고 불러오기</button>
+              </div>
+            </div>
+          </div>`;
+        document.body.appendChild(overlay);
+
+        const close = () => overlay.remove();
+        overlay.querySelector("#local-model-close")?.addEventListener("click", close);
+        overlay.addEventListener("click", (event) => {
+          if (event.target === overlay) close();
+        });
+
+        const statusEl = overlay.querySelector("#local-model-status");
+        const getLoadOptions = () => ({
+          contextLength: Number(overlay.querySelector("#local-model-context")?.value || 2048),
+          useGpu: !!overlay.querySelector("#local-model-gpu")?.checked,
+        });
+        const loadSavedFiles = async (files, savedModel, button) => {
+          if (!window.LocalGGUF) throw new Error("로컬 모델 런타임을 아직 준비하지 못했습니다. 잠시 후 다시 시도하세요.");
+          if (button) button.disabled = true;
+          setState({ localModel: { ...S.localModel, loading: true } });
+          try {
+            localStorage.setItem("gfd-gguf-context", String(getLoadOptions().contextLength));
+            localStorage.setItem("gfd-gguf-gpu", getLoadOptions().useGpu ? "1" : "0");
+            const modelStatus = await window.LocalGGUF.load(files, {
+              ...getLoadOptions(),
+              onProgress: (message) => { statusEl.textContent = message; },
+            });
+            setState({ localModel: { ...modelStatus, savedModelId: savedModel?.id || "" } });
+            updateLocalModelHint();
+            toast(`로컬 모델을 준비했습니다: ${modelStatus.modelName}`, "success");
+            close();
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "GGUF 모델을 불러오지 못했습니다.";
+            statusEl.textContent = message;
+            toast(message, "error", 6000);
+            setState({ localModel: window.LocalGGUF?.getStatus?.() || { ready: false, modelFiles: 0 } });
+          } finally {
+            if (button) button.disabled = false;
+          }
+        };
+
+        overlay.querySelector("#local-model-load")?.addEventListener("click", async () => {
+          const input = overlay.querySelector("#local-model-files");
+          const loadButton = overlay.querySelector("#local-model-load");
+          const files = Array.from(input?.files || []);
+          if (!files.length) {
+            statusEl.textContent = "하나 이상의 GGUF 파일을 선택하세요.";
+            return;
+          }
+          try {
+            statusEl.textContent = "GGUF 파일을 이 기기에 저장하는 중입니다…";
+            const savedModel = await persistGGUFModel(files);
+            const storedFiles = await getSavedGGUFFiles(savedModel);
+            await loadSavedFiles(storedFiles, savedModel, loadButton);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : "GGUF 모델을 저장하지 못했습니다.";
+            statusEl.textContent = message;
+            toast(message, "error", 6000);
+          }
+        });
+
+        overlay.querySelectorAll(".saved-gguf-load").forEach((button) => {
+          button.addEventListener("click", async () => {
+            const model = savedModels.find((item) => item.id === button.dataset.id);
+            if (!model) return;
+            try {
+              statusEl.textContent = "저장된 GGUF 파일을 기기 저장소에서 읽는 중입니다…";
+              await loadSavedFiles(await getSavedGGUFFiles(model), model, button);
+            } catch (error) {
+              const message = error instanceof Error ? error.message : "저장된 GGUF 모델을 불러오지 못했습니다.";
+              statusEl.textContent = message;
+              toast(message, "error", 6000);
+            }
+          });
+        });
+
+        overlay.querySelectorAll(".saved-gguf-delete").forEach((button) => {
+          button.addEventListener("click", async () => {
+            const model = savedModels.find((item) => item.id === button.dataset.id);
+            if (!model || !confirm(`기기에 저장된 모델 '${model.name}'을(를) 삭제하시겠습니까?`)) return;
+            button.disabled = true;
+            try {
+              await deleteSavedGGUFModel(model);
+              if (S.localModel?.savedModelId === model.id) {
+                await window.LocalGGUF?.unload().catch(() => {});
+                setState({ localModel: window.LocalGGUF?.getStatus?.() || { ready: false, modelFiles: 0 } });
+                updateLocalModelHint();
+              }
+              toast("저장된 GGUF 모델을 이 기기에서 삭제했습니다.", "success");
+              await renderLocalModelModal();
+            } catch (error) {
+              statusEl.textContent = error instanceof Error ? error.message : "저장된 GGUF 모델을 삭제하지 못했습니다.";
+            } finally {
+              button.disabled = false;
+            }
+          });
+        });
+
+        overlay.querySelector("#local-model-unload")?.addEventListener("click", async () => {
+          const statusEl = overlay.querySelector("#local-model-status");
+          try {
+            await window.LocalGGUF?.unload();
+            setState({ localModel: window.LocalGGUF?.getStatus() || { ready: false, modelFiles: 0 } });
+            updateLocalModelHint();
+            toast("로컬 모델 메모리를 해제했습니다.", "success");
+            close();
+          } catch (error) {
+            statusEl.textContent = error instanceof Error ? error.message : "모델 해제에 실패했습니다.";
+          }
+        });
+      }
+
+      // ── GPT MODAL ────────────────────────────────────────────────
+      let gptModalFiles = []; // runtime pending files for modal display
+
+      async function renderGPTModal() {
+        const overlay = document.getElementById("gpt-modal");
+        if (!overlay) return;
+        const editing = S.gptBuilderEditing;
+        overlay.classList.remove("hidden");
+        overlay.innerHTML = `<div class="modal-box">
+          <div class="modal-header">
+            <div class="modal-title">${editing ? "커스텀 GPT 수정" : "새 커스텀 GPT 만들기"}</div>
+            <button class="modal-close" id="modal-close">${iconSvg("X", 20)}</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label class="form-label">이름<span class="req">*</span></label>
+              <input class="form-input" id="gf-name" placeholder="예: 코딩 전문가" value="${escHtml(editing?.name || "")}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">설명</label>
+              <input class="form-input" id="gf-desc" placeholder="이 GPT가 무엇을 하는지 간단히 설명하세요" value="${escHtml(editing?.description || "")}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">시스템 프롬프트<span class="req">*</span></label>
+              <textarea class="form-input form-textarea" id="gf-sys" placeholder="AI의 역할과 성격을 정의하세요">${escHtml(editing?.system_prompt || "")}</textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">지침<span class="req">*</span></label>
+              <textarea class="form-input form-textarea" id="gf-inst" placeholder="구체적인 행동 지침을 작성하세요">${escHtml(editing?.instructions || "")}</textarea>
+            </div>
+            <div class="form-group">
+              <label class="form-label">아바타 URL (선택)</label>
+              <input class="form-input" id="gf-avatar" type="url" placeholder="https://example.com/avatar.png" value="${escHtml(editing?.avatar_url || "")}">
+            </div>
+            <div class="form-group">
+              <label class="form-label">🤖 로컬 GGUF 모델 (선택)</label>
+              <select class="form-input" id="gf-gguf-model">
+                <option value="">선택 안 함 — API 우선</option>
+              </select>
+              <div class="form-hint">앱 내부에 영구 저장된 GGUF를 이 GPT에 연결합니다. API가 실패하거나 오프라인이면 연결된 모델을 자동으로 사용합니다.</div>
+            </div>
+            <div class="form-group">
+              <label class="form-label">파일 첨부 (선택)</label>
+              <input type="file" id="gf-file-input" multiple style="display:none;">
+              <div class="upload-zone" id="upload-zone">${iconSvg("Upload", 24)}<div class="upload-zone-text">전용 폴더를 선택하여 자료 불러오기</div><div class="upload-zone-hint">/storage/emulated/0/커스텀GPT골드파이어드래곤브라우저/커스텀GPT 리스트/ 및 하위 파일만 읽습니다</div></div>
+              <div class="file-list" id="gf-file-list"></div>
+            </div>
+            <div class="form-group">
+              <div class="form-hint" style="line-height:1.55;">이 GPT와 첨부 파일은 현재 브라우저의 LocalForage에 저장됩니다. 계정·서버 설정이 없어도 사용할 수 있으며, 이 모드에서는 다른 사용자에게 자동 공유되지 않습니다.</div>
+              <input type="hidden" id="gf-public" value="false">
+            </div>
+            <div class="modal-footer">
+              <button class="btn-cancel" id="modal-cancel">취소</button>
+              <button class="btn-save" id="modal-save">${editing ? "수정" : "생성"}</button>
+            </div>
+          </div>
+        </div>`;
+
+        gptModalPendingDeletes = [];
+        const ggufSelect = document.getElementById("gf-gguf-model");
+        if (ggufSelect) {
+          const savedModels = await getSavedGGUFModels().catch(() => []);
+          ggufSelect.innerHTML = `<option value="">선택 안 함 — API 우선</option>` + savedModels.map((m) =>
+            `<option value="${escHtml(m.id)}">${escHtml(m.name)} · ${formatModelSize(m.totalBytes)}</option>`).join("");
+          ggufSelect.value = editing?.local_gguf_model_id || "";
+        }
+        // 편집 시: DB에서 기존 파일 로드
+        if (editing) {
+          const existingFiles = await loadGPTFiles(editing.id);
+          const newOnly = gptBuilderFiles.filter((f) => !f.isExisting);
+          gptModalFiles = [...existingFiles, ...newOnly];
+        } else {
+          gptModalFiles = [...gptBuilderFiles];
+        }
+        renderGPTFileList();
+
+        const closeBuilder = async () => {
+          await discardUnsavedGPTFiles();
+          overlay.classList.add("hidden");
+          setState({ gptBuilderOpen: false, gptBuilderEditing: null });
+        };
+        document.getElementById("modal-close").addEventListener("click", () => { void closeBuilder(); });
+        document.getElementById("modal-cancel").addEventListener("click", () => { void closeBuilder(); });
+        overlay.addEventListener("click", (e) => {
+          if (e.target === overlay) void closeBuilder();
+        });
+        const gptUploadZone = document.getElementById("upload-zone");
+        const gptFileInput = document.getElementById("gf-file-input");
+        gptUploadZone.addEventListener("click", () => {
+          if (window.GoldFireNative?.openGptBuilderFolder) {
+            window.GoldFireNative.openGptBuilderFolder();
+          } else {
+            gptFileInput.click();
+          }
+        });
+        gptFileInput.addEventListener("change", handleGPTFileUpload);
+        window.__goldfireNativeGptUploadDone = () => {
+          try {
+            const bridge = window.GoldFireNative;
+            const count = Number(bridge?.getGptBuilderUploadCount?.() || 0);
+            if (!count) return;
+            const transfer = new DataTransfer();
+            for (let index = 0; index < count; index += 1) {
+              const chunks = [];
+              for (let offset = 0; ; offset += 24576) {
+                const encoded = bridge.getGptBuilderUploadChunk(index, offset, 24576);
+                if (!encoded) break;
+                const binary = atob(encoded);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+                chunks.push(bytes);
+                if (encoded.length < 32768) break;
+              }
+              const name = bridge.getGptBuilderUploadName(index) || `folder-file-${index + 1}`;
+              const type = bridge.getGptBuilderUploadMime(index) || "application/octet-stream";
+              transfer.items.add(new File([new Blob(chunks, { type })], name, { type }));
+            }
+            gptFileInput.files = transfer.files;
+            gptFileInput.dispatchEvent(new Event("change", { bubbles: true }));
+          } catch (error) {
+            toast("전용 폴더 자료를 불러오지 못했습니다.", "error");
+          }
+        };
+        document.getElementById("modal-save").addEventListener("click", async () => {
+          const saveButton = document.getElementById("modal-save");
+          const formData = {
+            name: document.getElementById("gf-name").value.trim(),
+            description: document.getElementById("gf-desc").value.trim(),
+            systemPrompt: document.getElementById("gf-sys").value.trim(),
+            instructions: document.getElementById("gf-inst").value.trim(),
+            avatarUrl: document.getElementById("gf-avatar").value.trim(),
+            localGgufModelId: document.getElementById("gf-gguf-model")?.value || "",
+            isPublic: document.getElementById("gf-public").checked,
+          };
+          if (!formData.name || !formData.systemPrompt || !formData.instructions) {
+            toast("이름, 시스템 프롬프트, 지침은 필수입니다", "error");
+            return;
+          }
+          if (formData.avatarUrl && !/^https:\/\//i.test(formData.avatarUrl)) {
+            toast("아바타 URL은 HTTPS 주소여야 합니다.", "error");
+            return;
+          }
+          saveButton.disabled = true;
+          try {
+            gptBuilderFiles = [...gptModalFiles];
+            await saveGPT(formData);
+          } finally {
+            if (document.body.contains(saveButton)) saveButton.disabled = false;
+          }
+        });
+      }
+
+      function renderGPTFileList() {
+        const el = document.getElementById("gf-file-list");
+        if (!el) return;
+        el.innerHTML = "";
+        if (gptModalFiles.length === 0) {
+          el.innerHTML =
+            '<div style="color:var(--text-dim);font-size:12px;padding:8px 4px;">첨부된 파일이 없습니다</div>';
+          return;
+        }
+        for (let i = 0; i < gptModalFiles.length; i++) {
+          const f = gptModalFiles[i];
+          const isPending = f.isExisting && gptModalPendingDeletes.some((dd) => dd.id === f.id);
+          const d = document.createElement("div");
+          d.className = "file-list-item";
+          d.style.opacity = isPending ? "0.45" : "1";
+          d.style.textDecoration = isPending ? "line-through" : "none";
+          const statusBadge = f.isExisting
+            ? `<span style="font-size:10px;background:rgba(16,163,127,0.18);color:#10a37f;padding:2px 7px;border-radius:9999px;flex-shrink:0;">저장됨</span>`
+            : `<span style="font-size:10px;background:rgba(59,130,246,0.18);color:#60a5fa;padding:2px 7px;border-radius:9999px;flex-shrink:0;">새파일</span>`;
+          const delLabel = isPending ? "되돌리기" : "삭제";
+          const delColor = isPending ? "var(--text-muted)" : "var(--danger)";
+          const delIcon = isPending ? iconSvg("Plus", 14) : iconSvg("Trash2", 14);
+          d.innerHTML = `${iconSvg("FileText", 16)}<div class="file-list-name">${escHtml(f.file_name)}</div>${statusBadge}<span class="file-list-size">${fmtSize(f.file_size)}</span><button class="file-list-del" data-idx="${i}" title="${delLabel}" style="color:${delColor}">${delIcon}</button>`;
+          d.querySelector("[data-idx]").addEventListener("click", async () => {
+            const target = gptModalFiles[i];
+            if (target && target.isExisting) {
+              // 기존 DB 파일: 삭제 예정 토글
+              const pIdx = gptModalPendingDeletes.findIndex((x) => x.id === target.id);
+              if (pIdx >= 0) {
+                gptModalPendingDeletes.splice(pIdx, 1);
+              } else {
+                gptModalPendingDeletes.push(target);
+              }
+            } else if (target) {
+              // 저장 전 새 파일은 목록과 LocalForage 블롭을 함께 정리합니다.
+              gptModalFiles.splice(i, 1);
+              if (target.local_file_id) {
+                await blobStore.removeItem(target.local_file_id).catch(() => {});
+                await metaStore.removeItem(target.local_file_id).catch(() => {});
+              }
+            }
+            renderGPTFileList();
+          });
+          el.appendChild(d);
+        }
+        if (gptModalPendingDeletes.length > 0) {
+          const notice = document.createElement("div");
+          notice.style.cssText = "font-size:11px;color:var(--danger);padding:6px 4px;margin-top:4px;";
+          notice.textContent = `⚠️ ${gptModalPendingDeletes.length}개 파일이 '저장' 시 영구 삭제됩니다`;
+          el.appendChild(notice);
+        }
+      }
+
+      async function handleGPTFileUpload(e) {
+        const files = Array.from(e.target.files || []);
+        if (!files.length) return;
+        const btn = document.getElementById("modal-save");
+        if (btn) btn.disabled = true;
+        try {
+          const alreadySelected = gptModalFiles.reduce((total, file) => total + (file.file_size || 0), 0);
+          let total = alreadySelected;
+          for (const file of files) {
+            try {
+              if (!file.size || file.size > 100 * 1024 * 1024) throw new Error("파일당 100MB 이하만 전용 폴더 자료로 읽을 수 있습니다.");
+              if (total + file.size > 500 * 1024 * 1024) throw new Error("전용 폴더 자료 총합은 500MB 이하만 읽을 수 있습니다.");
+              const meta = await storeFileLF(file, { ownerId: S.user?.id, role: "custom-gpt-file" });
+              gptModalFiles.push({
+                id: `pending-gpt-file-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`}`,
+                custom_gpt_id: "",
+                file_name: meta.name,
+                file_size: meta.size,
+                mime_type: meta.mimeType,
+                file_content: meta.textContent || "",
+                local_file_id: meta.id,
+                created_at: meta.createdAt,
+                isLocal: true,
+              });
+              total += file.size;
+              toast(`${file.name}을(를) 이 기기에 첨부했습니다.`, "success");
+            } catch (error) {
+              toast(`${file.name}: ${error instanceof Error ? error.message : "저장에 실패했습니다."}`, "error");
+            }
+          }
+        } finally {
+          if (btn) btn.disabled = false;
+          renderGPTFileList();
+          if (e.target) e.target.value = "";
+        }
+      }
+
+      // ── BIND MAIN EVENTS ─────────────────────────────────────────
+      function bindMain() {
+        // GPT 빌더 버튼은 사이드바 부분 렌더와 무관하게 이 주 바인딩에서도 확실히 처리합니다.
+        const createGPTButton = document.getElementById("btn-create-gpt");
+        if (createGPTButton) {
+          createGPTButton.onclick = (event) => {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            openGPTBuilder(null);
+          };
+        }
+
+        // New chat
+        document.getElementById("btn-new-chat")?.addEventListener("click", () => {
+          _renderedMsgIds.clear();
+          setState({ currentConvId: null, messages: [], streamingMsg: "", currentGPT: null, currentGPTFiles: [] });
+        });
+
+        // Browser panel toggle (split view alongside chat)
+        document.getElementById("btn-open-browser")?.addEventListener("click", () => {
+          if (S.browserOpen) closeBrowserOverlay();
+          else openBrowserOverlay();
+        });
+
+        // Sidebar drawer toggle (slide open/close)
+        document.getElementById("btn-toggle-sidebar")?.addEventListener("click", () => {
+          setState({ sidebarOpen: !S.sidebarOpen });
+        });
+        document.getElementById("sidebar-backdrop")?.addEventListener("click", () => {
+          setState({ sidebarOpen: false });
+        });
+
+        // User dropdown
+        document.getElementById("user-btn")?.addEventListener("click", (e) => {
+          e.stopPropagation();
+          setState({ dropdownOpen: !S.dropdownOpen });
+        });
+        document.addEventListener("click", () => {
+          if (S.dropdownOpen) setState({ dropdownOpen: false });
+        });
+        document.getElementById("dd-profile")?.addEventListener("click", () => {
+          setState({ dropdownOpen: false });
+          renderProfileModal();
+        });
+        document.getElementById("dd-account")?.addEventListener("click", () => {
+          setState({ dropdownOpen: false });
+          void renderAccountModal();
+        });
+        document.getElementById("dd-sync")?.addEventListener("click", async () => {
+          setState({ dropdownOpen: false });
+          if (!S.account?.connected) {
+            toast("계정 연결 전에도 모든 데이터는 이 기기에 저장됩니다. 계정을 연결하면 다른 기기와 동기화할 수 있습니다.", "info", 5000);
+            return;
+          }
+          const ok = await flushSyncQueue();
+          toast(ok ? "동기화를 완료했습니다." : "동기화 대기 항목이 남아 있습니다.", ok ? "success" : "info");
+        });
+        document.getElementById("dd-disconnect")?.addEventListener("click", disconnectAccount);
+        document.getElementById("dd-local-model")?.addEventListener("click", () => {
+          setState({ dropdownOpen: false });
+          renderLocalModelModal();
+        });
+
+        // File attach
+        document
+          .getElementById("btn-attach")
+          ?.addEventListener("click", () => document.getElementById("file-input").click());
+        document.getElementById("file-input")?.addEventListener("change", (e) => {
+          const files = Array.from(e.target.files || []);
+          const maxFileCount = 10;
+          const maxFileBytes = 10 * 1024 * 1024;
+          const maxTotalBytes = 20 * 1024 * 1024;
+          const available = Math.max(0, maxFileCount - S.attachedFiles.length);
+          let totalBytes = S.attachedFiles.reduce((sum, item) => sum + item.file.size, 0);
+          const accepted = [];
+
+          for (const file of files.slice(0, available)) {
+            if (!file.size) {
+              toast(`빈 파일은 첨부할 수 없습니다: ${file.name}`, "error");
+              continue;
+            }
+            if (file.size > maxFileBytes) {
+              toast(`파일당 최대 10MB까지 첨부할 수 있습니다: ${file.name}`, "error");
+              continue;
+            }
+            if (totalBytes + file.size > maxTotalBytes) {
+              toast("전체 첨부 크기는 20MB까지입니다.", "error");
+              break;
+            }
+            accepted.push(file);
+            totalBytes += file.size;
+          }
+          if (files.length > available) toast("파일은 최대 10개까지 첨부할 수 있습니다.", "info");
+
+          const newFiles = accepted.map((file) => ({
+            id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            file,
+            previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+          }));
+          if (newFiles.length) setState({ attachedFiles: [...S.attachedFiles, ...newFiles] });
+          if (e.target) e.target.value = "";
+        });
+
+        // Send button
+        document.getElementById("btn-send")?.addEventListener("click", doSend);
+
+        // Textarea
+        const ta = document.getElementById("msg-input");
+        if (ta) {
+          ta.addEventListener("keydown", (e) => {
+            if (e.isComposing) return;
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void doSend();
+            }
+          });
+          ta.addEventListener("input", (e) => {
+            const el = e.target;
+            el.style.height = "auto";
+            el.style.height = Math.min(el.scrollHeight, 180) + "px";
+          });
+        }
+
+        // document-level outside-click handler above already handles this.
+        // A second content-area handler would immediately close the menu after opening.
+      }
+
+      async function doSend() {
+        const ta = document.getElementById("msg-input");
+        const content = ta?.value || "";
+        const files = S.attachedFiles.map((file) => file.file);
+        if (!content.trim() && files.length === 0) return;
+
+        const sent = await sendMessage(content, files);
+        if (!sent) return;
+
+        S.attachedFiles.forEach((file) => {
+          if (file.previewUrl) URL.revokeObjectURL(file.previewUrl);
+        });
+        setState({ attachedFiles: [] });
+        if (ta) {
+          ta.value = "";
+          ta.style.height = "auto";
+        }
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 🔧  UTILS
+      // ═══════════════════════════════════════════════════════════════
+      function escHtml(s) {
+        return String(s || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function render() {
+        if (S.loading) {
+          document.getElementById("loading-screen").classList.remove("hidden");
+          return;
+        }
+        document.getElementById("loading-screen").classList.add("hidden");
+        if (S.view === "auth") {
+          app.innerHTML = "";
+          renderAuth();
+          return;
+        }
+        // Check if we need full re-render
+        if (!document.getElementById("main-layout")) {
+          app.innerHTML = "";
+          _renderedMsgIds.clear();
+          renderMain();
+          return;
+        }
+        // Targeted updates
+        updateConvList();
+        updateGPTSection();
+        updateMessages();
+        updateHeader();
+        updateFilePreviews();
+        updateLocalModelHint();
+        updateGPTBanner();
+        updateSidebarDrawer();
+        const gptModal = document.getElementById("gpt-modal");
+        if (S.gptBuilderOpen && gptModal?.classList.contains("hidden")) void renderGPTModal();
+        if (!S.gptBuilderOpen && gptModal && !gptModal.classList.contains("hidden")) gptModal.classList.add("hidden");
+      }
+
+      function updateConvList() {
+        const el = document.getElementById("conv-list");
+        if (!el) return;
+        renderConvList();
+      }
+      function updateGPTSection() {
+        const el = document.getElementById("gpt-section");
+        if (!el) return;
+        renderGPTSection();
+      }
+      function updateMessages() {
+        renderMessages();
+      }
+      function updateFilePreviews() {
+        renderFilePreviews();
+      }
+      function updateHeader() {
+        const dd = document.getElementById("user-dropdown");
+        if (dd) {
+          dd.className = `dropdown ${S.dropdownOpen ? "open" : ""}`;
+        }
+        const bb = document.getElementById("btn-open-browser");
+        if (bb) {
+          bb.className = `browser-toggle-btn ${S.browserOpen ? "active" : ""}`;
+        }
+        const sb2 = document.getElementById("btn-toggle-sidebar");
+        if (sb2) {
+          sb2.className = `sidebar-toggle-btn ${S.sidebarOpen ? "active" : ""}`;
+        }
+      }
+      function updateSidebarDrawer() {
+        const sidebar = document.getElementById("sidebar");
+        if (sidebar) sidebar.className = S.sidebarOpen ? "open" : "";
+        const backdrop = document.getElementById("sidebar-backdrop");
+        if (backdrop) backdrop.className = S.sidebarOpen ? "open" : "";
+        // 안전장치: 일부 안드로이드 웹뷰는 z-index와 무관하게 iframe이 터치를 가로채는 버그가 있어
+        // 사이드바가 열려 있는 동안은 브라우저 iframe의 터치 자체를 막아 먹통 현상을 방지한다.
+        const iframe = document.getElementById("brow-iframe");
+        if (iframe) iframe.style.pointerEvents = S.sidebarOpen ? "none" : "";
+      }
+      function updateGPTBanner() {
+        const b = document.getElementById("gpt-banner");
+        if (!b) return;
+        if (S.currentGPT) {
+          b.className = "visible";
+          b.innerHTML = `<div class="gpt-banner-avatar">${S.currentGPT.avatar_url ? `<img src="${S.currentGPT.avatar_url}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">` : S.currentGPT.name[0] || "?"}</div><div><div style="font-weight:600;">${escHtml(S.currentGPT.name)}</div>${S.currentGPT.description ? `<div style="font-size:13px;color:rgba(255,255,255,0.6);">${escHtml(S.currentGPT.description)}</div>` : ""}</div>`;
+        } else {
+          b.className = "";
+          b.innerHTML = "";
+        }
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 🌐  ONLINE / OFFLINE
+      // ═══════════════════════════════════════════════════════════════
+      window.addEventListener("online", () => {
+        setState({ isOnline: true, syncStatus: "연결 복구됨" });
+        void flushSyncQueue();
+        toast("인터넷에 연결되었습니다. 저장된 변경사항을 확인합니다.", "success");
+      });
+      window.addEventListener("offline", () => {
+        setState({ isOnline: false, syncStatus: "오프라인 · 기기에 저장 중" });
+        toast("오프라인 상태입니다", "error");
+      });
+
+      // ═══════════════════════════════════════════════════════════════
+      // 🌐  브라우저 오버레이
+      // ═══════════════════════════════════════════════════════════════
+      const BROWSER_HOME_URL = "GoldFireDragonBrowser.html";
+
+      function openBrowserOverlay() {
+        const brow = document.getElementById("brow");
+        const iframe = document.getElementById("brow-iframe");
+        if (!brow || !iframe) return;
+        if (!iframe.src || iframe.src === "about:blank") {
+          iframe.src = BROWSER_HOME_URL;
+        }
+        brow.classList.add("open");
+        setState({ browserOpen: true });
+      }
+      function closeBrowserOverlay() {
+        const brow = document.getElementById("brow");
+        brow?.classList.remove("open");
+        // 수동으로 조절한 크기 초기화 → 다음에 열 때 기본 반반 비율로 시작
+        if (brow) {
+          brow.style.height = "";
+          brow.style.width = "";
+        }
+        setState({ browserOpen: false });
+      }
+      const browserOrientationQuery = window.matchMedia("(orientation: landscape)");
+      function bindBrowserOverlay() {
+        document.getElementById("brow-back")?.addEventListener("click", closeBrowserOverlay);
+        document.getElementById("brow-reload")?.addEventListener("click", () => {
+          const iframe = document.getElementById("brow-iframe");
+          if (iframe && iframe.src && iframe.src !== "about:blank") {
+            iframe.src = iframe.src;
+          }
+        });
+        document.getElementById("brow-newtab")?.addEventListener("click", () => {
+          window.open(BROWSER_HOME_URL, "_blank", "noopener,noreferrer");
+        });
+        bindBrowserResize();
+        // 화면 회전 시 수동 조절값을 지워서 세로=상하 반반 / 가로=좌우 반반 기본값으로 재적용
+        browserOrientationQuery.addEventListener("change", () => {
+          const brow = document.getElementById("brow");
+          if (brow) {
+            brow.style.height = "";
+            brow.style.width = "";
+          }
+        });
+      }
+
+      // 드래그로 브라우저 패널 / 채팅 화면 분할 비율 조절
+      // portrait(세로) = 위아래 드래그로 높이 조절, landscape(가로) = 좌우 드래그로 너비 조절
+      function bindBrowserResize() {
+        const handle = document.getElementById("brow-resize");
+        const brow = document.getElementById("brow");
+        if (!handle || !brow) return;
+        let dragging = false;
+        const apply = (clientX, clientY) => {
+          if (browserOrientationQuery.matches) {
+            const vw = window.innerWidth;
+            const min = vw * 0.2;
+            const max = vw * 0.8;
+            const w = Math.max(min, Math.min(max, clientX));
+            brow.style.width = w + "px";
+          } else {
+            const vh = window.innerHeight;
+            const min = vh * 0.18;
+            const max = vh * 0.8;
+            const h = Math.max(min, Math.min(max, clientY));
+            brow.style.height = h + "px";
+          }
+        };
+        handle.addEventListener("pointerdown", (e) => {
+          if (!brow.classList.contains("open")) return;
+          dragging = true;
+          brow.classList.add("resizing");
+          handle.setPointerCapture(e.pointerId);
+        });
+        handle.addEventListener("pointermove", (e) => {
+          if (!dragging) return;
+          apply(e.clientX, e.clientY);
+        });
+        const endDrag = () => {
+          if (!dragging) return;
+          dragging = false;
+          brow.classList.remove("resizing");
+        };
+        handle.addEventListener("pointerup", endDrag);
+        handle.addEventListener("pointercancel", endDrag);
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // 🚀  BOOT
+      // ═══════════════════════════════════════════════════════════════
+      (async () => {
+        await supabaseReady; // anon key 해석 + Supabase 클라이언트 준비를 기다린다 (필요 시 입력폼 대기)
+        bindBrowserOverlay();
+        try {
+          try {
+            await Promise.all([
+              blobStore.ready(),
+              metaStore.ready(),
+              msgFileStore.ready(),
+              convStore.ready(),
+              msgStore.ready(),
+            ]);
+          } catch (e) {
+            console.warn("LocalForage init:", e);
+          }
+
+          await withTimeout(initAuth(), 6000, undefined);
+          if (S.user) {
+            await withTimeout(loadUserData(), 8000, undefined);
+          }
+        } catch (e) {
+          console.warn("Boot error:", e);
+        } finally {
+          if (S.loading) setState({ loading: false, view: S.user ? "chat" : "auth" });
+          render();
+          window.__bootReady = true;
+          clearTimeout(window.__bootWatchdog);
+          document.getElementById("loading-screen").classList.add("hidden");
+        }
+      })();
+
+      // PWA Service Worker
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker.register("./sw.js").catch(() => {});
+        });
+      }
+    </script>
+  </body>
+</html>

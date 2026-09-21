@@ -26,19 +26,13 @@
  *    (예: Capacitor 프로젝트라면 보통 "www" 또는 "public" 폴더)
  * ------------------------------------------------------------------
  */
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const fs = require("fs");
+const path = require("path");
 
 // ⚠️ 프로젝트 구조에 맞게 필요 시 수정하세요.
 const ENV_PATH = path.join(__dirname, ".env");
 const OUTPUT_PATH = path.join(__dirname, "env-config.js"); // index.html과 같은 폴더 기준
-const ENV_VAR_NAMES = {
-  url: "VITE_SUPABASE_URL",
-  anonKey: "VITE_SUPABASE_ANON_KEY",
-};
+const ENV_VAR_NAME = "VITE_SUPABASE_ANON_KEY";
 
 function parseEnvFile(content) {
   const result = {};
@@ -68,26 +62,24 @@ function main() {
   }
 
   const env = parseEnvFile(fs.readFileSync(ENV_PATH, "utf8"));
-  const supabaseUrl = env[ENV_VAR_NAMES.url];
-  const anonKey = env[ENV_VAR_NAMES.anonKey];
+  const anonKey = env[ENV_VAR_NAME];
 
-  if (!supabaseUrl || !anonKey) {
-    console.warn(`[generate-env-config] .env에 ${ENV_VAR_NAMES.url} 및 ${ENV_VAR_NAMES.anonKey} 값이 필요합니다.`);
+  if (!anonKey) {
+    console.warn(`[generate-env-config] .env에 ${ENV_VAR_NAME} 값이 없습니다.`);
     console.warn("[generate-env-config] env-config.js를 생성하지 않습니다. 앱 실행 시 입력폼이 표시됩니다.");
     return;
   }
 
   const output = `// 이 파일은 generate-env-config.js가 자동 생성합니다. 직접 수정하지 마세요.
-// 원본 값: .env의 ${ENV_VAR_NAMES.url}, ${ENV_VAR_NAMES.anonKey}
+// 원본 값: .env의 ${ENV_VAR_NAME}
 window.__ENV__ = {
-  SUPABASE_URL: ${JSON.stringify(supabaseUrl)},
   SUPABASE_ANON_KEY: ${JSON.stringify(anonKey)}
 };
 `;
 
   fs.writeFileSync(OUTPUT_PATH, output, "utf8");
   console.log(`[generate-env-config] 생성 완료 → ${OUTPUT_PATH}`);
-  console.log(`[generate-env-config] (.env의 ${ENV_VAR_NAMES.url}, ${ENV_VAR_NAMES.anonKey} 값을 사용)`);
+  console.log(`[generate-env-config] (.env의 ${ENV_VAR_NAME} 값을 사용)`);
 }
 
 main();

@@ -27,10 +27,12 @@
 
   window.GFDInAppBrowser = Object.freeze({ open, isWebUrl });
 
-  // IMPORTANT: do not hijack window.open. Electron owns popup navigation and
-  // opens HTTP(S) targets in a dedicated in-app browser window. Hijacking it
-  // with location.assign() makes Google/X-Frame-protected pages appear black
-  // when this document is hosted inside the AI-chat iframe.
+  // Replace popup-style navigation with same-window navigation.
+  const nativeOpen = window.open;
+  window.open = function (url) {
+    if (isWebUrl(url)) return open(url);
+    return nativeOpen ? nativeOpen.apply(window, arguments) : null;
+  };
 
   // Force ordinary target=_blank web links back into this app window.
   document.addEventListener('click', function (event) {
