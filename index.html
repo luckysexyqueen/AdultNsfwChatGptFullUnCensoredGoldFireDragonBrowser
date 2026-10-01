@@ -6,15 +6,59 @@
     <meta name="theme-color" content="#10a37f" />
     <meta name="description" content="제한 없는 AI 채팅 애플리케이션" />
     <title>AI Chat - 무제한 대화</title>
-    <link rel="icon" type="image/png" href="./icon.png" />
-    <link rel="manifest" href="./manifest.json" />
-    <link rel="apple-touch-icon" href="./icon.png" />
+    <link rel="icon" type="image/png" href="./assets/icon-CV9Zx_iX.png" />
+    <link rel="manifest" href="./assets/manifest-BnsIcC0n.json" />
+    <link rel="apple-touch-icon" href="./assets/icon-CV9Zx_iX.png" />
+    <script src="./env-config.js"></script>
+    <script src="./vpn-index-control.js" defer></script>
+    <link rel="alternate" type="application/yaml" href="./openapi-spec.yaml" title="GoldFire API specification" />
+    <link rel="alternate" type="application/yaml" href="./localforge-offline-storage-api.yaml" title="LocalForage offline storage API specification" />
     <!-- 선택 사항: 배포 환경의 Supabase 공개 키 설정. 파일이 없어도 로컬 모드로 계속 실행됩니다. -->
-    <script type="module" src="./env-config.js" onerror="console.info('[env-config] 파일 없음 — 로컬 모드로 계속합니다.')"></script>
-    <script type="module" src="./vpn-index-control.js"></script>
-    <script type="module" src="./boot-guard.js"></script>
     <!-- 로컬 GGUF 런타임은 번들 환경에서만 로드합니다. 원본 TypeScript를 standalone HTML에서 직접 요청하지 않습니다. -->
-    <script type="module" src="./inapp-browser.js"></script>
+    <script type="module" crossorigin src="./assets/index-D4Dri-tC.js"></script>
+    <script>
+      // App-bundled GGUF adapter: inference stays in the Android process on loopback.
+      (function () {
+        const base = "http://127.0.0.1:18765/api/gguf";
+        let status = { ready: false, modelName: "assembled-kogpt2-sexy-llama-f16.gguf", bundled: true, onDevice: true };
+        async function request(path, body) {
+          const response = await fetch(`${base}/${path}`, {
+            method: body === undefined ? "GET" : "POST",
+            headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+            body: body === undefined ? undefined : JSON.stringify(body),
+            cache: "no-store",
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.error || `온디바이스 GGUF 요청 실패 (${response.status})`);
+          return data;
+        }
+        window.LocalGGUF = {
+          isBundled: true,
+          getStatus: () => ({ ...status }),
+          async load(files, options = {}) {
+            if (files?.length) throw new Error("이 앱에서는 APK에 내장된 KoGPT-2 모델을 사용합니다. 브라우저에 업로드한 별도 모델은 이 네이티브 런타임에 아직 연결되지 않았습니다.");
+            options.onProgress?.("앱 내장 모델을 기기 저장소에 준비하고 불러오는 중입니다…");
+            status = await request("load", {
+              contextLength: options.contextLength || 1024,
+              temperature: Number(localStorage.getItem("gfd-gguf-temperature") || 0.7),
+            });
+            status.onDevice = true;
+            return { ...status };
+          },
+          async generate(messages, options = {}) {
+            if (!status.ready) throw new Error("먼저 앱 내장 GGUF 모델을 불러오세요.");
+            const data = await request("generate", { messages, maxTokens: options.maxTokens || 256 });
+            options.onToken?.(data.text || "");
+            return data.text || "";
+          },
+          async unload() {
+            await request("unload", {});
+            status = { ready: false, modelName: "assembled-kogpt2-sexy-llama-f16.gguf", bundled: true, onDevice: true };
+          },
+        };
+        void request("status").then((data) => { status = { ...status, ...data, bundled: true, onDevice: true }; }).catch(() => {});
+      })();
+    </script>
   </head>
   <body>
     <!-- LocalForage: CDN 제거, 네이티브 IndexedDB 기반 자체 구현으로 대체 (오프라인/WebView 안전) -->
@@ -34,15 +78,34 @@
               reject(new Error("IndexedDB unsupported"));
               return;
             }
-            const req = indexedDB.open(dbName, 1);
-            req.onupgradeneeded = (e) => {
-              const db = e.target.result;
-              if (!db.objectStoreNames.contains(storeName)) {
-                db.createObjectStore(storeName);
+            const ensureStore = (db) => {
+              db.onversionchange = () => db.close();
+              if (db.objectStoreNames.contains(storeName)) {
+                resolve(db);
+                return;
               }
+              const nextVersion = db.version + 1;
+              db.close();
+              const upgrade = indexedDB.open(dbName, nextVersion);
+              upgrade.onupgradeneeded = (event) => {
+                const upgradedDb = event.target.result;
+                if (!upgradedDb.objectStoreNames.contains(storeName)) upgradedDb.createObjectStore(storeName);
+              };
+              upgrade.onsuccess = (event) => {
+                const upgradedDb = event.target.result;
+                upgradedDb.onversionchange = () => upgradedDb.close();
+                resolve(upgradedDb);
+              };
+              upgrade.onerror = (event) => reject(event.target.error || new Error("IndexedDB store upgrade failed"));
+              upgrade.onblocked = () => reject(new Error("IndexedDB store upgrade blocked by another open connection"));
             };
-            req.onsuccess = (e) => resolve(e.target.result);
-            req.onerror = (e) => reject(e.target.error || new Error("IndexedDB open failed"));
+            const req = indexedDB.open(dbName);
+            req.onupgradeneeded = (event) => {
+              const db = event.target.result;
+              if (!db.objectStoreNames.contains(storeName)) db.createObjectStore(storeName);
+            };
+            req.onsuccess = (event) => ensureStore(event.target.result);
+            req.onerror = (event) => reject(event.target.error || new Error("IndexedDB open failed"));
           });
         }
 
@@ -261,9 +324,54 @@
           removeItem: (k) => defaultInstance.removeItem(k),
           clear: () => defaultInstance.clear(),
           keys: () => defaultInstance.keys(),
+          length: async () => (await defaultInstance.keys()).length,
+          key: async (index) => (await defaultInstance.keys())[index] ?? null,
           iterate: (cb) => defaultInstance.iterate(cb),
           ready: () => defaultInstance.ready(),
           createInstance: createInstance,
+          async setDriver(driver) {
+            const requested = Array.isArray(driver) ? driver : [driver];
+            if (requested.includes("asyncStorage") && window.indexedDB) return;
+            throw new Error("이 앱은 영구 저장을 위해 IndexedDB(asyncStorage)를 사용합니다.");
+          },
+          async dropInstance(options = {}) {
+            const dbName = options.name || "localforage";
+            const storeName = options.storeName || "keyvaluepairs";
+            const db = await openDb(dbName, storeName);
+            db.close();
+            if (!options.storeName) await new Promise((resolve, reject) => {
+              const req = indexedDB.deleteDatabase(dbName);
+              req.onsuccess = () => resolve(); req.onerror = () => reject(req.error);
+            });
+            else await new Promise((resolve, reject) => {
+              const open = indexedDB.open(dbName);
+              open.onsuccess = () => { const current = open.result; const next = current.version + 1; current.close();
+                const upgrade = indexedDB.open(dbName, next);
+                upgrade.onupgradeneeded = () => { if (upgrade.result.objectStoreNames.contains(storeName)) upgrade.result.deleteObjectStore(storeName); };
+                upgrade.onsuccess = () => { upgrade.result.close(); resolve(); }; upgrade.onerror = () => reject(upgrade.error);
+              }; open.onerror = () => reject(open.error);
+            });
+          },
+          INDEXEDDB: "asyncStorage",
+          LOCALSTORAGE: "localStorageWrapper",
+          WEBSQL: "webSQLStorage",
+          async config(options = {}) { return { name: options.name || "localforage", storeName: options.storeName || "keyvaluepairs", driver: "asyncStorage" }; },
+          async driver() { return "asyncStorage"; },
+          async supports(driver) { return driver === "asyncStorage" ? !!window.indexedDB : driver === "localStorageWrapper" ? !!window.localStorage : false; },
+        };
+        window.LocalForageOfflineStorage = {
+          async configureStore(options = {}) {
+            const instance = createInstance({ name: options.name || "localforage", storeName: options.storeName || "keyvaluepairs" });
+            await instance.ready();
+            return instance;
+          },
+          async clearStore(instance = defaultInstance) { await instance.clear(); return { status: 204 }; },
+          async getItem(key, instance = defaultInstance) { return { value: await instance.getItem(String(key)) }; },
+          async setItem(key, value, instance = defaultInstance) { await instance.setItem(String(key), value); return { value }; },
+          async removeItem(key, instance = defaultInstance) { await instance.removeItem(String(key)); return { status: 204 }; },
+          async getAllKeys(instance = defaultInstance) { return instance.keys(); },
+          async getKeyByPosition(index, instance = defaultInstance) { const keys = await instance.keys(); return { key: Number.isInteger(index) && index >= 0 ? (keys[index] ?? null) : null }; },
+          async getStoreLength(instance = defaultInstance) { return { length: (await instance.keys()).length }; },
         };
       })();
     </script>
@@ -277,1293 +385,9 @@
       href="https://cdn.jsdelivr.net/gh/luckysexysuccubusqueen135age/GoldFireDragonFullUnCensoredGoogleProxyInAndroidWebBrowserAppHomePage@refs/heads/codespace-super-robot-xrwp9jp647v62v74v/fonts/gamefont.css"
     />
 
-    <style>
-      @font-face {
-        font-family: "acutehoney";
-        src: url("https://cdn.jsdelivr.net/gh/luckysexyqueen/GoldFireDragonUnCensoredBrowser/fonts/a%ED%81%90%ED%8B%B0%ED%97%88%EB%8B%88.woff")
-          format("woff");
-        font-weight: normal;
-        font-style: normal;
-        font-display: swap;
-      }
-      *,
-      *::before,
-      *::after,
-      input,
-      button,
-      textarea,
-      select {
-        font-family: "acutehoney", sans-serif !important;
-      }
-    </style>
+    <style>@font-face{font-family:acutehoney;src:url(https://cdn.jsdelivr.net/gh/luckysexyqueen/GoldFireDragonUnCensoredBrowser/fonts/a%ED%81%90%ED%8B%B0%ED%97%88%EB%8B%88.woff)format("woff");font-weight:400;font-style:normal;font-display:swap}*,:before,:after,input,button,textarea,select{font-family:acutehoney,sans-serif!important}</style>
 
-    <style>
-      /* ===== RESET & BASE ===== */
-      *,
-      *::before,
-      *::after {
-        box-sizing: border-box;
-        margin: 0;
-        padding: 0;
-      }
-      html,
-      body {
-        height: 100%;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      }
-      body {
-        background: #212121;
-        color: #fff;
-        overflow: hidden;
-        display: flex;
-        flex-direction: column;
-      }
-      #app {
-        flex: 1;
-        min-height: 0;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        position: relative;
-        overflow: hidden;
-      }
-
-      /* ===== VARIABLES ===== */
-      :root {
-        --bg: #212121;
-        --bg2: #2f2f2f;
-        --bg3: #343541;
-        --bg4: #40414f;
-        --border: rgba(255, 255, 255, 0.1);
-        --accent: #10a37f;
-        --accent-hover: #0d8968;
-        --text: #fff;
-        --text-muted: rgba(255, 255, 255, 0.5);
-        --text-dim: rgba(255, 255, 255, 0.25);
-        --danger: #ef4444;
-      }
-
-      /* ── 브라우저 패널 (채팅 화면과 항상 함께 보이는 분할 패널) ──
-         portrait(세로): 위/아래 반반, landscape(가로): 좌/우 반반 */
-      #brow {
-        flex-shrink: 0;
-        display: flex;
-        flex-direction: column; /* portrait 기본값: 내용 위, 핸들 아래 */
-        width: 100%;
-        height: 0;
-        min-width: 0;
-        min-height: 0;
-        background: #0a0b0f;
-        overflow: hidden;
-        transition: height 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-      }
-      #brow.open {
-        height: 50vh;
-        border-bottom: 1px solid #1e1f2e;
-      }
-      #brow.resizing {
-        transition: none;
-      }
-      #brow-content {
-        flex: 1;
-        min-width: 0;
-        min-height: 0;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
-      #brow-resize {
-        flex-shrink: 0;
-        height: 14px;
-        width: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: row-resize;
-        background: #0e0f14;
-        touch-action: none;
-      }
-      #brow-resize::after {
-        content: "";
-        width: 40px;
-        height: 4px;
-        border-radius: 2px;
-        background: #3a3c4a;
-      }
-      /* landscape(가로 모드): 채팅과 브라우저를 좌우로 반반 배치 */
-      @media (orientation: landscape) {
-        body {
-          flex-direction: row;
-        }
-        #app {
-          min-width: 0;
-        }
-        #brow {
-          flex-direction: row; /* 내용 왼쪽, 핸들 오른쪽 */
-          width: 0;
-          height: 100%;
-          transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        #brow.open {
-          width: 50vw;
-          height: 100%;
-          border-bottom: none;
-          border-right: 1px solid #1e1f2e;
-        }
-        #brow-resize {
-          width: 14px;
-          height: 100%;
-          cursor: col-resize;
-        }
-        #brow-resize::after {
-          width: 4px;
-          height: 40px;
-        }
-      }
-      #brow-tb {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 12px;
-        background: #0e0f14;
-        border-bottom: 1px solid #1e1f2e;
-      }
-      #brow-url {
-        flex: 1;
-        background: #16171f;
-        border: 1px solid #2d2f3e;
-        border-radius: 7px;
-        padding: 5px 10px;
-        font-size: 11px;
-        color: #9ca3af;
-        font-family: "JetBrains Mono", monospace;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      #brow-iframe {
-        flex: 1;
-        width: 100%;
-        border: none;
-      }
-
-      /* ===== SCROLLBAR ===== */
-      ::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-      }
-      ::-webkit-scrollbar-track {
-        background: transparent;
-      }
-      ::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.15);
-        border-radius: 3px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: rgba(255, 255, 255, 0.25);
-      }
-
-      /* ===== LAYOUT ===== */
-      #main-layout {
-        display: flex;
-        height: 100%;
-        overflow: hidden;
-      }
-
-      /* ===== SIDEBAR ===== */
-      #sidebar {
-        position: absolute;
-        top: 0;
-        left: 0;
-        bottom: 0;
-        width: 260px;
-        min-width: 260px;
-        background: var(--bg2);
-        border-right: 1px solid var(--border);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        z-index: 300;
-        transform: translateX(-100%);
-        transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-        box-shadow: 2px 0 24px rgba(0, 0, 0, 0.4);
-      }
-      #sidebar.open {
-        transform: translateX(0);
-      }
-      #sidebar-backdrop {
-        position: absolute;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.5);
-        z-index: 290;
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-      }
-      #sidebar-backdrop.open {
-        opacity: 1;
-        pointer-events: auto;
-      }
-      .sidebar-toggle-btn {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        background: var(--bg3);
-        border: 1px solid var(--border);
-        color: #fff;
-        cursor: pointer;
-        font-size: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-        transition:
-          background 0.15s,
-          border-color 0.15s;
-      }
-      .sidebar-toggle-btn:hover {
-        background: var(--bg4);
-      }
-      .sidebar-toggle-btn.active {
-        background: var(--accent);
-        border-color: var(--accent);
-      }
-      .sidebar-top {
-        padding: 12px;
-        border-bottom: 1px solid var(--border);
-      }
-      .btn-new-chat {
-        width: 100%;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 14px;
-        background: transparent;
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        color: var(--text);
-        cursor: pointer;
-        font-size: 14px;
-        transition: background 0.15s;
-      }
-      .btn-new-chat:hover {
-        background: var(--bg3);
-      }
-      .sidebar-section {
-        flex: 1;
-        overflow-y: auto;
-        padding: 8px;
-      }
-      .sidebar-label {
-        font-size: 11px;
-        color: var(--text-muted);
-        padding: 8px 10px 4px;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-      }
-      .conv-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 10px;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: background 0.15s;
-        position: relative;
-      }
-      .conv-item:hover {
-        background: var(--bg3);
-      }
-      .conv-item.active {
-        background: var(--bg4);
-      }
-      .conv-item-title {
-        flex: 1;
-        font-size: 13px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .conv-item-del {
-        opacity: 0;
-        background: none;
-        border: none;
-        color: var(--danger);
-        cursor: pointer;
-        padding: 2px;
-        border-radius: 4px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-      }
-      .conv-item:hover .conv-item-del {
-        opacity: 1;
-      }
-
-      /* GPT List */
-      .gpt-section {
-        border-bottom: 1px solid var(--border);
-        padding: 8px;
-      }
-      .gpt-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 6px 10px;
-      }
-      .gpt-header-title {
-        font-size: 14px;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-      .btn-create-gpt {
-        font-size: 12px;
-        padding: 4px 10px;
-        background: var(--accent);
-        border: none;
-        border-radius: 6px;
-        color: white;
-        cursor: pointer;
-      }
-      .btn-create-gpt:hover {
-        background: var(--accent-hover);
-      }
-      .gpt-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 8px 10px;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: background 0.15s;
-        position: relative;
-      }
-      .gpt-item:hover {
-        background: var(--bg3);
-      }
-      .gpt-avatar {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #8b5cf6, #ec4899);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-shrink: 0;
-        font-weight: bold;
-        font-size: 14px;
-      }
-      .gpt-avatar img {
-        width: 100%;
-        height: 100%;
-        border-radius: 50%;
-        object-fit: cover;
-      }
-      .gpt-info {
-        flex: 1;
-        min-width: 0;
-      }
-      .gpt-name {
-        font-size: 13px;
-        font-weight: 500;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .gpt-desc {
-        font-size: 11px;
-        color: var(--text-muted);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .gpt-actions {
-        display: none;
-        gap: 2px;
-      }
-      .gpt-item:hover .gpt-actions {
-        display: flex;
-      }
-      .gpt-action-btn {
-        background: none;
-        border: none;
-        color: var(--text-muted);
-        cursor: pointer;
-        padding: 4px;
-        border-radius: 4px;
-        display: flex;
-        align-items: center;
-      }
-      .gpt-action-btn:hover {
-        background: var(--bg4);
-        color: var(--text);
-      }
-      .gpt-empty {
-        text-align: center;
-        color: var(--text-muted);
-        font-size: 12px;
-        padding: 16px 8px;
-      }
-
-      /* ===== HEADER ===== */
-      #header {
-        height: 56px;
-        min-height: 56px;
-        border-bottom: 1px solid var(--border);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 0 24px;
-        background: var(--bg2);
-      }
-      .header-title {
-        font-size: 18px;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-      .guest-badge {
-        font-size: 11px;
-        background: rgba(234, 179, 8, 0.2);
-        color: #eab308;
-        padding: 2px 8px;
-        border-radius: 9999px;
-      }
-      .header-right {
-        position: relative;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-      .browser-toggle-btn {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        background: var(--bg3);
-        border: 1px solid var(--border);
-        color: #fff;
-        cursor: pointer;
-        font-size: 16px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition:
-          background 0.15s,
-          border-color 0.15s;
-      }
-      .browser-toggle-btn:hover {
-        background: var(--bg4);
-      }
-      .browser-toggle-btn.active {
-        background: var(--accent);
-        border-color: var(--accent);
-      }
-      .user-btn {
-        width: 36px;
-        height: 36px;
-        border-radius: 50%;
-        background: var(--accent);
-        border: none;
-        color: white;
-        cursor: pointer;
-        font-weight: 600;
-        font-size: 14px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .dropdown {
-        position: absolute;
-        top: calc(100% + 8px);
-        right: 0;
-        background: var(--bg3);
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        min-width: 200px;
-        overflow: hidden;
-        z-index: 100;
-        display: none;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-      }
-      .dropdown.open {
-        display: block;
-      }
-      .dropdown-header {
-        padding: 12px 14px;
-        border-bottom: 1px solid var(--border);
-      }
-      .dropdown-user-name {
-        font-size: 13px;
-        font-weight: 500;
-      }
-      .dropdown-user-email {
-        font-size: 11px;
-        color: var(--text-muted);
-        margin-top: 2px;
-      }
-      .dropdown-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 10px 14px;
-        font-size: 13px;
-        cursor: pointer;
-        transition: background 0.15s;
-      }
-      .dropdown-item:hover {
-        background: var(--bg4);
-      }
-      .dropdown-item.danger {
-        color: var(--danger);
-      }
-      .dropdown-sep {
-        height: 1px;
-        background: var(--border);
-        margin: 4px 0;
-      }
-
-      /* ===== GPT BANNER ===== */
-      #gpt-banner {
-        background: linear-gradient(to right, rgba(139, 92, 246, 0.2), rgba(236, 72, 153, 0.2));
-        border-bottom: 1px solid var(--border);
-        padding: 10px 24px;
-        display: none;
-        align-items: center;
-        gap: 12px;
-      }
-      #gpt-banner.visible {
-        display: flex;
-      }
-      .gpt-banner-avatar {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #8b5cf6, #ec4899);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: bold;
-        font-size: 13px;
-        flex-shrink: 0;
-      }
-
-      /* ===== CHAT AREA ===== */
-      #content-area {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-      }
-      #messages-area {
-        flex: 1;
-        overflow-y: auto;
-      }
-      .messages-inner {
-        padding-bottom: 16px;
-      }
-
-      /* Empty state */
-      #empty-state {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        padding: 40px 20px;
-        text-align: center;
-      }
-      .empty-logo {
-        width: 64px;
-        height: 64px;
-        border-radius: 50%;
-        background: var(--accent);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-bottom: 20px;
-      }
-      .empty-title {
-        font-size: 24px;
-        font-weight: 600;
-        margin-bottom: 8px;
-      }
-      .empty-sub {
-        color: var(--text-muted);
-        font-size: 14px;
-      }
-
-      /* Message */
-      .message {
-        padding: 20px 16px;
-      }
-      .message.assistant {
-        background: rgba(255, 255, 255, 0.03);
-      }
-      .message-inner {
-        max-width: 720px;
-        margin: 0 auto;
-        display: flex;
-        gap: 14px;
-      }
-      .msg-avatar {
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 14px;
-      }
-      .msg-avatar.user {
-        background: var(--accent);
-      }
-      .msg-avatar.assistant {
-        background: var(--bg4);
-      }
-      .msg-body {
-        flex: 1;
-        min-width: 0;
-        padding-top: 4px;
-      }
-      .msg-text {
-        font-size: 15px;
-        line-height: 1.7;
-        white-space: pre-wrap;
-        word-break: break-word;
-        color: var(--text);
-      }
-      .msg-cursor {
-        display: inline-block;
-        width: 8px;
-        height: 16px;
-        background: var(--text);
-        border-radius: 2px;
-        margin-left: 3px;
-        animation: blink 0.8s infinite;
-      }
-      @keyframes blink {
-        0%,
-        100% {
-          opacity: 1;
-        }
-        50% {
-          opacity: 0;
-        }
-      }
-
-      /* Universal local file vault */
-      .universal-file-vault{display:flex;flex-direction:column;gap:10px;max-height:70vh}
-      .ufv-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
-      .ufv-list{display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:80px;max-height:34vh}
-      .ufv-item{display:flex;gap:8px;align-items:center;padding:9px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.04)}
-      .ufv-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-      .ufv-actions{display:flex;gap:5px;flex-wrap:wrap}
-      .ufv-preview{width:100%;min-height:180px;max-height:42vh;overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(0,0,0,.2);padding:10px}
-      .ufv-preview img,.ufv-preview video{max-width:100%;max-height:36vh;display:block;margin:auto}
-      .ufv-preview iframe{width:100%;height:36vh;border:0}
-      .ufv-preview textarea{width:100%;min-height:30vh;box-sizing:border-box}
-
-      /* File attachments in messages */
-      .msg-files {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-      .msg-img-thumb {
-        max-width: 280px;
-        max-height: 200px;
-        border-radius: 10px;
-        overflow: hidden;
-        border: 1px solid var(--border);
-      }
-      .msg-img-thumb img {
-        width: 100%;
-        height: 100%;
-        object-fit: contain;
-        display: block;
-      }
-      .msg-file-chip {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        background: var(--bg3);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 6px 10px;
-        font-size: 12px;
-        max-width: 220px;
-      }
-      .msg-file-chip .fc-name {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .msg-file-chip .fc-size {
-        color: var(--text-muted);
-        font-size: 10px;
-        margin-top: 1px;
-      }
-
-      /* ===== CHAT INPUT ===== */
-      #chat-input-area {
-        border-top: 1px solid var(--border);
-        background: var(--bg);
-        padding: 12px 16px 14px;
-      }
-      .input-wrap {
-        max-width: 720px;
-        margin: 0 auto;
-      }
-      #file-previews {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-bottom: 10px;
-      }
-      .fp-img {
-        position: relative;
-        width: 76px;
-        height: 76px;
-        border-radius: 10px;
-        overflow: hidden;
-        border: 1px solid var(--border);
-      }
-      .fp-img img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-      .fp-img-name {
-        position: absolute;
-        bottom: 0;
-        inset-x: 0;
-        background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
-        font-size: 9px;
-        padding: 4px 3px 2px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .fp-chip {
-        display: flex;
-        align-items: center;
-        gap: 7px;
-        background: var(--bg3);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 6px 10px;
-        max-width: 190px;
-      }
-      .fp-chip-name {
-        font-size: 11px;
-        font-weight: 500;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .fp-chip-size {
-        font-size: 9px;
-        color: var(--text-muted);
-      }
-      .fp-remove {
-        background: rgba(0, 0, 0, 0.6);
-        border: none;
-        color: #fff;
-        cursor: pointer;
-        border-radius: 50%;
-        width: 18px;
-        height: 18px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        position: absolute;
-        top: 3px;
-        right: 3px;
-        font-size: 10px;
-      }
-      .fp-chip .fp-remove {
-        position: static;
-        background: none;
-        color: var(--text-muted);
-        font-size: 12px;
-      }
-      .input-box {
-        display: flex;
-        align-items: flex-end;
-        gap: 8px;
-        background: var(--bg2);
-        border-radius: 14px;
-        border: 1px solid var(--border);
-        padding: 10px 14px;
-      }
-      .input-box-btn {
-        background: none;
-        border: none;
-        color: var(--text-muted);
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 2px;
-        border-radius: 6px;
-        transition: color 0.15s;
-        flex-shrink: 0;
-        margin-bottom: 2px;
-      }
-      .input-box-btn:hover {
-        color: var(--text);
-      }
-      .input-box-btn:disabled {
-        opacity: 0.3;
-        cursor: not-allowed;
-      }
-      #msg-input {
-        flex: 1;
-        background: none;
-        border: none;
-        outline: none;
-        color: var(--text);
-        font-size: 14px;
-        line-height: 1.6;
-        resize: none;
-        min-height: 24px;
-        max-height: 180px;
-        overflow-y: auto;
-        font-family: inherit;
-      }
-      #msg-input::placeholder {
-        color: var(--text-dim);
-      }
-      .send-btn {
-        width: 32px;
-        height: 32px;
-        border-radius: 8px;
-        background: var(--accent);
-        border: none;
-        color: white;
-        cursor: pointer;
-        flex-shrink: 0;
-        margin-bottom: 2px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background 0.15s;
-      }
-      .send-btn:hover {
-        background: var(--accent-hover);
-      }
-      .send-btn:disabled {
-        opacity: 0.25;
-        cursor: not-allowed;
-      }
-      .input-hint {
-        font-size: 11px;
-        color: var(--text-dim);
-        text-align: center;
-        margin-top: 6px;
-      }
-
-      /* ===== AUTH PAGE ===== */
-      #auth-page {
-        min-height: 100vh;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: var(--bg);
-        padding: 16px;
-      }
-      .auth-card {
-        width: 100%;
-        max-width: 400px;
-        background: var(--bg2);
-        border: 1px solid var(--border);
-        border-radius: 16px;
-        padding: 32px 28px;
-      }
-      .auth-logo {
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        background: rgba(16, 163, 127, 0.15);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin: 0 auto 20px;
-      }
-      .auth-title {
-        font-size: 22px;
-        font-weight: 700;
-        text-align: center;
-        margin-bottom: 6px;
-      }
-      .auth-sub {
-        font-size: 13px;
-        color: var(--text-muted);
-        text-align: center;
-        margin-bottom: 24px;
-      }
-      .auth-input {
-        width: 100%;
-        background: var(--bg3);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 10px 14px;
-        color: var(--text);
-        font-size: 14px;
-        outline: none;
-        margin-bottom: 10px;
-        transition: border-color 0.15s;
-      }
-      .auth-input:focus {
-        border-color: var(--accent);
-      }
-      .auth-input:disabled {
-        opacity: 0.5;
-      }
-      .auth-btn {
-        width: 100%;
-        padding: 11px;
-        border: none;
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: background 0.15s;
-        margin-bottom: 10px;
-      }
-      .auth-btn.primary {
-        background: var(--accent);
-        color: white;
-      }
-      .auth-btn.primary:hover {
-        background: var(--accent-hover);
-      }
-      .auth-btn.primary:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-      .auth-btn.outline {
-        background: transparent;
-        color: var(--text);
-        border: 2px solid rgba(16, 163, 127, 0.5);
-      }
-      .auth-btn.outline:hover {
-        background: rgba(16, 163, 127, 0.1);
-      }
-      .auth-divider {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin: 12px 0;
-      }
-      .auth-divider::before,
-      .auth-divider::after {
-        content: "";
-        flex: 1;
-        height: 1px;
-        background: var(--border);
-      }
-      .auth-divider span {
-        font-size: 11px;
-        color: var(--text-muted);
-        white-space: nowrap;
-      }
-      .auth-switch {
-        text-align: center;
-        font-size: 13px;
-        color: var(--text-muted);
-        cursor: pointer;
-      }
-      .auth-switch:hover {
-        color: var(--text);
-      }
-
-      /* ===== GPT BUILDER MODAL ===== */
-      .modal-overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.8);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 400;
-        padding: 16px;
-      }
-      .modal-overlay.hidden {
-        display: none;
-      }
-      .modal-box {
-        background: var(--bg2);
-        border-radius: 14px;
-        width: 100%;
-        max-width: 640px;
-        max-height: 90vh;
-        overflow-y: auto;
-      }
-      .modal-header {
-        position: sticky;
-        top: 0;
-        background: var(--bg2);
-        border-bottom: 1px solid var(--border);
-        padding: 20px 24px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        z-index: 1;
-      }
-      .modal-title {
-        font-size: 20px;
-        font-weight: 700;
-      }
-      .modal-close {
-        background: none;
-        border: none;
-        color: var(--text-muted);
-        cursor: pointer;
-        padding: 4px;
-        border-radius: 6px;
-        display: flex;
-      }
-      .modal-close:hover {
-        color: var(--text);
-      }
-      .modal-body {
-        padding: 24px;
-      }
-      .form-group {
-        margin-bottom: 20px;
-      }
-      .form-label {
-        display: block;
-        font-size: 13px;
-        font-weight: 500;
-        margin-bottom: 7px;
-      }
-      .form-label .req {
-        color: var(--danger);
-        margin-left: 3px;
-      }
-      .form-input {
-        width: 100%;
-        background: var(--bg4);
-        border: 1px solid var(--border);
-        border-radius: 8px;
-        padding: 10px 14px;
-        color: var(--text);
-        font-size: 14px;
-        outline: none;
-        font-family: inherit;
-        transition: border-color 0.15s;
-      }
-      .form-input:focus {
-        border-color: var(--accent);
-      }
-      .form-textarea {
-        min-height: 100px;
-        resize: vertical;
-      }
-      .upload-zone {
-        border: 2px dashed var(--border);
-        border-radius: 10px;
-        padding: 28px;
-        text-align: center;
-        cursor: pointer;
-        transition:
-          border-color 0.15s,
-          background 0.15s;
-      }
-      .upload-zone:hover {
-        border-color: rgba(255, 255, 255, 0.3);
-        background: rgba(255, 255, 255, 0.02);
-      }
-      .upload-zone-text {
-        color: var(--text-muted);
-        font-size: 13px;
-        margin-top: 8px;
-      }
-      .upload-zone-hint {
-        color: var(--text-dim);
-        font-size: 11px;
-        margin-top: 4px;
-      }
-      .file-list {
-        margin-top: 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-      }
-      .file-list-item {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        background: var(--bg4);
-        border-radius: 8px;
-        padding: 8px 12px;
-      }
-      .file-list-name {
-        flex: 1;
-        font-size: 13px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-      .file-list-size {
-        font-size: 11px;
-        color: var(--text-muted);
-      }
-      .file-list-del {
-        background: none;
-        border: none;
-        color: var(--danger);
-        cursor: pointer;
-        padding: 2px;
-        display: flex;
-        border-radius: 4px;
-      }
-      .checkbox-row {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-      .checkbox-row input {
-        width: 16px;
-        height: 16px;
-        accent-color: var(--accent);
-        cursor: pointer;
-      }
-      .modal-footer {
-        display: flex;
-        gap: 10px;
-        padding-top: 8px;
-      }
-      .modal-footer .btn-cancel {
-        flex: 1;
-        padding: 11px;
-        background: var(--bg4);
-        border: none;
-        color: var(--text);
-        border-radius: 8px;
-        font-size: 14px;
-        cursor: pointer;
-      }
-      .modal-footer .btn-save {
-        flex: 1;
-        padding: 11px;
-        background: var(--accent);
-        border: none;
-        color: white;
-        border-radius: 8px;
-        font-size: 14px;
-        font-weight: 600;
-        cursor: pointer;
-      }
-      .modal-footer .btn-save:hover {
-        background: var(--accent-hover);
-      }
-      .modal-footer .btn-save:disabled {
-        opacity: 0.5;
-        cursor: not-allowed;
-      }
-
-      /* ===== TOAST ===== */
-      #toast-container {
-        position: fixed;
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        z-index: 9999;
-        pointer-events: none;
-      }
-      .toast {
-        padding: 10px 18px;
-        border-radius: 8px;
-        font-size: 13px;
-        font-weight: 500;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-        animation: slideIn 0.25s ease;
-        pointer-events: auto;
-        max-width: 320px;
-        text-align: center;
-      }
-      .toast.success {
-        background: #1a3a2f;
-        border: 1px solid var(--accent);
-        color: #4ade80;
-      }
-      .toast.error {
-        background: #3a1a1a;
-        border: 1px solid var(--danger);
-        color: #f87171;
-      }
-      .toast.info {
-        background: #1a2a3a;
-        border: 1px solid #3b82f6;
-        color: #93c5fd;
-      }
-      @keyframes slideIn {
-        from {
-          opacity: 0;
-          transform: translateY(-10px);
-        }
-        to {
-          opacity: 1;
-          transform: translateY(0);
-        }
-      }
-
-      /* ===== SPINNER ===== */
-      .spinner {
-        width: 32px;
-        height: 32px;
-        border: 3px solid rgba(255, 255, 255, 0.15);
-        border-top-color: var(--accent);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-      }
-      @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
-      }
-      #loading-screen {
-        position: fixed;
-        inset: 0;
-        background: var(--bg);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 999;
-      }
-      #loading-screen.hidden {
-        display: none;
-      }
-
-      /* ===== SUPABASE ANON KEY 최초 실행 입력 모달 (자동 설정 기능) ===== */
-      #sb-key-overlay {
-        z-index: 10000; /* #loading-screen(999)보다 위에 떠야 함 */
-      }
-      #sb-key-overlay .form-hint {
-        font-size: 12px;
-        color: var(--text-muted);
-        margin: -2px 0 10px;
-        line-height: 1.5;
-      }
-      #sb-key-overlay .sb-key-error {
-        font-size: 12px;
-        color: var(--danger);
-        min-height: 16px;
-        margin: 4px 0 2px;
-      }
-    </style>
+    <style>*,:before,:after{box-sizing:border-box;margin:0;padding:0}html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif}body{color:#fff;background:#212121;flex-direction:column;display:flex;overflow:hidden}#app{flex-direction:column;flex:1;min-width:0;min-height:0;display:flex;position:relative;overflow:hidden}:root{--bg:#212121;--bg2:#2f2f2f;--bg3:#343541;--bg4:#40414f;--border:#ffffff1a;--accent:#10a37f;--accent-hover:#0d8968;--text:#fff;--text-muted:#ffffff80;--text-dim:#ffffff40;--danger:#ef4444}#brow{background:#0a0b0f;flex-direction:column;flex-shrink:0;width:100%;min-width:0;height:0;min-height:0;transition:height .28s cubic-bezier(.4,0,.2,1);display:flex;overflow:hidden}#brow.open{border-bottom:1px solid #1e1f2e;height:50vh}#brow.resizing{transition:none}#brow-content{flex-direction:column;flex:1;min-width:0;min-height:0;display:flex;overflow:hidden}#brow-resize{cursor:row-resize;touch-action:none;background:#0e0f14;flex-shrink:0;justify-content:center;align-items:center;width:100%;height:14px;display:flex}#brow-resize:after{content:"";background:#3a3c4a;border-radius:2px;width:40px;height:4px}@media (orientation:landscape){body{flex-direction:row}#app{min-width:0}#brow{flex-direction:row;width:0;height:100%;transition:width .28s cubic-bezier(.4,0,.2,1)}#brow.open{border-bottom:none;border-right:1px solid #1e1f2e;width:50vw;height:100%}#brow-resize{cursor:col-resize;width:14px;height:100%}#brow-resize:after{width:4px;height:40px}}#brow-tb{background:#0e0f14;border-bottom:1px solid #1e1f2e;align-items:center;gap:8px;padding:8px 12px;display:flex}#brow-url{color:#9ca3af;white-space:nowrap;text-overflow:ellipsis;background:#16171f;border:1px solid #2d2f3e;border-radius:7px;flex:1;padding:5px 10px;font-family:JetBrains Mono,monospace;font-size:11px;overflow:hidden}#brow-iframe{border:none;flex:1;width:100%}::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:0 0}::-webkit-scrollbar-thumb{background:#ffffff26;border-radius:3px}::-webkit-scrollbar-thumb:hover{background:#ffffff40}#main-layout{height:100%;display:flex;overflow:hidden}#sidebar{background:var(--bg2);border-right:1px solid var(--border);z-index:300;flex-direction:column;width:260px;min-width:260px;transition:transform .28s cubic-bezier(.4,0,.2,1);display:flex;position:absolute;top:0;bottom:0;left:0;overflow:hidden;transform:translate(-100%);box-shadow:2px 0 24px #0006}#sidebar.open{transform:translate(0)}#sidebar-backdrop{z-index:290;opacity:0;pointer-events:none;background:#00000080;transition:opacity .28s cubic-bezier(.4,0,.2,1);position:absolute;inset:0}#sidebar-backdrop.open{opacity:1;pointer-events:auto}.sidebar-toggle-btn{background:var(--bg3);border:1px solid var(--border);color:#fff;cursor:pointer;border-radius:50%;flex-shrink:0;justify-content:center;align-items:center;width:36px;height:36px;font-size:16px;transition:background .15s,border-color .15s;display:flex}.sidebar-toggle-btn:hover{background:var(--bg4)}.sidebar-toggle-btn.active{background:var(--accent);border-color:var(--accent)}.sidebar-top{border-bottom:1px solid var(--border);padding:12px}.btn-new-chat{border:1px solid var(--border);width:100%;color:var(--text);cursor:pointer;background:0 0;border-radius:8px;align-items:center;gap:8px;padding:10px 14px;font-size:14px;transition:background .15s;display:flex}.btn-new-chat:hover{background:var(--bg3)}.sidebar-section{flex:1;padding:8px;overflow-y:auto}.sidebar-label{color:var(--text-muted);text-transform:uppercase;letter-spacing:.05em;padding:8px 10px 4px;font-size:11px}.conv-item{cursor:pointer;border-radius:8px;align-items:center;gap:8px;padding:8px 10px;transition:background .15s;display:flex;position:relative}.conv-item:hover{background:var(--bg3)}.conv-item.active{background:var(--bg4)}.conv-item-title{white-space:nowrap;text-overflow:ellipsis;flex:1;font-size:13px;overflow:hidden}.conv-item-del{opacity:0;color:var(--danger);cursor:pointer;background:0 0;border:none;border-radius:4px;flex-shrink:0;justify-content:center;align-items:center;padding:2px;display:flex}.conv-item:hover .conv-item-del{opacity:1}.gpt-section{border-bottom:1px solid var(--border);padding:8px}.gpt-header{justify-content:space-between;align-items:center;padding:6px 10px;display:flex}.gpt-header-title{align-items:center;gap:6px;font-size:14px;font-weight:600;display:flex}.btn-create-gpt{background:var(--accent);color:#fff;cursor:pointer;border:none;border-radius:6px;padding:4px 10px;font-size:12px}.btn-create-gpt:hover{background:var(--accent-hover)}.gpt-item{cursor:pointer;border-radius:8px;align-items:center;gap:8px;padding:8px 10px;transition:background .15s;display:flex;position:relative}.gpt-item:hover{background:var(--bg3)}.gpt-avatar{background:linear-gradient(135deg,#8b5cf6,#ec4899);border-radius:50%;flex-shrink:0;justify-content:center;align-items:center;width:36px;height:36px;font-size:14px;font-weight:700;display:flex}.gpt-avatar img{-o-object-fit:cover;object-fit:cover;border-radius:50%;width:100%;height:100%}.gpt-info{flex:1;min-width:0}.gpt-name{white-space:nowrap;text-overflow:ellipsis;font-size:13px;font-weight:500;overflow:hidden}.gpt-desc{color:var(--text-muted);white-space:nowrap;text-overflow:ellipsis;font-size:11px;overflow:hidden}.gpt-actions{gap:2px;display:none}.gpt-item:hover .gpt-actions{display:flex}.gpt-action-btn{color:var(--text-muted);cursor:pointer;background:0 0;border:none;border-radius:4px;align-items:center;padding:4px;display:flex}.gpt-action-btn:hover{background:var(--bg4);color:var(--text)}.gpt-empty{text-align:center;color:var(--text-muted);padding:16px 8px;font-size:12px}#header{border-bottom:1px solid var(--border);background:var(--bg2);justify-content:space-between;align-items:center;height:56px;min-height:56px;padding:0 24px;display:flex}.header-title{align-items:center;gap:10px;font-size:18px;font-weight:600;display:flex}.guest-badge{color:#eab308;background:#eab30833;border-radius:9999px;padding:2px 8px;font-size:11px}.header-right{align-items:center;gap:10px;display:flex;position:relative}.browser-toggle-btn{background:var(--bg3);border:1px solid var(--border);color:#fff;cursor:pointer;border-radius:50%;justify-content:center;align-items:center;width:36px;height:36px;font-size:16px;transition:background .15s,border-color .15s;display:flex}.browser-toggle-btn:hover{background:var(--bg4)}.browser-toggle-btn.active{background:var(--accent);border-color:var(--accent)}.user-btn{background:var(--accent);color:#fff;cursor:pointer;border:none;border-radius:50%;justify-content:center;align-items:center;width:36px;height:36px;font-size:14px;font-weight:600;display:flex}.dropdown{background:var(--bg3);border:1px solid var(--border);z-index:100;border-radius:10px;min-width:200px;display:none;position:absolute;top:calc(100% + 8px);right:0;overflow:hidden;box-shadow:0 8px 24px #0006}.dropdown.open{display:block}.dropdown-header{border-bottom:1px solid var(--border);padding:12px 14px}.dropdown-user-name{font-size:13px;font-weight:500}.dropdown-user-email{color:var(--text-muted);margin-top:2px;font-size:11px}.dropdown-item{cursor:pointer;align-items:center;gap:8px;padding:10px 14px;font-size:13px;transition:background .15s;display:flex}.dropdown-item:hover{background:var(--bg4)}.dropdown-item.danger{color:var(--danger)}.dropdown-sep{background:var(--border);height:1px;margin:4px 0}#gpt-banner{border-bottom:1px solid var(--border);background:linear-gradient(90deg,#8b5cf633,#ec489933);align-items:center;gap:12px;padding:10px 24px;display:none}#gpt-banner.visible{display:flex}.gpt-banner-avatar{background:linear-gradient(135deg,#8b5cf6,#ec4899);border-radius:50%;flex-shrink:0;justify-content:center;align-items:center;width:32px;height:32px;font-size:13px;font-weight:700;display:flex}#content-area{flex-direction:column;flex:1;display:flex;overflow:hidden}#messages-area{flex:1;overflow-y:auto}.messages-inner{padding-bottom:16px}#empty-state{text-align:center;flex-direction:column;justify-content:center;align-items:center;height:100%;padding:40px 20px;display:flex}.empty-logo{background:var(--accent);border-radius:50%;justify-content:center;align-items:center;width:64px;height:64px;margin-bottom:20px;display:flex}.empty-title{margin-bottom:8px;font-size:24px;font-weight:600}.empty-sub{color:var(--text-muted);font-size:14px}.message{padding:20px 16px}.message.assistant{background:#ffffff08}.message-inner{gap:14px;max-width:720px;margin:0 auto;display:flex}.msg-avatar{border-radius:50%;flex-shrink:0;justify-content:center;align-items:center;width:32px;height:32px;font-size:14px;display:flex}.msg-avatar.user{background:var(--accent)}.msg-avatar.assistant{background:var(--bg4)}.msg-body{flex:1;min-width:0;padding-top:4px}.msg-text{white-space:pre-wrap;word-break:break-word;color:var(--text);font-size:15px;line-height:1.7}.msg-cursor{background:var(--text);border-radius:2px;width:8px;height:16px;margin-left:3px;animation:.8s infinite blink;display:inline-block}@keyframes blink{0%,to{opacity:1}50%{opacity:0}}.universal-file-vault{flex-direction:column;gap:10px;max-height:70vh;display:flex}.ufv-toolbar{flex-wrap:wrap;align-items:center;gap:8px;display:flex}.ufv-list{flex-direction:column;gap:6px;min-height:80px;max-height:34vh;display:flex;overflow:auto}.ufv-item{background:#ffffff0a;border:1px solid #ffffff14;border-radius:8px;align-items:center;gap:8px;padding:9px;display:flex}.ufv-name{text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;overflow:hidden}.ufv-actions{flex-wrap:wrap;gap:5px;display:flex}.ufv-preview{background:#0003;border:1px solid #ffffff14;border-radius:8px;width:100%;min-height:180px;max-height:42vh;padding:10px;overflow:auto}.ufv-preview img,.ufv-preview video{max-width:100%;max-height:36vh;margin:auto;display:block}.ufv-preview iframe{border:0;width:100%;height:36vh}.ufv-preview textarea{box-sizing:border-box;width:100%;min-height:30vh}.msg-files{flex-wrap:wrap;gap:8px;margin-bottom:8px;display:flex}.msg-img-thumb{border:1px solid var(--border);border-radius:10px;max-width:280px;max-height:200px;overflow:hidden}.msg-img-thumb img{-o-object-fit:contain;object-fit:contain;width:100%;height:100%;display:block}.msg-file-chip{background:var(--bg3);border:1px solid var(--border);border-radius:8px;align-items:center;gap:8px;max-width:220px;padding:6px 10px;font-size:12px;display:flex}.msg-file-chip .fc-name{white-space:nowrap;text-overflow:ellipsis;overflow:hidden}.msg-file-chip .fc-size{color:var(--text-muted);margin-top:1px;font-size:10px}#chat-input-area{border-top:1px solid var(--border);background:var(--bg);padding:12px 16px 14px}.input-wrap{max-width:720px;margin:0 auto}#file-previews{flex-wrap:wrap;gap:8px;margin-bottom:10px;display:flex}.fp-img{border:1px solid var(--border);border-radius:10px;width:76px;height:76px;position:relative;overflow:hidden}.fp-img img{-o-object-fit:cover;object-fit:cover;width:100%;height:100%}.fp-img-name{inset-x:0;white-space:nowrap;text-overflow:ellipsis;background:linear-gradient(#0000,#000c);padding:4px 3px 2px;font-size:9px;position:absolute;bottom:0;overflow:hidden}.fp-chip{background:var(--bg3);border:1px solid var(--border);border-radius:8px;align-items:center;gap:7px;max-width:190px;padding:6px 10px;display:flex}.fp-chip-name{white-space:nowrap;text-overflow:ellipsis;font-size:11px;font-weight:500;overflow:hidden}.fp-chip-size{color:var(--text-muted);font-size:9px}.fp-remove{color:#fff;cursor:pointer;background:#0009;border:none;border-radius:50%;justify-content:center;align-items:center;width:18px;height:18px;font-size:10px;display:flex;position:absolute;top:3px;right:3px}.fp-chip .fp-remove{color:var(--text-muted);background:0 0;font-size:12px;position:static}.input-box{background:var(--bg2);border:1px solid var(--border);border-radius:14px;align-items:flex-end;gap:8px;padding:10px 14px;display:flex}.input-box-btn{color:var(--text-muted);cursor:pointer;background:0 0;border:none;border-radius:6px;flex-shrink:0;justify-content:center;align-items:center;margin-bottom:2px;padding:2px;transition:color .15s;display:flex}.input-box-btn:hover{color:var(--text)}.input-box-btn:disabled{opacity:.3;cursor:not-allowed}#msg-input{color:var(--text);resize:none;background:0 0;border:none;outline:none;flex:1;min-height:24px;max-height:180px;font-family:inherit;font-size:14px;line-height:1.6;overflow-y:auto}#msg-input::placeholder{color:var(--text-dim)}.send-btn{background:var(--accent);color:#fff;cursor:pointer;border:none;border-radius:8px;flex-shrink:0;justify-content:center;align-items:center;width:32px;height:32px;margin-bottom:2px;transition:background .15s;display:flex}.send-btn:hover{background:var(--accent-hover)}.send-btn:disabled{opacity:.25;cursor:not-allowed}.input-hint{color:var(--text-dim);text-align:center;margin-top:6px;font-size:11px}#auth-page{background:var(--bg);justify-content:center;align-items:center;min-height:100vh;padding:16px;display:flex}.auth-card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;width:100%;max-width:400px;padding:32px 28px}.auth-logo{background:#10a37f26;border-radius:50%;justify-content:center;align-items:center;width:48px;height:48px;margin:0 auto 20px;display:flex}.auth-title{text-align:center;margin-bottom:6px;font-size:22px;font-weight:700}.auth-sub{color:var(--text-muted);text-align:center;margin-bottom:24px;font-size:13px}.auth-input{background:var(--bg3);border:1px solid var(--border);width:100%;color:var(--text);border-radius:8px;outline:none;margin-bottom:10px;padding:10px 14px;font-size:14px;transition:border-color .15s}.auth-input:focus{border-color:var(--accent)}.auth-input:disabled{opacity:.5}.auth-btn{cursor:pointer;border:none;border-radius:8px;width:100%;margin-bottom:10px;padding:11px;font-size:14px;font-weight:600;transition:background .15s}.auth-btn.primary{background:var(--accent);color:#fff}.auth-btn.primary:hover{background:var(--accent-hover)}.auth-btn.primary:disabled{opacity:.5;cursor:not-allowed}.auth-btn.outline{color:var(--text);background:0 0;border:2px solid #10a37f80}.auth-btn.outline:hover{background:#10a37f1a}.auth-divider{align-items:center;gap:10px;margin:12px 0;display:flex}.auth-divider:before,.auth-divider:after{content:"";background:var(--border);flex:1;height:1px}.auth-divider span{color:var(--text-muted);white-space:nowrap;font-size:11px}.auth-switch{text-align:center;color:var(--text-muted);cursor:pointer;font-size:13px}.auth-switch:hover{color:var(--text)}.modal-overlay{z-index:400;background:#000c;justify-content:center;align-items:center;padding:16px;display:flex;position:fixed;inset:0}.modal-overlay.hidden{display:none}.modal-box{background:var(--bg2);border-radius:14px;width:100%;max-width:640px;max-height:90vh;overflow-y:auto}.modal-header{background:var(--bg2);border-bottom:1px solid var(--border);z-index:1;justify-content:space-between;align-items:center;padding:20px 24px;display:flex;position:sticky;top:0}.modal-title{font-size:20px;font-weight:700}.modal-close{color:var(--text-muted);cursor:pointer;background:0 0;border:none;border-radius:6px;padding:4px;display:flex}.modal-close:hover{color:var(--text)}.modal-body{padding:24px}.form-group{margin-bottom:20px}.form-label{margin-bottom:7px;font-size:13px;font-weight:500;display:block}.form-label .req{color:var(--danger);margin-left:3px}.form-input{background:var(--bg4);border:1px solid var(--border);width:100%;color:var(--text);border-radius:8px;outline:none;padding:10px 14px;font-family:inherit;font-size:14px;transition:border-color .15s}.form-input:focus{border-color:var(--accent)}.form-textarea{resize:vertical;min-height:100px}.upload-zone{border:2px dashed var(--border);text-align:center;cursor:pointer;border-radius:10px;padding:28px;transition:border-color .15s,background .15s}.upload-zone:hover{background:#ffffff05;border-color:#ffffff4d}.upload-zone-text{color:var(--text-muted);margin-top:8px;font-size:13px}.upload-zone-hint{color:var(--text-dim);margin-top:4px;font-size:11px}.file-list{flex-direction:column;gap:8px;margin-top:12px;display:flex}.file-list-item{background:var(--bg4);border-radius:8px;align-items:center;gap:10px;padding:8px 12px;display:flex}.file-list-name{white-space:nowrap;text-overflow:ellipsis;flex:1;font-size:13px;overflow:hidden}.file-list-size{color:var(--text-muted);font-size:11px}.file-list-del{color:var(--danger);cursor:pointer;background:0 0;border:none;border-radius:4px;padding:2px;display:flex}.checkbox-row{align-items:center;gap:10px;display:flex}.checkbox-row input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}.modal-footer{gap:10px;padding-top:8px;display:flex}.modal-footer .btn-cancel{background:var(--bg4);color:var(--text);cursor:pointer;border:none;border-radius:8px;flex:1;padding:11px;font-size:14px}.modal-footer .btn-save{background:var(--accent);color:#fff;cursor:pointer;border:none;border-radius:8px;flex:1;padding:11px;font-size:14px;font-weight:600}.modal-footer .btn-save:hover{background:var(--accent-hover)}.modal-footer .btn-save:disabled{opacity:.5;cursor:not-allowed}#toast-container{z-index:9999;pointer-events:none;flex-direction:column;gap:8px;display:flex;position:fixed;top:20px;left:50%;transform:translate(-50%)}.toast{pointer-events:auto;text-align:center;border-radius:8px;max-width:320px;padding:10px 18px;font-size:13px;font-weight:500;animation:.25s slideIn;box-shadow:0 4px 16px #0006}.toast.success{border:1px solid var(--accent);color:#4ade80;background:#1a3a2f}.toast.error{border:1px solid var(--danger);color:#f87171;background:#3a1a1a}.toast.info{color:#93c5fd;background:#1a2a3a;border:1px solid #3b82f6}@keyframes slideIn{0%{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}.spinner{border:3px solid #ffffff26;border-top-color:var(--accent);border-radius:50%;width:32px;height:32px;animation:.8s linear infinite spin}@keyframes spin{to{transform:rotate(360deg)}}#loading-screen{background:var(--bg);z-index:999;justify-content:center;align-items:center;display:flex;position:fixed;inset:0}#loading-screen.hidden{display:none}#sb-key-overlay{z-index:10000}#sb-key-overlay .form-hint{color:var(--text-muted);margin:-2px 0 10px;font-size:12px;line-height:1.5}#sb-key-overlay .sb-key-error{color:var(--danger);min-height:16px;margin:4px 0 2px;font-size:12px}</style>
 
     <div id="loading-screen" class="hidden" aria-hidden="true"><div class="spinner"></div></div>
     <div id="toast-container"></div>
@@ -1581,6 +405,7 @@
             골드파이어드래곤브라우저
           </div>
           <button id="vpn-settings-btn" class="input-box-btn" style="height:32px;color:#fff" title="VPN 설정" onclick="window.__gfdOpenVpn && window.__gfdOpenVpn()">VPN 설정</button>
+          <button id="file-vault-btn" class="input-box-btn" style="height:32px;color:#fff" title="업로드 파일 관리">파일 보관함</button>
           <button
             id="brow-reload"
             class="input-box-btn"
@@ -2036,6 +861,24 @@
         } catch {
           return null;
         }
+      }
+      async function replaceLocalFileLF(id, file) {
+        const old = await getFileMeta(id);
+        if (!old) throw new Error("저장 파일을 찾을 수 없습니다.");
+        const type = fileType(file);
+        let textContent;
+        if (type === "text") textContent = (await file.text()).slice(0, 2000000);
+        const meta = { ...old, name: file.name, mimeType: file.type || "application/octet-stream", size: file.size, type,
+          textContent, updatedAt: new Date().toISOString(), persistent: true, embeddedInApp: true, storageScope: "app-internal" };
+        await blobStore.setItem(id, file.slice(0, file.size, file.type));
+        await metaStore.setItem(id, meta);
+        await embeddedFileIndexStore.setItem(id, { id, name: meta.name, mimeType: meta.mimeType, size: meta.size, type: meta.type,
+          createdAt: meta.createdAt, updatedAt: meta.updatedAt, embeddedInApp: true, storageScope: "app-internal" });
+        for (const key of await localGPTFileStore.keys()) {
+          const record = await localGPTFileStore.getItem(key);
+          if (record?.local_file_id === id) await localGPTFileStore.setItem(key, { ...record, file_name: meta.name, file_size: meta.size, mime_type: meta.mimeType, file_content: meta.textContent || "", updated_at: meta.updatedAt });
+        }
+        return meta;
       }
       async function getFileMeta(id) {
         try {
@@ -2632,6 +1475,10 @@
         await msgFileStore.iterate(async (ids, key) => {
           if (Array.isArray(ids) && ids.includes(id)) await msgFileStore.setItem(key, ids.filter(x=>x!==id));
         }).catch(()=>{});
+        for (const key of await localGPTFileStore.keys()) {
+          const record = await localGPTFileStore.getItem(key);
+          if (record?.local_file_id === id) await localGPTFileStore.removeItem(key);
+        }
         const profile = await getDeviceProfile().catch(()=>null);
         if (profile?.documents) await saveDeviceProfile({documents: profile.documents.filter(x=>x.id!==id)}).catch(()=>{});
       }
@@ -2653,18 +1500,22 @@
       }
       async function openUniversalFileVault(){
         const overlay=document.createElement('div'); overlay.className='modal-overlay';
-        overlay.innerHTML=`<div class="modal" style="max-width:920px;width:94vw"><div class="modal-header"><div class="modal-title">📁 앱 내부 파일 보관함</div><button class="modal-close" id="ufv-close">${iconSvg('X',20)}</button></div><div class="universal-file-vault"><div class="ufv-toolbar"><button class="auth-btn primary" id="ufv-add">＋ 파일 가져오기</button><button class="auth-btn outline" id="ufv-create">＋ 새 텍스트 파일</button><button class="auth-btn outline" id="ufv-refresh">새로고침</button><input id="ufv-input" type="file" multiple style="display:none"></div><div class="form-hint">📦 업로드한 파일은 원본 그대로 앱 전용 영구 저장소에 <b>앱 내부 내장 파일</b>로 보관합니다. 재실행·오프라인에서도 유지되며 GPT Builder와 채팅에서 다시 선택할 수 있습니다.</div><div class="ufv-list" id="ufv-list"></div><div class="ufv-preview" id="ufv-preview">파일을 선택하면 미리보기/편집이 표시됩니다.</div></div></div>`;
+        overlay.innerHTML=`<div class="modal" style="max-width:920px;width:94vw"><div class="modal-header"><div class="modal-title">📁 앱 내부 파일 보관함</div><button class="modal-close" id="ufv-close">${iconSvg('X',20)}</button></div><div class="universal-file-vault"><div class="ufv-toolbar"><button class="auth-btn primary" id="ufv-add">＋ 파일 가져오기</button><button class="auth-btn outline" id="ufv-create">＋ 새 텍스트 파일</button><button class="auth-btn outline" id="ufv-refresh">새로고침</button><input id="ufv-input" type="file" multiple style="display:none"><input id="ufv-replace-input" type="file" style="display:none"></div><div class="form-hint">📦 업로드한 파일은 원본 그대로 앱 전용 영구 저장소에 <b>앱 내부 내장 파일</b>로 보관합니다. 재실행·오프라인에서도 유지되며 GPT Builder와 채팅에서 다시 선택할 수 있습니다.</div><div class="ufv-list" id="ufv-list"></div><div class="ufv-preview" id="ufv-preview">파일을 선택하면 미리보기/편집이 표시됩니다.</div></div></div>`;
         document.body.appendChild(overlay);
         const close=()=>{ const u=document.getElementById('ufv-preview')?.dataset.url; if(u) URL.revokeObjectURL(u); overlay.remove(); };
         overlay.querySelector('#ufv-close').onclick=close;
-        const renderList=async()=>{ const list=overlay.querySelector('#ufv-list'); const files=await listAllLocalFiles(); list.innerHTML=files.length?files.map(f=>`<div class="ufv-item"><div class="ufv-name">${escHtml(f.name)} <span class="form-hint">· ${fmtSize(f.size||0)} · ${escHtml(f.type||'binary')}</span></div><div class="ufv-actions"><button class="auth-btn outline ufv-view" data-id="${escHtml(f.id)}">보기</button><button class="auth-btn outline ufv-download" data-id="${escHtml(f.id)}">저장</button><button class="ufv-delete" data-id="${escHtml(f.id)}" style="border:0;background:none;color:#f87171">삭제</button></div></div>`).join(''):'<div class="form-hint">앱 내부에 저장된 파일이 없습니다.</div>'; };
+        const renderList=async()=>{ const list=overlay.querySelector('#ufv-list'); const files=await listAllLocalFiles(); list.innerHTML=files.length?files.map(f=>`<div class="ufv-item"><div class="ufv-name">${escHtml(f.name)} <span class="form-hint">· ${fmtSize(f.size||0)} · ${escHtml(f.type||'binary')}</span></div><div class="ufv-actions"><button class="auth-btn outline ufv-view" data-id="${escHtml(f.id)}">보기</button><button class="auth-btn outline ufv-download" data-id="${escHtml(f.id)}">저장</button><button class="auth-btn outline ufv-replace" data-id="${escHtml(f.id)}">갱신</button><button class="ufv-delete" data-id="${escHtml(f.id)}" style="border:0;background:none;color:#f87171">삭제</button></div></div>`).join(''):'<div class="form-hint">앱 내부에 저장된 파일이 없습니다.</div>'; };
         await renderList();
         overlay.querySelector('#ufv-add').onclick=()=>overlay.querySelector('#ufv-input').click();
         overlay.querySelector('#ufv-input').onchange=async e=>{ const fs=[...(e.target.files||[])]; for(const f of fs) await storeFileLF(f,{vault:true}); e.target.value=''; await renderList(); toast(`${fs.length}개 파일을 앱에 영구 저장했습니다.`,'success'); };
         overlay.querySelector('#ufv-create').onclick=async()=>{ const name=prompt('새 파일 이름','새파일.txt'); if(!name) return; const text=prompt('파일 내용을 입력하세요',''); const f=new File([text||''],name,{type:'text/plain'}); await storeFileLF(f,{vault:true}); await renderList(); };
         overlay.querySelector('#ufv-refresh').onclick=renderList;
-        overlay.querySelector('#ufv-list').onclick=async e=>{ const b=e.target.closest('button'); if(!b) return; const meta=await getFileMeta(b.dataset.id); if(!meta) return; if(b.classList.contains('ufv-view')) universalFilePreview(meta,await getFileBlob(meta.id)); if(b.classList.contains('ufv-download')){ const blob=await getFileBlob(meta.id); if(blob){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=meta.name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); } } if(b.classList.contains('ufv-delete')){ if(confirm(`'${meta.name}'을 삭제할까요?`)){ await deleteLocalFileEverywhere(meta.id); await renderList(); } } };
+        let replacingId = null;
+        const replaceInput = overlay.querySelector('#ufv-replace-input');
+        overlay.querySelector('#ufv-list').onclick=async e=>{ const b=e.target.closest('button'); if(!b) return; const meta=await getFileMeta(b.dataset.id); if(!meta) return; if(b.classList.contains('ufv-view')) universalFilePreview(meta,await getFileBlob(meta.id)); if(b.classList.contains('ufv-download')){ const blob=await getFileBlob(meta.id); if(blob){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=meta.name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); } } if(b.classList.contains('ufv-replace')){ replacingId=meta.id; replaceInput.click(); } if(b.classList.contains('ufv-delete')){ if(confirm(`'${meta.name}'을 삭제할까요?`)){ await deleteLocalFileEverywhere(meta.id); await renderList(); } } };
+        replaceInput.onchange=async e=>{ const file=e.target.files?.[0]; if(!file||!replacingId)return; try { await replaceLocalFileLF(replacingId,file); await renderList(); toast('저장 파일을 갱신했습니다.','success'); } catch(error) { toast(`파일 갱신 실패: ${error.message}`,'error'); } finally { replacingId=null; e.target.value=''; } };
       }
+      document.getElementById("file-vault-btn")?.addEventListener("click", openUniversalFileVault);
 
       // ═══════════════════════════════════════════════════════════════
       // 💬  CHAT
@@ -2807,6 +1658,10 @@
           }
         }
 
+        // 온라인 API와 온디바이스 GGUF가 같은 언어 정책을 따르도록 시스템 지침에 적용합니다.
+        const koreanLanguagePolicy = "항상 자연스러운 한국어로 답변하세요. 사용자가 외국어로 입력하면 먼저 그 뜻을 한국어로 옮긴 뒤 답하세요. 번역, 인용, 코드 등 원문 보존이 필요한 경우에만 외국어를 함께 표시하세요. 상황에 맞게 친근하고 창의적으로 설명하고 가벼운 유머를 사용할 수 있습니다.";
+        sysPrompt = [sysPrompt, koreanLanguagePolicy].filter((value) => typeof value === "string" && value.trim()).join("\n\n");
+
         // Create conversation if needed
         if (!convId) {
           const title = trimmed.slice(0, 50) || filesToSend[0]?.name || "새 대화";
@@ -2907,6 +1762,7 @@
         if (S.localModel?.ready && window.LocalGGUF) {
           try {
             const localMessages = [];
+            localMessages.push({ role: "system", content: "앱에 연결된 GGUF 로컬 응답 도우미다. 항상 자연스러운 한국어로 답하고, 외국어 입력은 그 뜻을 한국어로 옮긴 뒤 응답한다. 사용자가 저장한 시스템 프롬프트와 지침, LocalForage에 보관된 업로드 문서의 관련 내용을 반영한다. 친근하고 창의적으로 설명하며 상황에 맞는 가벼운 유머를 사용할 수 있다. 이미지 원본을 직접 분석할 수 없는 모델이면 그 한계를 분명히 알린다." });
             if (sysPrompt) localMessages.push({ role: "system", content: sysPrompt });
             if (instructions) localMessages.push({ role: "system", content: instructions });
             localMessages.push(...currentMsgs.map((message) => ({ role: message.role, content: message.content })));
@@ -4137,6 +2993,14 @@
       async function ensureLocalGGUFForFallback(preferredModelId = "") {
         if (!window.LocalGGUF) throw new Error("로컬 GGUF 런타임이 아직 준비되지 않았습니다. 잠시 후 다시 시도하세요.");
         if (S.localModel?.ready) return true;
+        if (window.LocalGGUF.isBundled) {
+          const status = await window.LocalGGUF.load([], {
+            contextLength: Number(localStorage.getItem("gfd-gguf-context") || 1024),
+            useGpu: false,
+          });
+          setState({ localModel: { ...status, savedModelId: "bundled-kogpt2" } });
+          return true;
+        }
         const savedModels = await getSavedGGUFModels();
         if (!savedModels.length) return false;
         const target = savedModels.find((m) => m.id === preferredModelId) || savedModels[0];
@@ -4156,11 +3020,18 @@
           const clean = String(text).replace(/\u0000/g, "").trim();
           if (clean) chunks.push(`\n\n[파일: ${name}]\n${clean.slice(0, limit)}`);
         };
+        // 로컬 GGUF에서도 저장소를 기준으로 최신 첨부 내용과 GPT 파일을 다시 읽습니다.
+        await Promise.all([blobStore.ready(), metaStore.ready(), localGPTFileStore.ready()]);
         for (const a of attachments) {
-          if (a?.type === "text") add(a.name, a.textContent);
+          if (a?.localId) {
+            const stored = await getFileMeta(a.localId).catch(() => null);
+            if (stored?.type === "text") add(stored.name || a.name, stored.textContent);
+            else if (stored?.type === "image") add(stored.name || a.name, "이미지 원본은 LocalForage에 저장되어 있으나 현재 연결된 GGUF는 텍스트 전용 모델입니다.", 1000);
+          } else if (a?.type === "text") add(a.name, a.textContent);
         }
         for (const f of gptFiles || []) {
-          add(f.file_name || f.name || "GPT 자료", f.file_content || f.textContent, 16000);
+          const stored = f.local_file_id ? await getFileMeta(f.local_file_id).catch(() => null) : null;
+          add(stored?.name || f.file_name || f.name || "GPT 자료", stored?.textContent || f.file_content || f.textContent, 16000);
         }
         // 과거 메시지에 연결된 로컬 파일도 다시 읽어 로컬 GGUF가 문맥을 잃지 않게 합니다.
         const ids = [...new Set((historyMessages || []).flatMap((m) => Array.isArray(m.localFileIds) ? m.localFileIds : []))];
@@ -4203,7 +3074,7 @@
             </div>
             <div class="modal-body">
               <div class="form-hint" style="margin-bottom:14px;line-height:1.6;">
-                선택한 GGUF 파일은 서버로 업로드되지 않고 이 브라우저의 LocalForage 저장소에 보관됩니다. 새로고침·오프라인 후에도 아래 목록에서 다시 불러올 수 있습니다. 분할 모델은 모든 조각을 함께 선택하세요.
+                기본 모델은 APK에 포함된 KoGPT-2 GGUF이며, 모델 파일을 외부 서버로 보내지 않고 기기에서 실행합니다. 직접 선택한 GGUF는 브라우저 저장소에 보관됩니다. 분할 모델은 모든 조각을 함께 선택하세요.
               </div>
               <div class="form-group">
                 <label class="form-label">새 GGUF 파일 저장</label>
@@ -4235,6 +3106,7 @@
               </div>
               <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
                 ${status.ready ? '<button class="auth-btn outline" id="local-model-unload" style="width:auto;margin:0;padding:10px 14px;">모델 해제</button>' : ""}
+                <button class="auth-btn outline" id="local-model-load-bundled" style="width:auto;margin:0;padding:10px 14px;">앱 내장 KoGPT-2 불러오기</button>
                 <button class="auth-btn primary" id="local-model-load" style="width:auto;margin:0;padding:10px 14px;">저장하고 불러오기</button>
               </div>
             </div>
@@ -4279,6 +3151,16 @@
             if (button) button.disabled = false;
           }
         };
+
+        overlay.querySelector("#local-model-load-bundled")?.addEventListener("click", async (event) => {
+          const button = event.currentTarget;
+          try {
+            statusEl.textContent = "앱 내장 KoGPT-2 GGUF를 기기에서 준비하고 있습니다…";
+            await loadSavedFiles([], { id: "bundled-kogpt2", name: "assembled-kogpt2-sexy-llama-f16.gguf" }, button);
+          } catch (error) {
+            statusEl.textContent = error instanceof Error ? error.message : "내장 GGUF 모델을 불러오지 못했습니다.";
+          }
+        });
 
         overlay.querySelector("#local-model-load")?.addEventListener("click", async () => {
           const input = overlay.querySelector("#local-model-files");
