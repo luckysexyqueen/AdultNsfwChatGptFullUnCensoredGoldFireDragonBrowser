@@ -4,73 +4,40 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#10a37f" />
-    <meta name="description" content="제한 없는 AI 채팅 애플리케이션" />
-    <title>AI Chat - 무제한 대화</title>
-    <link rel="icon" type="image/png" href="./assets/icon-CV9Zx_iX.png" />
-    <link rel="manifest" href="./assets/manifest-BnsIcC0n.json" />
-    <link rel="apple-touch-icon" href="./assets/icon-CV9Zx_iX.png" />
-    <script src="./env-config.js"></script>
-    <script src="./vpn-index-control.js" defer=""></script>
-    <link rel="alternate" type="application/yaml" href="./openapi-spec.yaml" title="GoldFire API specification" />
-    <link
-      rel="alternate"
-      type="application/yaml"
-      href="./localforge-offline-storage-api.yaml"
-      title="LocalForage offline storage API specification"
-    />
-    <!-- 선택 사항: 배포 환경의 Supabase 공개 키 설정. 파일이 없어도 로컬 모드로 계속 실행됩니다. -->
-    <!-- 로컬 GGUF 런타임은 번들 환경에서만 로드합니다. 원본 TypeScript를 standalone HTML에서 직접 요청하지 않습니다. -->
-    <script type="module" crossorigin="" src="./assets/index-D4Dri-tC.js"></script>
     <script>
-      // App-bundled GGUF adapter: inference stays in the Android process on loopback.
       (function () {
-        const base = "http://127.0.0.1:18765/api/gguf";
-        let status = { ready: false, modelName: "assembled-kogpt2-sexy-llama-f16.gguf", bundled: true, onDevice: true };
-        async function request(path, body) {
-          const response = await fetch(`${base}/${path}`, {
-            method: body === undefined ? "GET" : "POST",
-            headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-            body: body === undefined ? undefined : JSON.stringify(body),
-            cache: "no-store",
-          });
-          const data = await response.json().catch(() => ({}));
-          if (!response.ok) throw new Error(data.error || `온디바이스 GGUF 요청 실패 (${response.status})`);
-          return data;
-        }
-        window.LocalGGUF = {
-          isBundled: true,
-          getStatus: () => ({ ...status }),
-          async load(files, options = {}) {
-            if (files?.length)
-              throw new Error(
-                "이 앱에서는 APK에 내장된 KoGPT-2 모델을 사용합니다. 브라우저에 업로드한 별도 모델은 이 네이티브 런타임에 아직 연결되지 않았습니다.",
-              );
-            options.onProgress?.("앱 내장 모델을 기기 저장소에 준비하고 불러오는 중입니다…");
-            status = await request("load", {
-              contextLength: options.contextLength || 1024,
-              temperature: Number(localStorage.getItem("gfd-gguf-temperature") || 0.7),
-            });
-            status.onDevice = true;
-            return { ...status };
-          },
-          async generate(messages, options = {}) {
-            if (!status.ready) throw new Error("먼저 앱 내장 GGUF 모델을 불러오세요.");
-            const data = await request("generate", { messages, maxTokens: options.maxTokens || 256 });
-            options.onToken?.(data.text || "");
-            return data.text || "";
-          },
-          async unload() {
-            await request("unload", {});
-            status = { ready: false, modelName: "assembled-kogpt2-sexy-llama-f16.gguf", bundled: true, onDevice: true };
-          },
-        };
-        void request("status")
-          .then((data) => {
-            status = { ...status, ...data, bundled: true, onDevice: true };
-          })
-          .catch(() => {});
+        try {
+          Object.defineProperty(navigator, "language", { configurable: true, get: function () { return "ko-KR"; } });
+          Object.defineProperty(navigator, "languages", { configurable: true, get: function () { return ["ko-KR", "ko", "ja-JP", "en-US"]; } });
+        } catch (_) {}
+        try {
+          Object.defineProperty(navigator, "geolocation", { configurable: true, get: function () {
+            return {
+              getCurrentPosition: function (success, error) {
+                try { success({ coords: { latitude: 35.6762, longitude: 139.6503, accuracy: 1500 }, timestamp: Date.now() }); } catch (e) { if (error) error(e); }
+              },
+              watchPosition: function (success) { try { success({ coords: { latitude: 35.6762, longitude: 139.6503, accuracy: 1500 }, timestamp: Date.now() }); } catch (_) {} return 1; },
+              clearWatch: function () {}
+            };
+          }});
+        } catch (_) {}
+        document.documentElement.lang = "ko";
+        window.__GOLDFIRE_DEFAULT_LANGUAGE__ = "ko-KR";
+        window.__GOLDFIRE_DEFAULT_REGION__ = "JP";
+        window.__GOLDFIRE_DEFAULT_TIMEZONE__ = "Asia/Tokyo";
       })();
     </script>
+    <meta name="description" content="제한 없는 AI 채팅 애플리케이션" />
+    <title>AI Chat - 무제한 대화</title>
+    <link rel="icon" type="image/png" href="./icon.png" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="apple-touch-icon" href="./icon.png" />
+    <!-- 선택 사항: 배포 환경의 Supabase 공개 키 설정. 파일이 없어도 로컬 모드로 계속 실행됩니다. -->
+    <script type="module" src="./env-config.js" onerror="console.info('[env-config] 파일 없음 — 로컬 모드로 계속합니다.')"></script>
+    <script type="module" src="./vpn-index-control.js"></script>
+    <script type="module" src="./boot-guard.js"></script>
+    <!-- 로컬 GGUF 런타임은 번들 환경에서만 로드합니다. 원본 TypeScript를 standalone HTML에서 직접 요청하지 않습니다. -->
+    <script type="module" src="./inapp-browser.js"></script>
   </head>
   <body>
     <!-- LocalForage: CDN 제거, 네이티브 IndexedDB 기반 자체 구현으로 대체 (오프라인/WebView 안전) -->
@@ -90,34 +57,15 @@
               reject(new Error("IndexedDB unsupported"));
               return;
             }
-            const ensureStore = (db) => {
-              db.onversionchange = () => db.close();
-              if (db.objectStoreNames.contains(storeName)) {
-                resolve(db);
-                return;
+            const req = indexedDB.open(dbName, 1);
+            req.onupgradeneeded = (e) => {
+              const db = e.target.result;
+              if (!db.objectStoreNames.contains(storeName)) {
+                db.createObjectStore(storeName);
               }
-              const nextVersion = db.version + 1;
-              db.close();
-              const upgrade = indexedDB.open(dbName, nextVersion);
-              upgrade.onupgradeneeded = (event) => {
-                const upgradedDb = event.target.result;
-                if (!upgradedDb.objectStoreNames.contains(storeName)) upgradedDb.createObjectStore(storeName);
-              };
-              upgrade.onsuccess = (event) => {
-                const upgradedDb = event.target.result;
-                upgradedDb.onversionchange = () => upgradedDb.close();
-                resolve(upgradedDb);
-              };
-              upgrade.onerror = (event) => reject(event.target.error || new Error("IndexedDB store upgrade failed"));
-              upgrade.onblocked = () => reject(new Error("IndexedDB store upgrade blocked by another open connection"));
             };
-            const req = indexedDB.open(dbName);
-            req.onupgradeneeded = (event) => {
-              const db = event.target.result;
-              if (!db.objectStoreNames.contains(storeName)) db.createObjectStore(storeName);
-            };
-            req.onsuccess = (event) => ensureStore(event.target.result);
-            req.onerror = (event) => reject(event.target.error || new Error("IndexedDB open failed"));
+            req.onsuccess = (e) => resolve(e.target.result);
+            req.onerror = (e) => reject(e.target.error || new Error("IndexedDB open failed"));
           });
         }
 
@@ -336,103 +284,9 @@
           removeItem: (k) => defaultInstance.removeItem(k),
           clear: () => defaultInstance.clear(),
           keys: () => defaultInstance.keys(),
-          length: async () => (await defaultInstance.keys()).length,
-          key: async (index) => (await defaultInstance.keys())[index] ?? null,
           iterate: (cb) => defaultInstance.iterate(cb),
           ready: () => defaultInstance.ready(),
           createInstance: createInstance,
-          async setDriver(driver) {
-            const requested = Array.isArray(driver) ? driver : [driver];
-            if (requested.includes("asyncStorage") && window.indexedDB) return;
-            throw new Error("이 앱은 영구 저장을 위해 IndexedDB(asyncStorage)를 사용합니다.");
-          },
-          async dropInstance(options = {}) {
-            const dbName = options.name || "localforage";
-            const storeName = options.storeName || "keyvaluepairs";
-            const db = await openDb(dbName, storeName);
-            db.close();
-            if (!options.storeName)
-              await new Promise((resolve, reject) => {
-                const req = indexedDB.deleteDatabase(dbName);
-                req.onsuccess = () => resolve();
-                req.onerror = () => reject(req.error);
-              });
-            else
-              await new Promise((resolve, reject) => {
-                const open = indexedDB.open(dbName);
-                open.onsuccess = () => {
-                  const current = open.result;
-                  const next = current.version + 1;
-                  current.close();
-                  const upgrade = indexedDB.open(dbName, next);
-                  upgrade.onupgradeneeded = () => {
-                    if (upgrade.result.objectStoreNames.contains(storeName))
-                      upgrade.result.deleteObjectStore(storeName);
-                  };
-                  upgrade.onsuccess = () => {
-                    upgrade.result.close();
-                    resolve();
-                  };
-                  upgrade.onerror = () => reject(upgrade.error);
-                };
-                open.onerror = () => reject(open.error);
-              });
-          },
-          INDEXEDDB: "asyncStorage",
-          LOCALSTORAGE: "localStorageWrapper",
-          WEBSQL: "webSQLStorage",
-          async config(options = {}) {
-            return {
-              name: options.name || "localforage",
-              storeName: options.storeName || "keyvaluepairs",
-              driver: "asyncStorage",
-            };
-          },
-          async driver() {
-            return "asyncStorage";
-          },
-          async supports(driver) {
-            return driver === "asyncStorage"
-              ? !!window.indexedDB
-              : driver === "localStorageWrapper"
-                ? !!window.localStorage
-                : false;
-          },
-        };
-        window.LocalForageOfflineStorage = {
-          async configureStore(options = {}) {
-            const instance = createInstance({
-              name: options.name || "localforage",
-              storeName: options.storeName || "keyvaluepairs",
-            });
-            await instance.ready();
-            return instance;
-          },
-          async clearStore(instance = defaultInstance) {
-            await instance.clear();
-            return { status: 204 };
-          },
-          async getItem(key, instance = defaultInstance) {
-            return { value: await instance.getItem(String(key)) };
-          },
-          async setItem(key, value, instance = defaultInstance) {
-            await instance.setItem(String(key), value);
-            return { value };
-          },
-          async removeItem(key, instance = defaultInstance) {
-            await instance.removeItem(String(key));
-            return { status: 204 };
-          },
-          async getAllKeys(instance = defaultInstance) {
-            return instance.keys();
-          },
-          async getKeyByPosition(index, instance = defaultInstance) {
-            const keys = await instance.keys();
-            return { key: Number.isInteger(index) && index >= 0 ? (keys[index] ?? null) : null };
-          },
-          async getStoreLength(instance = defaultInstance) {
-            return { length: (await instance.keys()).length };
-          },
         };
       })();
     </script>
@@ -448,28 +302,29 @@
 
     <style>
       @font-face {
-        font-family: acutehoney;
-        src: url(https://cdn.jsdelivr.net/gh/luckysexyqueen/GoldFireDragonUnCensoredBrowser/fonts/a%ED%81%90%ED%8B%B0%ED%97%88%EB%8B%88.woff)
+        font-family: "acutehoney";
+        src: url("https://cdn.jsdelivr.net/gh/luckysexyqueen/GoldFireDragonUnCensoredBrowser/fonts/a%ED%81%90%ED%8B%B0%ED%97%88%EB%8B%88.woff")
           format("woff");
-        font-weight: 400;
+        font-weight: normal;
         font-style: normal;
         font-display: swap;
       }
       *,
-      :before,
-      :after,
+      *::before,
+      *::after,
       input,
       button,
       textarea,
       select {
-        font-family: acutehoney, sans-serif !important;
+        font-family: "acutehoney", sans-serif !important;
       }
     </style>
 
     <style>
+      /* ===== RESET & BASE ===== */
       *,
-      :before,
-      :after {
+      *::before,
+      *::after {
         box-sizing: border-box;
         margin: 0;
         padding: 0;
@@ -477,86 +332,88 @@
       html,
       body {
         height: 100%;
-        font-family:
-          -apple-system,
-          BlinkMacSystemFont,
-          Segoe UI,
-          sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
       body {
-        color: #fff;
         background: #212121;
-        flex-direction: column;
-        display: flex;
+        color: #fff;
         overflow: hidden;
+        display: flex;
+        flex-direction: column;
       }
       #app {
-        flex-direction: column;
         flex: 1;
-        min-width: 0;
         min-height: 0;
+        min-width: 0;
         display: flex;
+        flex-direction: column;
         position: relative;
         overflow: hidden;
       }
+
+      /* ===== VARIABLES ===== */
       :root {
         --bg: #212121;
         --bg2: #2f2f2f;
         --bg3: #343541;
         --bg4: #40414f;
-        --border: #ffffff1a;
+        --border: rgba(255, 255, 255, 0.1);
         --accent: #10a37f;
         --accent-hover: #0d8968;
         --text: #fff;
-        --text-muted: #ffffff80;
-        --text-dim: #ffffff40;
+        --text-muted: rgba(255, 255, 255, 0.5);
+        --text-dim: rgba(255, 255, 255, 0.25);
         --danger: #ef4444;
       }
+
+      /* ── 브라우저 패널 (채팅 화면과 항상 함께 보이는 분할 패널) ──
+         portrait(세로): 위/아래 반반, landscape(가로): 좌/우 반반 */
       #brow {
-        background: #0a0b0f;
-        flex-direction: column;
         flex-shrink: 0;
-        width: 100%;
-        min-width: 0;
-        height: 0;
-        min-height: 0;
-        transition: height 0.28s cubic-bezier(0.4, 0, 0.2, 1);
         display: flex;
+        flex-direction: column; /* portrait 기본값: 내용 위, 핸들 아래 */
+        width: 100%;
+        height: 0;
+        min-width: 0;
+        min-height: 0;
+        background: #0a0b0f;
         overflow: hidden;
+        transition: height 0.28s cubic-bezier(0.4, 0, 0.2, 1);
       }
       #brow.open {
-        border-bottom: 1px solid #1e1f2e;
         height: 50vh;
+        border-bottom: 1px solid #1e1f2e;
       }
       #brow.resizing {
         transition: none;
       }
       #brow-content {
-        flex-direction: column;
         flex: 1;
         min-width: 0;
         min-height: 0;
         display: flex;
+        flex-direction: column;
         overflow: hidden;
       }
       #brow-resize {
-        cursor: row-resize;
-        touch-action: none;
-        background: #0e0f14;
         flex-shrink: 0;
-        justify-content: center;
-        align-items: center;
-        width: 100%;
         height: 14px;
+        width: 100%;
         display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: row-resize;
+        background: #0e0f14;
+        touch-action: none;
       }
-      #brow-resize:after {
+      #brow-resize::after {
         content: "";
-        background: #3a3c4a;
-        border-radius: 2px;
         width: 40px;
         height: 4px;
+        border-radius: 2px;
+        background: #3a3c4a;
       }
+      /* landscape(가로 모드): 채팅과 브라우저를 좌우로 반반 배치 */
       @media (orientation: landscape) {
         body {
           flex-direction: row;
@@ -565,123 +422,127 @@
           min-width: 0;
         }
         #brow {
-          flex-direction: row;
+          flex-direction: row; /* 내용 왼쪽, 핸들 오른쪽 */
           width: 0;
           height: 100%;
           transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
         }
         #brow.open {
-          border-bottom: none;
-          border-right: 1px solid #1e1f2e;
           width: 50vw;
           height: 100%;
+          border-bottom: none;
+          border-right: 1px solid #1e1f2e;
         }
         #brow-resize {
-          cursor: col-resize;
           width: 14px;
           height: 100%;
+          cursor: col-resize;
         }
-        #brow-resize:after {
+        #brow-resize::after {
           width: 4px;
           height: 40px;
         }
       }
       #brow-tb {
-        background: #0e0f14;
-        border-bottom: 1px solid #1e1f2e;
+        display: flex;
         align-items: center;
         gap: 8px;
         padding: 8px 12px;
-        display: flex;
+        background: #0e0f14;
+        border-bottom: 1px solid #1e1f2e;
       }
       #brow-url {
-        color: #9ca3af;
-        white-space: nowrap;
-        text-overflow: ellipsis;
+        flex: 1;
         background: #16171f;
         border: 1px solid #2d2f3e;
         border-radius: 7px;
-        flex: 1;
         padding: 5px 10px;
-        font-family:
-          JetBrains Mono,
-          monospace;
         font-size: 11px;
+        color: #9ca3af;
+        font-family: "JetBrains Mono", monospace;
+        white-space: nowrap;
         overflow: hidden;
+        text-overflow: ellipsis;
       }
       #brow-iframe {
-        border: none;
         flex: 1;
         width: 100%;
+        border: none;
       }
+
+      /* ===== SCROLLBAR ===== */
       ::-webkit-scrollbar {
         width: 6px;
         height: 6px;
       }
       ::-webkit-scrollbar-track {
-        background: 0 0;
+        background: transparent;
       }
       ::-webkit-scrollbar-thumb {
-        background: #ffffff26;
+        background: rgba(255, 255, 255, 0.15);
         border-radius: 3px;
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #ffffff40;
+        background: rgba(255, 255, 255, 0.25);
       }
+
+      /* ===== LAYOUT ===== */
       #main-layout {
-        height: 100%;
         display: flex;
+        height: 100%;
         overflow: hidden;
       }
+
+      /* ===== SIDEBAR ===== */
       #sidebar {
-        background: var(--bg2);
-        border-right: 1px solid var(--border);
-        z-index: 300;
-        flex-direction: column;
-        width: 260px;
-        min-width: 260px;
-        transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-        display: flex;
         position: absolute;
         top: 0;
-        bottom: 0;
         left: 0;
+        bottom: 0;
+        width: 260px;
+        min-width: 260px;
+        background: var(--bg2);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
         overflow: hidden;
-        transform: translate(-100%);
-        box-shadow: 2px 0 24px #0006;
+        z-index: 300;
+        transform: translateX(-100%);
+        transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 2px 0 24px rgba(0, 0, 0, 0.4);
       }
       #sidebar.open {
-        transform: translate(0);
+        transform: translateX(0);
       }
       #sidebar-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
         z-index: 290;
         opacity: 0;
         pointer-events: none;
-        background: #00000080;
         transition: opacity 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-        position: absolute;
-        inset: 0;
       }
       #sidebar-backdrop.open {
         opacity: 1;
         pointer-events: auto;
       }
       .sidebar-toggle-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
         background: var(--bg3);
         border: 1px solid var(--border);
         color: #fff;
         cursor: pointer;
-        border-radius: 50%;
-        flex-shrink: 0;
-        justify-content: center;
-        align-items: center;
-        width: 36px;
-        height: 36px;
         font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
         transition:
           background 0.15s,
           border-color 0.15s;
-        display: flex;
       }
       .sidebar-toggle-btn:hover {
         background: var(--bg4);
@@ -691,46 +552,46 @@
         border-color: var(--accent);
       }
       .sidebar-top {
-        border-bottom: 1px solid var(--border);
         padding: 12px;
+        border-bottom: 1px solid var(--border);
       }
       .btn-new-chat {
-        border: 1px solid var(--border);
         width: 100%;
-        color: var(--text);
-        cursor: pointer;
-        background: 0 0;
-        border-radius: 8px;
+        display: flex;
         align-items: center;
         gap: 8px;
         padding: 10px 14px;
+        background: transparent;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        color: var(--text);
+        cursor: pointer;
         font-size: 14px;
         transition: background 0.15s;
-        display: flex;
       }
       .btn-new-chat:hover {
         background: var(--bg3);
       }
       .sidebar-section {
         flex: 1;
-        padding: 8px;
         overflow-y: auto;
+        padding: 8px;
       }
       .sidebar-label {
+        font-size: 11px;
         color: var(--text-muted);
+        padding: 8px 10px 4px;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        padding: 8px 10px 4px;
-        font-size: 11px;
       }
       .conv-item {
-        cursor: pointer;
-        border-radius: 8px;
+        display: flex;
         align-items: center;
         gap: 8px;
         padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
         transition: background 0.15s;
-        display: flex;
         position: relative;
       }
       .conv-item:hover {
@@ -740,123 +601,124 @@
         background: var(--bg4);
       }
       .conv-item-title {
-        white-space: nowrap;
-        text-overflow: ellipsis;
         flex: 1;
         font-size: 13px;
+        white-space: nowrap;
         overflow: hidden;
+        text-overflow: ellipsis;
       }
       .conv-item-del {
         opacity: 0;
+        background: none;
+        border: none;
         color: var(--danger);
         cursor: pointer;
-        background: 0 0;
-        border: none;
-        border-radius: 4px;
-        flex-shrink: 0;
-        justify-content: center;
-        align-items: center;
         padding: 2px;
+        border-radius: 4px;
         display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
       }
       .conv-item:hover .conv-item-del {
         opacity: 1;
       }
+
+      /* GPT List */
       .gpt-section {
         border-bottom: 1px solid var(--border);
         padding: 8px;
       }
       .gpt-header {
-        justify-content: space-between;
-        align-items: center;
-        padding: 6px 10px;
         display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 6px 10px;
       }
       .gpt-header-title {
-        align-items: center;
-        gap: 6px;
         font-size: 14px;
         font-weight: 600;
         display: flex;
+        align-items: center;
+        gap: 6px;
       }
       .btn-create-gpt {
+        font-size: 12px;
+        padding: 4px 10px;
         background: var(--accent);
-        color: #fff;
-        cursor: pointer;
         border: none;
         border-radius: 6px;
-        padding: 4px 10px;
-        font-size: 12px;
+        color: white;
+        cursor: pointer;
       }
       .btn-create-gpt:hover {
         background: var(--accent-hover);
       }
       .gpt-item {
-        cursor: pointer;
-        border-radius: 8px;
+        display: flex;
         align-items: center;
         gap: 8px;
         padding: 8px 10px;
+        border-radius: 8px;
+        cursor: pointer;
         transition: background 0.15s;
-        display: flex;
         position: relative;
       }
       .gpt-item:hover {
         background: var(--bg3);
       }
       .gpt-avatar {
-        background: linear-gradient(135deg, #8b5cf6, #ec4899);
-        border-radius: 50%;
-        flex-shrink: 0;
-        justify-content: center;
-        align-items: center;
         width: 36px;
         height: 36px;
-        font-size: 14px;
-        font-weight: 700;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #8b5cf6, #ec4899);
         display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-weight: bold;
+        font-size: 14px;
       }
       .gpt-avatar img {
-        -o-object-fit: cover;
-        object-fit: cover;
-        border-radius: 50%;
         width: 100%;
         height: 100%;
+        border-radius: 50%;
+        object-fit: cover;
       }
       .gpt-info {
         flex: 1;
         min-width: 0;
       }
       .gpt-name {
-        white-space: nowrap;
-        text-overflow: ellipsis;
         font-size: 13px;
         font-weight: 500;
+        white-space: nowrap;
         overflow: hidden;
+        text-overflow: ellipsis;
       }
       .gpt-desc {
+        font-size: 11px;
         color: var(--text-muted);
         white-space: nowrap;
-        text-overflow: ellipsis;
-        font-size: 11px;
         overflow: hidden;
+        text-overflow: ellipsis;
       }
       .gpt-actions {
-        gap: 2px;
         display: none;
+        gap: 2px;
       }
       .gpt-item:hover .gpt-actions {
         display: flex;
       }
       .gpt-action-btn {
+        background: none;
+        border: none;
         color: var(--text-muted);
         cursor: pointer;
-        background: 0 0;
-        border: none;
-        border-radius: 4px;
-        align-items: center;
         padding: 4px;
+        border-radius: 4px;
         display: flex;
+        align-items: center;
       }
       .gpt-action-btn:hover {
         background: var(--bg4);
@@ -865,54 +727,56 @@
       .gpt-empty {
         text-align: center;
         color: var(--text-muted);
-        padding: 16px 8px;
         font-size: 12px;
+        padding: 16px 8px;
       }
+
+      /* ===== HEADER ===== */
       #header {
-        border-bottom: 1px solid var(--border);
-        background: var(--bg2);
-        justify-content: space-between;
-        align-items: center;
         height: 56px;
         min-height: 56px;
-        padding: 0 24px;
+        border-bottom: 1px solid var(--border);
         display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 24px;
+        background: var(--bg2);
       }
       .header-title {
-        align-items: center;
-        gap: 10px;
         font-size: 18px;
         font-weight: 600;
         display: flex;
-      }
-      .guest-badge {
-        color: #eab308;
-        background: #eab30833;
-        border-radius: 9999px;
-        padding: 2px 8px;
-        font-size: 11px;
-      }
-      .header-right {
         align-items: center;
         gap: 10px;
-        display: flex;
+      }
+      .guest-badge {
+        font-size: 11px;
+        background: rgba(234, 179, 8, 0.2);
+        color: #eab308;
+        padding: 2px 8px;
+        border-radius: 9999px;
+      }
+      .header-right {
         position: relative;
+        display: flex;
+        align-items: center;
+        gap: 10px;
       }
       .browser-toggle-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
         background: var(--bg3);
         border: 1px solid var(--border);
         color: #fff;
         cursor: pointer;
-        border-radius: 50%;
-        justify-content: center;
-        align-items: center;
-        width: 36px;
-        height: 36px;
         font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         transition:
           background 0.15s,
           border-color 0.15s;
-        display: flex;
       }
       .browser-toggle-btn:hover {
         background: var(--bg4);
@@ -922,56 +786,56 @@
         border-color: var(--accent);
       }
       .user-btn {
-        background: var(--accent);
-        color: #fff;
-        cursor: pointer;
-        border: none;
-        border-radius: 50%;
-        justify-content: center;
-        align-items: center;
         width: 36px;
         height: 36px;
-        font-size: 14px;
+        border-radius: 50%;
+        background: var(--accent);
+        border: none;
+        color: white;
+        cursor: pointer;
         font-weight: 600;
+        font-size: 14px;
         display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .dropdown {
-        background: var(--bg3);
-        border: 1px solid var(--border);
-        z-index: 100;
-        border-radius: 10px;
-        min-width: 200px;
-        display: none;
         position: absolute;
         top: calc(100% + 8px);
         right: 0;
+        background: var(--bg3);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        min-width: 200px;
         overflow: hidden;
-        box-shadow: 0 8px 24px #0006;
+        z-index: 100;
+        display: none;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
       }
       .dropdown.open {
         display: block;
       }
       .dropdown-header {
-        border-bottom: 1px solid var(--border);
         padding: 12px 14px;
+        border-bottom: 1px solid var(--border);
       }
       .dropdown-user-name {
         font-size: 13px;
         font-weight: 500;
       }
       .dropdown-user-email {
+        font-size: 11px;
         color: var(--text-muted);
         margin-top: 2px;
-        font-size: 11px;
       }
       .dropdown-item {
-        cursor: pointer;
+        display: flex;
         align-items: center;
         gap: 8px;
         padding: 10px 14px;
         font-size: 13px;
+        cursor: pointer;
         transition: background 0.15s;
-        display: flex;
       }
       .dropdown-item:hover {
         background: var(--bg4);
@@ -980,37 +844,41 @@
         color: var(--danger);
       }
       .dropdown-sep {
-        background: var(--border);
         height: 1px;
+        background: var(--border);
         margin: 4px 0;
       }
+
+      /* ===== GPT BANNER ===== */
       #gpt-banner {
+        background: linear-gradient(to right, rgba(139, 92, 246, 0.2), rgba(236, 72, 153, 0.2));
         border-bottom: 1px solid var(--border);
-        background: linear-gradient(90deg, #8b5cf633, #ec489933);
-        align-items: center;
-        gap: 12px;
         padding: 10px 24px;
         display: none;
+        align-items: center;
+        gap: 12px;
       }
       #gpt-banner.visible {
         display: flex;
       }
       .gpt-banner-avatar {
-        background: linear-gradient(135deg, #8b5cf6, #ec4899);
-        border-radius: 50%;
-        flex-shrink: 0;
-        justify-content: center;
-        align-items: center;
         width: 32px;
         height: 32px;
-        font-size: 13px;
-        font-weight: 700;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #8b5cf6, #ec4899);
         display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 13px;
+        flex-shrink: 0;
       }
+
+      /* ===== CHAT AREA ===== */
       #content-area {
-        flex-direction: column;
         flex: 1;
         display: flex;
+        flex-direction: column;
         overflow: hidden;
       }
       #messages-area {
@@ -1020,55 +888,59 @@
       .messages-inner {
         padding-bottom: 16px;
       }
+
+      /* Empty state */
       #empty-state {
-        text-align: center;
+        display: flex;
         flex-direction: column;
-        justify-content: center;
         align-items: center;
+        justify-content: center;
         height: 100%;
         padding: 40px 20px;
-        display: flex;
+        text-align: center;
       }
       .empty-logo {
-        background: var(--accent);
-        border-radius: 50%;
-        justify-content: center;
-        align-items: center;
         width: 64px;
         height: 64px;
-        margin-bottom: 20px;
+        border-radius: 50%;
+        background: var(--accent);
         display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 20px;
       }
       .empty-title {
-        margin-bottom: 8px;
         font-size: 24px;
         font-weight: 600;
+        margin-bottom: 8px;
       }
       .empty-sub {
         color: var(--text-muted);
         font-size: 14px;
       }
+
+      /* Message */
       .message {
         padding: 20px 16px;
       }
       .message.assistant {
-        background: #ffffff08;
+        background: rgba(255, 255, 255, 0.03);
       }
       .message-inner {
-        gap: 14px;
         max-width: 720px;
         margin: 0 auto;
         display: flex;
+        gap: 14px;
       }
       .msg-avatar {
-        border-radius: 50%;
-        flex-shrink: 0;
-        justify-content: center;
-        align-items: center;
         width: 32px;
         height: 32px;
-        font-size: 14px;
+        border-radius: 50%;
+        flex-shrink: 0;
         display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
       }
       .msg-avatar.user {
         background: var(--accent);
@@ -1082,139 +954,86 @@
         padding-top: 4px;
       }
       .msg-text {
+        font-size: 15px;
+        line-height: 1.7;
         white-space: pre-wrap;
         word-break: break-word;
         color: var(--text);
-        font-size: 15px;
-        line-height: 1.7;
       }
       .msg-cursor {
-        background: var(--text);
-        border-radius: 2px;
+        display: inline-block;
         width: 8px;
         height: 16px;
+        background: var(--text);
+        border-radius: 2px;
         margin-left: 3px;
-        animation: 0.8s infinite blink;
-        display: inline-block;
+        animation: blink 0.8s infinite;
       }
       @keyframes blink {
         0%,
-        to {
+        100% {
           opacity: 1;
         }
         50% {
           opacity: 0;
         }
       }
-      .universal-file-vault {
-        flex-direction: column;
-        gap: 10px;
-        max-height: 70vh;
-        display: flex;
-      }
-      .ufv-toolbar {
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px;
-        display: flex;
-      }
-      .ufv-list {
-        flex-direction: column;
-        gap: 6px;
-        min-height: 80px;
-        max-height: 34vh;
-        display: flex;
-        overflow: auto;
-      }
-      .ufv-item {
-        background: #ffffff0a;
-        border: 1px solid #ffffff14;
-        border-radius: 8px;
-        align-items: center;
-        gap: 8px;
-        padding: 9px;
-        display: flex;
-      }
-      .ufv-name {
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        flex: 1;
-        min-width: 0;
-        overflow: hidden;
-      }
-      .ufv-actions {
-        flex-wrap: wrap;
-        gap: 5px;
-        display: flex;
-      }
-      .ufv-preview {
-        background: #0003;
-        border: 1px solid #ffffff14;
-        border-radius: 8px;
-        width: 100%;
-        min-height: 180px;
-        max-height: 42vh;
-        padding: 10px;
-        overflow: auto;
-      }
-      .ufv-preview img,
-      .ufv-preview video {
-        max-width: 100%;
-        max-height: 36vh;
-        margin: auto;
-        display: block;
-      }
-      .ufv-preview iframe {
-        border: 0;
-        width: 100%;
-        height: 36vh;
-      }
-      .ufv-preview textarea {
-        box-sizing: border-box;
-        width: 100%;
-        min-height: 30vh;
-      }
+
+      /* Universal local file vault */
+      .universal-file-vault{display:flex;flex-direction:column;gap:10px;max-height:70vh}
+      .ufv-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+      .ufv-list{display:flex;flex-direction:column;gap:6px;overflow:auto;min-height:80px;max-height:34vh}
+      .ufv-item{display:flex;gap:8px;align-items:center;padding:9px;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(255,255,255,.04)}
+      .ufv-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .ufv-actions{display:flex;gap:5px;flex-wrap:wrap}
+      .ufv-preview{width:100%;min-height:180px;max-height:42vh;overflow:auto;border:1px solid rgba(255,255,255,.08);border-radius:8px;background:rgba(0,0,0,.2);padding:10px}
+      .ufv-preview img,.ufv-preview video{max-width:100%;max-height:36vh;display:block;margin:auto}
+      .ufv-preview iframe{width:100%;height:36vh;border:0}
+      .ufv-preview textarea{width:100%;min-height:30vh;box-sizing:border-box}
+
+      /* File attachments in messages */
       .msg-files {
+        display: flex;
         flex-wrap: wrap;
         gap: 8px;
         margin-bottom: 8px;
-        display: flex;
       }
       .msg-img-thumb {
-        border: 1px solid var(--border);
-        border-radius: 10px;
         max-width: 280px;
         max-height: 200px;
+        border-radius: 10px;
         overflow: hidden;
+        border: 1px solid var(--border);
       }
       .msg-img-thumb img {
-        -o-object-fit: contain;
-        object-fit: contain;
         width: 100%;
         height: 100%;
+        object-fit: contain;
         display: block;
       }
       .msg-file-chip {
+        display: flex;
+        align-items: center;
+        gap: 8px;
         background: var(--bg3);
         border: 1px solid var(--border);
         border-radius: 8px;
-        align-items: center;
-        gap: 8px;
-        max-width: 220px;
         padding: 6px 10px;
         font-size: 12px;
-        display: flex;
+        max-width: 220px;
       }
       .msg-file-chip .fc-name {
         white-space: nowrap;
-        text-overflow: ellipsis;
         overflow: hidden;
+        text-overflow: ellipsis;
       }
       .msg-file-chip .fc-size {
         color: var(--text-muted);
-        margin-top: 1px;
         font-size: 10px;
+        margin-top: 1px;
       }
+
+      /* ===== CHAT INPUT ===== */
       #chat-input-area {
         border-top: 1px solid var(--border);
         background: var(--bg);
@@ -1225,101 +1044,100 @@
         margin: 0 auto;
       }
       #file-previews {
+        display: flex;
         flex-wrap: wrap;
         gap: 8px;
         margin-bottom: 10px;
-        display: flex;
       }
       .fp-img {
-        border: 1px solid var(--border);
-        border-radius: 10px;
+        position: relative;
         width: 76px;
         height: 76px;
-        position: relative;
+        border-radius: 10px;
         overflow: hidden;
+        border: 1px solid var(--border);
       }
       .fp-img img {
-        -o-object-fit: cover;
-        object-fit: cover;
         width: 100%;
         height: 100%;
+        object-fit: cover;
       }
       .fp-img-name {
-        inset-x: 0;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-        background: linear-gradient(#0000, #000c);
-        padding: 4px 3px 2px;
-        font-size: 9px;
         position: absolute;
         bottom: 0;
+        inset-x: 0;
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+        font-size: 9px;
+        padding: 4px 3px 2px;
+        white-space: nowrap;
         overflow: hidden;
+        text-overflow: ellipsis;
       }
       .fp-chip {
+        display: flex;
+        align-items: center;
+        gap: 7px;
         background: var(--bg3);
         border: 1px solid var(--border);
         border-radius: 8px;
-        align-items: center;
-        gap: 7px;
-        max-width: 190px;
         padding: 6px 10px;
-        display: flex;
+        max-width: 190px;
       }
       .fp-chip-name {
-        white-space: nowrap;
-        text-overflow: ellipsis;
         font-size: 11px;
         font-weight: 500;
+        white-space: nowrap;
         overflow: hidden;
+        text-overflow: ellipsis;
       }
       .fp-chip-size {
-        color: var(--text-muted);
         font-size: 9px;
+        color: var(--text-muted);
       }
       .fp-remove {
+        background: rgba(0, 0, 0, 0.6);
+        border: none;
         color: #fff;
         cursor: pointer;
-        background: #0009;
-        border: none;
         border-radius: 50%;
-        justify-content: center;
-        align-items: center;
         width: 18px;
         height: 18px;
-        font-size: 10px;
         display: flex;
+        align-items: center;
+        justify-content: center;
         position: absolute;
         top: 3px;
         right: 3px;
+        font-size: 10px;
       }
       .fp-chip .fp-remove {
-        color: var(--text-muted);
-        background: 0 0;
-        font-size: 12px;
         position: static;
+        background: none;
+        color: var(--text-muted);
+        font-size: 12px;
       }
       .input-box {
-        background: var(--bg2);
-        border: 1px solid var(--border);
-        border-radius: 14px;
+        display: flex;
         align-items: flex-end;
         gap: 8px;
+        background: var(--bg2);
+        border-radius: 14px;
+        border: 1px solid var(--border);
         padding: 10px 14px;
-        display: flex;
       }
       .input-box-btn {
+        background: none;
+        border: none;
         color: var(--text-muted);
         cursor: pointer;
-        background: 0 0;
-        border: none;
-        border-radius: 6px;
-        flex-shrink: 0;
-        justify-content: center;
-        align-items: center;
-        margin-bottom: 2px;
-        padding: 2px;
-        transition: color 0.15s;
         display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px;
+        border-radius: 6px;
+        transition: color 0.15s;
+        flex-shrink: 0;
+        margin-bottom: 2px;
       }
       .input-box-btn:hover {
         color: var(--text);
@@ -1329,36 +1147,36 @@
         cursor: not-allowed;
       }
       #msg-input {
-        color: var(--text);
-        resize: none;
-        background: 0 0;
+        flex: 1;
+        background: none;
         border: none;
         outline: none;
-        flex: 1;
-        min-height: 24px;
-        max-height: 180px;
-        font-family: inherit;
+        color: var(--text);
         font-size: 14px;
         line-height: 1.6;
+        resize: none;
+        min-height: 24px;
+        max-height: 180px;
         overflow-y: auto;
+        font-family: inherit;
       }
       #msg-input::placeholder {
         color: var(--text-dim);
       }
       .send-btn {
-        background: var(--accent);
-        color: #fff;
-        cursor: pointer;
-        border: none;
-        border-radius: 8px;
-        flex-shrink: 0;
-        justify-content: center;
-        align-items: center;
         width: 32px;
         height: 32px;
+        border-radius: 8px;
+        background: var(--accent);
+        border: none;
+        color: white;
+        cursor: pointer;
+        flex-shrink: 0;
         margin-bottom: 2px;
-        transition: background 0.15s;
         display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s;
       }
       .send-btn:hover {
         background: var(--accent-hover);
@@ -1368,59 +1186,61 @@
         cursor: not-allowed;
       }
       .input-hint {
+        font-size: 11px;
         color: var(--text-dim);
         text-align: center;
         margin-top: 6px;
-        font-size: 11px;
       }
+
+      /* ===== AUTH PAGE ===== */
       #auth-page {
-        background: var(--bg);
-        justify-content: center;
-        align-items: center;
         min-height: 100vh;
-        padding: 16px;
         display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--bg);
+        padding: 16px;
       }
       .auth-card {
+        width: 100%;
+        max-width: 400px;
         background: var(--bg2);
         border: 1px solid var(--border);
         border-radius: 16px;
-        width: 100%;
-        max-width: 400px;
         padding: 32px 28px;
       }
       .auth-logo {
-        background: #10a37f26;
-        border-radius: 50%;
-        justify-content: center;
-        align-items: center;
         width: 48px;
         height: 48px;
-        margin: 0 auto 20px;
+        border-radius: 50%;
+        background: rgba(16, 163, 127, 0.15);
         display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px;
       }
       .auth-title {
-        text-align: center;
-        margin-bottom: 6px;
         font-size: 22px;
         font-weight: 700;
+        text-align: center;
+        margin-bottom: 6px;
       }
       .auth-sub {
+        font-size: 13px;
         color: var(--text-muted);
         text-align: center;
         margin-bottom: 24px;
-        font-size: 13px;
       }
       .auth-input {
+        width: 100%;
         background: var(--bg3);
         border: 1px solid var(--border);
-        width: 100%;
-        color: var(--text);
         border-radius: 8px;
+        padding: 10px 14px;
+        color: var(--text);
+        font-size: 14px;
         outline: none;
         margin-bottom: 10px;
-        padding: 10px 14px;
-        font-size: 14px;
         transition: border-color 0.15s;
       }
       .auth-input:focus {
@@ -1430,19 +1250,19 @@
         opacity: 0.5;
       }
       .auth-btn {
-        cursor: pointer;
+        width: 100%;
+        padding: 11px;
         border: none;
         border-radius: 8px;
-        width: 100%;
-        margin-bottom: 10px;
-        padding: 11px;
         font-size: 14px;
         font-weight: 600;
+        cursor: pointer;
         transition: background 0.15s;
+        margin-bottom: 10px;
       }
       .auth-btn.primary {
         background: var(--accent);
-        color: #fff;
+        color: white;
       }
       .auth-btn.primary:hover {
         background: var(--accent-hover);
@@ -1452,49 +1272,51 @@
         cursor: not-allowed;
       }
       .auth-btn.outline {
+        background: transparent;
         color: var(--text);
-        background: 0 0;
-        border: 2px solid #10a37f80;
+        border: 2px solid rgba(16, 163, 127, 0.5);
       }
       .auth-btn.outline:hover {
-        background: #10a37f1a;
+        background: rgba(16, 163, 127, 0.1);
       }
       .auth-divider {
+        display: flex;
         align-items: center;
         gap: 10px;
         margin: 12px 0;
-        display: flex;
       }
-      .auth-divider:before,
-      .auth-divider:after {
+      .auth-divider::before,
+      .auth-divider::after {
         content: "";
-        background: var(--border);
         flex: 1;
         height: 1px;
+        background: var(--border);
       }
       .auth-divider span {
+        font-size: 11px;
         color: var(--text-muted);
         white-space: nowrap;
-        font-size: 11px;
       }
       .auth-switch {
         text-align: center;
+        font-size: 13px;
         color: var(--text-muted);
         cursor: pointer;
-        font-size: 13px;
       }
       .auth-switch:hover {
         color: var(--text);
       }
+
+      /* ===== GPT BUILDER MODAL ===== */
       .modal-overlay {
-        z-index: 400;
-        background: #000c;
-        justify-content: center;
-        align-items: center;
-        padding: 16px;
-        display: flex;
         position: fixed;
         inset: 0;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 400;
+        padding: 16px;
       }
       .modal-overlay.hidden {
         display: none;
@@ -1508,27 +1330,27 @@
         overflow-y: auto;
       }
       .modal-header {
-        background: var(--bg2);
-        border-bottom: 1px solid var(--border);
-        z-index: 1;
-        justify-content: space-between;
-        align-items: center;
-        padding: 20px 24px;
-        display: flex;
         position: sticky;
         top: 0;
+        background: var(--bg2);
+        border-bottom: 1px solid var(--border);
+        padding: 20px 24px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        z-index: 1;
       }
       .modal-title {
         font-size: 20px;
         font-weight: 700;
       }
       .modal-close {
+        background: none;
+        border: none;
         color: var(--text-muted);
         cursor: pointer;
-        background: 0 0;
-        border: none;
-        border-radius: 6px;
         padding: 4px;
+        border-radius: 6px;
         display: flex;
       }
       .modal-close:hover {
@@ -1541,96 +1363,96 @@
         margin-bottom: 20px;
       }
       .form-label {
-        margin-bottom: 7px;
+        display: block;
         font-size: 13px;
         font-weight: 500;
-        display: block;
+        margin-bottom: 7px;
       }
       .form-label .req {
         color: var(--danger);
         margin-left: 3px;
       }
       .form-input {
+        width: 100%;
         background: var(--bg4);
         border: 1px solid var(--border);
-        width: 100%;
-        color: var(--text);
         border-radius: 8px;
-        outline: none;
         padding: 10px 14px;
-        font-family: inherit;
+        color: var(--text);
         font-size: 14px;
+        outline: none;
+        font-family: inherit;
         transition: border-color 0.15s;
       }
       .form-input:focus {
         border-color: var(--accent);
       }
       .form-textarea {
-        resize: vertical;
         min-height: 100px;
+        resize: vertical;
       }
       .upload-zone {
         border: 2px dashed var(--border);
-        text-align: center;
-        cursor: pointer;
         border-radius: 10px;
         padding: 28px;
+        text-align: center;
+        cursor: pointer;
         transition:
           border-color 0.15s,
           background 0.15s;
       }
       .upload-zone:hover {
-        background: #ffffff05;
-        border-color: #ffffff4d;
+        border-color: rgba(255, 255, 255, 0.3);
+        background: rgba(255, 255, 255, 0.02);
       }
       .upload-zone-text {
         color: var(--text-muted);
-        margin-top: 8px;
         font-size: 13px;
+        margin-top: 8px;
       }
       .upload-zone-hint {
         color: var(--text-dim);
-        margin-top: 4px;
         font-size: 11px;
+        margin-top: 4px;
       }
       .file-list {
-        flex-direction: column;
-        gap: 8px;
         margin-top: 12px;
         display: flex;
+        flex-direction: column;
+        gap: 8px;
       }
       .file-list-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
         background: var(--bg4);
         border-radius: 8px;
-        align-items: center;
-        gap: 10px;
         padding: 8px 12px;
-        display: flex;
       }
       .file-list-name {
-        white-space: nowrap;
-        text-overflow: ellipsis;
         flex: 1;
         font-size: 13px;
+        white-space: nowrap;
         overflow: hidden;
+        text-overflow: ellipsis;
       }
       .file-list-size {
-        color: var(--text-muted);
         font-size: 11px;
+        color: var(--text-muted);
       }
       .file-list-del {
+        background: none;
+        border: none;
         color: var(--danger);
         cursor: pointer;
-        background: 0 0;
-        border: none;
-        border-radius: 4px;
         padding: 2px;
         display: flex;
+        border-radius: 4px;
       }
       .checkbox-row {
+        display: flex;
         align-items: center;
         gap: 10px;
-        display: flex;
       }
       .checkbox-row input {
         width: 16px;
@@ -1639,30 +1461,30 @@
         cursor: pointer;
       }
       .modal-footer {
+        display: flex;
         gap: 10px;
         padding-top: 8px;
-        display: flex;
       }
       .modal-footer .btn-cancel {
-        background: var(--bg4);
-        color: var(--text);
-        cursor: pointer;
-        border: none;
-        border-radius: 8px;
         flex: 1;
         padding: 11px;
+        background: var(--bg4);
+        border: none;
+        color: var(--text);
+        border-radius: 8px;
         font-size: 14px;
+        cursor: pointer;
       }
       .modal-footer .btn-save {
-        background: var(--accent);
-        color: #fff;
-        cursor: pointer;
-        border: none;
-        border-radius: 8px;
         flex: 1;
         padding: 11px;
+        background: var(--accent);
+        border: none;
+        color: white;
+        border-radius: 8px;
         font-size: 14px;
         font-weight: 600;
+        cursor: pointer;
       }
       .modal-footer .btn-save:hover {
         background: var(--accent-hover);
@@ -1671,45 +1493,47 @@
         opacity: 0.5;
         cursor: not-allowed;
       }
+
+      /* ===== TOAST ===== */
       #toast-container {
-        z-index: 9999;
-        pointer-events: none;
-        flex-direction: column;
-        gap: 8px;
-        display: flex;
         position: fixed;
         top: 20px;
         left: 50%;
-        transform: translate(-50%);
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        z-index: 9999;
+        pointer-events: none;
       }
       .toast {
-        pointer-events: auto;
-        text-align: center;
-        border-radius: 8px;
-        max-width: 320px;
         padding: 10px 18px;
+        border-radius: 8px;
         font-size: 13px;
         font-weight: 500;
-        animation: 0.25s slideIn;
-        box-shadow: 0 4px 16px #0006;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        animation: slideIn 0.25s ease;
+        pointer-events: auto;
+        max-width: 320px;
+        text-align: center;
       }
       .toast.success {
+        background: #1a3a2f;
         border: 1px solid var(--accent);
         color: #4ade80;
-        background: #1a3a2f;
       }
       .toast.error {
+        background: #3a1a1a;
         border: 1px solid var(--danger);
         color: #f87171;
-        background: #3a1a1a;
       }
       .toast.info {
-        color: #93c5fd;
         background: #1a2a3a;
         border: 1px solid #3b82f6;
+        color: #93c5fd;
       }
       @keyframes slideIn {
-        0% {
+        from {
           opacity: 0;
           transform: translateY(-10px);
         }
@@ -1718,13 +1542,15 @@
           transform: translateY(0);
         }
       }
+
+      /* ===== SPINNER ===== */
       .spinner {
-        border: 3px solid #ffffff26;
-        border-top-color: var(--accent);
-        border-radius: 50%;
         width: 32px;
         height: 32px;
-        animation: 0.8s linear infinite spin;
+        border: 3px solid rgba(255, 255, 255, 0.15);
+        border-top-color: var(--accent);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
       }
       @keyframes spin {
         to {
@@ -1732,31 +1558,33 @@
         }
       }
       #loading-screen {
-        background: var(--bg);
-        z-index: 999;
-        justify-content: center;
-        align-items: center;
-        display: flex;
         position: fixed;
         inset: 0;
+        background: var(--bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 999;
       }
       #loading-screen.hidden {
         display: none;
       }
+
+      /* ===== SUPABASE ANON KEY 최초 실행 입력 모달 (자동 설정 기능) ===== */
       #sb-key-overlay {
-        z-index: 10000;
+        z-index: 10000; /* #loading-screen(999)보다 위에 떠야 함 */
       }
       #sb-key-overlay .form-hint {
+        font-size: 12px;
         color: var(--text-muted);
         margin: -2px 0 10px;
-        font-size: 12px;
         line-height: 1.5;
       }
       #sb-key-overlay .sb-key-error {
+        font-size: 12px;
         color: var(--danger);
         min-height: 16px;
         margin: 4px 0 2px;
-        font-size: 12px;
       }
     </style>
 
@@ -1775,18 +1603,7 @@
             <i class="fa-solid fa-lock" style="color: #4ade80; margin-right: 4px"></i>
             골드파이어드래곤브라우저
           </div>
-          <button
-            id="vpn-settings-btn"
-            class="input-box-btn"
-            style="height: 32px; color: #fff"
-            title="VPN 설정"
-            onclick="window.__gfdOpenVpn &amp;&amp; window.__gfdOpenVpn()"
-          >
-            VPN 설정
-          </button>
-          <button id="file-vault-btn" class="input-box-btn" style="height: 32px; color: #fff" title="업로드 파일 관리">
-            파일 보관함
-          </button>
+          <button id="vpn-settings-btn" class="input-box-btn" style="height:32px;color:#fff" title="VPN 설정" onclick="window.__gfdOpenVpn && window.__gfdOpenVpn()">VPN 설정</button>
           <button
             id="brow-reload"
             class="input-box-btn"
@@ -1814,6 +1631,8 @@
       </div>
       <div id="brow-resize" title="드래그하여 크기 조절"></div>
     </div>
+
+
 
     <div id="app"></div>
 
@@ -1950,9 +1769,7 @@
           setState({ isOnline: true, syncStatus: "연결 복구됨" });
           void flushSyncQueue();
         });
-        window.addEventListener("offline", () =>
-          setState({ isOnline: false, syncStatus: "오프라인 · 기기에 저장 중" }),
-        );
+        window.addEventListener("offline", () => setState({ isOnline: false, syncStatus: "오프라인 · 기기에 저장 중" }));
 
         const chain = (table) => {
           let filters = [];
@@ -2188,18 +2005,13 @@
       ]);
       function fileType(file) {
         const mime = String(file?.type || "").toLowerCase();
-        const e =
-          String(file?.name || "")
-            .split(".")
-            .pop()
-            ?.toLowerCase() || "";
+        const e = String(file?.name || "").split(".").pop()?.toLowerCase() || "";
         if (mime.startsWith("image/")) return "image";
         if (mime.startsWith("audio/")) return "audio";
         if (mime.startsWith("video/")) return "video";
         if (mime === "application/pdf" || e === "pdf") return "pdf";
-        if (mime.startsWith("text/") || mime === "application/json" || mime.includes("xml") || TEXT_EXTS.has(e))
-          return "text";
-        if (["doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf"].includes(e)) return "office";
+        if (mime.startsWith("text/") || mime === "application/json" || mime.includes("xml") || TEXT_EXTS.has(e)) return "text";
+        if (["doc","docx","xls","xlsx","ppt","pptx","odt","ods","odp","rtf"].includes(e)) return "office";
         return "binary";
       }
       function fmtSize(b) {
@@ -2236,14 +2048,8 @@
         await blobStore.setItem(id, file.slice(0, file.size, file.type));
         await metaStore.setItem(id, meta);
         await embeddedFileIndexStore.setItem(id, {
-          id,
-          name: meta.name,
-          mimeType: meta.mimeType,
-          size: meta.size,
-          type: meta.type,
-          createdAt: meta.createdAt,
-          embeddedInApp: true,
-          storageScope: "app-internal",
+          id, name: meta.name, mimeType: meta.mimeType, size: meta.size, type: meta.type,
+          createdAt: meta.createdAt, embeddedInApp: true, storageScope: "app-internal",
         });
         return meta;
       }
@@ -2253,51 +2059,6 @@
         } catch {
           return null;
         }
-      }
-      async function replaceLocalFileLF(id, file) {
-        const old = await getFileMeta(id);
-        if (!old) throw new Error("저장 파일을 찾을 수 없습니다.");
-        const type = fileType(file);
-        let textContent;
-        if (type === "text") textContent = (await file.text()).slice(0, 2000000);
-        const meta = {
-          ...old,
-          name: file.name,
-          mimeType: file.type || "application/octet-stream",
-          size: file.size,
-          type,
-          textContent,
-          updatedAt: new Date().toISOString(),
-          persistent: true,
-          embeddedInApp: true,
-          storageScope: "app-internal",
-        };
-        await blobStore.setItem(id, file.slice(0, file.size, file.type));
-        await metaStore.setItem(id, meta);
-        await embeddedFileIndexStore.setItem(id, {
-          id,
-          name: meta.name,
-          mimeType: meta.mimeType,
-          size: meta.size,
-          type: meta.type,
-          createdAt: meta.createdAt,
-          updatedAt: meta.updatedAt,
-          embeddedInApp: true,
-          storageScope: "app-internal",
-        });
-        for (const key of await localGPTFileStore.keys()) {
-          const record = await localGPTFileStore.getItem(key);
-          if (record?.local_file_id === id)
-            await localGPTFileStore.setItem(key, {
-              ...record,
-              file_name: meta.name,
-              file_size: meta.size,
-              mime_type: meta.mimeType,
-              file_content: meta.textContent || "",
-              updated_at: meta.updatedAt,
-            });
-        }
-        return meta;
       }
       async function getFileMeta(id) {
         try {
@@ -2314,10 +2075,8 @@
       }
       async function getEmbeddedAppFiles() {
         const out = [];
-        await embeddedFileIndexStore.iterate((v) => {
-          if (v?.embeddedInApp) out.push(v);
-        });
-        return out.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+        await embeddedFileIndexStore.iterate(v => { if (v?.embeddedInApp) out.push(v); });
+        return out.sort((a,b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       }
       async function createObjUrl(id) {
         const b = await getFileBlob(id);
@@ -2422,9 +2181,7 @@
 
       async function saveLocalGPTFile(gptId, file) {
         const record = {
-          id:
-            file.id ||
-            `local-gpt-file-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`,
+          id: file.id || `local-gpt-file-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`}`,
           custom_gpt_id: gptId,
           file_name: file.file_name,
           file_size: file.file_size || 0,
@@ -2521,9 +2278,7 @@
       }
 
       async function saveCloudConfig(url, anonKey) {
-        const normalizedUrl = String(url || "")
-          .trim()
-          .replace(/\/$/, "");
+        const normalizedUrl = String(url || "").trim().replace(/\/$/, "");
         const normalizedKey = String(anonKey || "").trim();
         if (!/^https:\/\//i.test(normalizedUrl) || !normalizedKey) {
           throw new Error("유효한 HTTPS Supabase URL과 Anon Key를 입력하세요.");
@@ -2548,11 +2303,9 @@
 
       async function updateSyncCount() {
         let count = 0;
-        await syncStore
-          .iterate(() => {
-            count += 1;
-          })
-          .catch(() => {});
+        await syncStore.iterate(() => {
+          count += 1;
+        }).catch(() => {});
         if (typeof S !== "undefined") setState({ syncPending: count });
         return count;
       }
@@ -2587,9 +2340,7 @@
             try {
               let error = null;
               if (job.kind === "conversation") {
-                ({ error } = await client
-                  .from("conversations")
-                  .upsert({ ...job.record, user_id: accountId }, { onConflict: "id" }));
+                ({ error } = await client.from("conversations").upsert({ ...job.record, user_id: accountId }, { onConflict: "id" }));
               } else if (job.kind === "message") {
                 ({ error } = await client.from("messages").upsert(job.record, { onConflict: "id" }));
               } else if (job.kind === "profileFile") {
@@ -2603,14 +2354,9 @@
                 }));
                 if (!error) {
                   const profile = await getDeviceProfile();
-                  const changes =
-                    job.record.role === "profile-avatar"
-                      ? { avatarCloudPath: path }
-                      : {
-                          documents: (profile.documents || []).map((document) =>
-                            document.id === job.record.id ? { ...document, cloudPath: path } : document,
-                          ),
-                        };
+                  const changes = job.record.role === "profile-avatar"
+                    ? { avatarCloudPath: path }
+                    : { documents: (profile.documents || []).map((document) => document.id === job.record.id ? { ...document, cloudPath: path } : document) };
                   const updated = await saveDeviceProfile(changes);
                   await queueSync("profile", updated);
                 }
@@ -2621,13 +2367,7 @@
                     avatar_url: job.record.avatar || "",
                     avatar_path: job.record.avatarCloudPath || "",
                     bio: job.record.bio || "",
-                    documents: (job.record.documents || []).map(({ id, name, mimeType, size, cloudPath }) => ({
-                      id,
-                      name,
-                      mimeType,
-                      size,
-                      cloudPath: cloudPath || "",
-                    })),
+                    documents: (job.record.documents || []).map(({ id, name, mimeType, size, cloudPath }) => ({ id, name, mimeType, size, cloudPath: cloudPath || "" })),
                   },
                 }));
               }
@@ -2635,11 +2375,7 @@
               await syncStore.removeItem(key);
             } catch (error) {
               failed = true;
-              await syncStore.setItem(key, {
-                ...job,
-                attempts: (job.attempts || 0) + 1,
-                last_error: String(error?.message || error),
-              });
+              await syncStore.setItem(key, { ...job, attempts: (job.attempts || 0) + 1, last_error: String(error?.message || error) });
             }
           }
           const pending = await updateSyncCount();
@@ -2694,10 +2430,7 @@
           bio: remoteUser.user_metadata?.bio || device.bio || "",
           isAnonymous: false,
         });
-        setState({
-          user: linked,
-          account: { connected: true, provider: remoteUser.app_metadata?.provider || "email" },
-        });
+        setState({ user: linked, account: { connected: true, provider: remoteUser.app_metadata?.provider || "email" } });
         await queueSync("profile", linked);
         await flushSyncQueue();
         await pullCloudData().catch((error) => console.warn("원격 데이터 수신 동기화 실패:", error));
@@ -2777,8 +2510,7 @@
         return {
           id: u?.id || `local-${Date.now()}`,
           email,
-          username:
-            u?.user_metadata?.username || u?.user_metadata?.full_name || (email ? email.split("@")[0] : "사용자"),
+          username: u?.user_metadata?.username || u?.user_metadata?.full_name || (email ? email.split("@")[0] : "사용자"),
           avatar: u?.user_metadata?.avatar_url,
         };
       }
@@ -2913,169 +2645,49 @@
       // ═══════════════════════════════════════════════════════════════
       async function listAllLocalFiles() {
         const out = [];
-        await metaStore.iterate((v) => {
-          if (v?.persistent !== false) out.push(v);
-        });
-        return out.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+        await metaStore.iterate((v) => { if (v?.persistent !== false) out.push(v); });
+        return out.sort((a,b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       }
       async function deleteLocalFileEverywhere(id) {
         if (!id) return;
-        await blobStore.removeItem(id).catch(() => {});
-        await metaStore.removeItem(id).catch(() => {});
-        await msgFileStore
-          .iterate(async (ids, key) => {
-            if (Array.isArray(ids) && ids.includes(id))
-              await msgFileStore.setItem(
-                key,
-                ids.filter((x) => x !== id),
-              );
-          })
-          .catch(() => {});
-        for (const key of await localGPTFileStore.keys()) {
-          const record = await localGPTFileStore.getItem(key);
-          if (record?.local_file_id === id) await localGPTFileStore.removeItem(key);
-        }
-        const profile = await getDeviceProfile().catch(() => null);
-        if (profile?.documents)
-          await saveDeviceProfile({ documents: profile.documents.filter((x) => x.id !== id) }).catch(() => {});
+        await blobStore.removeItem(id).catch(()=>{});
+        await metaStore.removeItem(id).catch(()=>{});
+        await msgFileStore.iterate(async (ids, key) => {
+          if (Array.isArray(ids) && ids.includes(id)) await msgFileStore.setItem(key, ids.filter(x=>x!==id));
+        }).catch(()=>{});
+        const profile = await getDeviceProfile().catch(()=>null);
+        if (profile?.documents) await saveDeviceProfile({documents: profile.documents.filter(x=>x.id!==id)}).catch(()=>{});
       }
       function universalFilePreview(meta, blob) {
-        const box = document.getElementById("ufv-preview");
-        if (!box) return;
-        box.innerHTML = "";
-        if (!meta || !blob) {
-          box.textContent = "파일을 읽을 수 없습니다.";
-          return;
-        }
-        const url = URL.createObjectURL(blob);
-        if (meta.type === "image") {
-          const img = document.createElement("img");
-          img.src = url;
-          img.alt = meta.name;
-          box.appendChild(img);
-        } else if (meta.type === "video") {
-          const v = document.createElement("video");
-          v.controls = true;
-          v.src = url;
-          box.appendChild(v);
-        } else if (meta.type === "audio") {
-          const a = document.createElement("audio");
-          a.controls = true;
-          a.src = url;
-          box.appendChild(a);
-        } else if (meta.type === "pdf") {
-          const f = document.createElement("iframe");
-          f.src = url;
-          box.appendChild(f);
-        } else if (meta.type === "text") {
-          const ta = document.createElement("textarea");
-          ta.value = meta.textContent || "";
-          ta.addEventListener("change", async () => {
-            const nb = new Blob([ta.value], { type: meta.mimeType || "text/plain" });
-            await blobStore.setItem(meta.id, nb);
-            meta.textContent = ta.value;
-            meta.size = nb.size;
-            meta.updatedAt = new Date().toISOString();
-            await metaStore.setItem(meta.id, meta);
-            toast("파일 내용을 저장했습니다.", "success");
-          });
-          box.appendChild(ta);
-        } else {
-          box.innerHTML =
-            '<div style="line-height:1.6">📦 ' +
-            escHtml(meta.name) +
-            "<br>형식: " +
-            escHtml(meta.mimeType || "알 수 없음") +
-            "<br>이 파일은 원본 바이트 그대로 앱 내부에 영구 보관됩니다. 미리보기가 지원되지 않는 형식은 다운로드/외부 앱으로 열 수 있습니다.</div>";
-        }
-        box.dataset.url = url;
+        const box=document.getElementById('ufv-preview'); if(!box) return;
+        box.innerHTML='';
+        if(!meta || !blob){ box.textContent='파일을 읽을 수 없습니다.'; return; }
+        const url=URL.createObjectURL(blob);
+        if(meta.type==='image'){ const img=document.createElement('img'); img.src=url; img.alt=meta.name; box.appendChild(img); }
+        else if(meta.type==='video'){ const v=document.createElement('video'); v.controls=true; v.src=url; box.appendChild(v); }
+        else if(meta.type==='audio'){ const a=document.createElement('audio'); a.controls=true; a.src=url; box.appendChild(a); }
+        else if(meta.type==='pdf'){ const f=document.createElement('iframe'); f.src=url; box.appendChild(f); }
+        else if(meta.type==='text'){
+          const ta=document.createElement('textarea'); ta.value=meta.textContent || ''; ta.addEventListener('change',async()=>{
+            const nb=new Blob([ta.value],{type:meta.mimeType||'text/plain'}); await blobStore.setItem(meta.id,nb); meta.textContent=ta.value; meta.size=nb.size; meta.updatedAt=new Date().toISOString(); await metaStore.setItem(meta.id,meta); toast('파일 내용을 저장했습니다.','success');
+          }); box.appendChild(ta);
+        } else { box.innerHTML='<div style="line-height:1.6">📦 '+escHtml(meta.name)+'<br>형식: '+escHtml(meta.mimeType||'알 수 없음')+'<br>이 파일은 원본 바이트 그대로 앱 내부에 영구 보관됩니다. 미리보기가 지원되지 않는 형식은 다운로드/외부 앱으로 열 수 있습니다.</div>'; }
+        box.dataset.url=url;
       }
-      async function openUniversalFileVault() {
-        const overlay = document.createElement("div");
-        overlay.className = "modal-overlay";
-        overlay.innerHTML = `<div class="modal" style="max-width:920px;width:94vw"><div class="modal-header"><div class="modal-title">📁 앱 내부 파일 보관함</div><button class="modal-close" id="ufv-close">${iconSvg("X", 20)}</button></div><div class="universal-file-vault"><div class="ufv-toolbar"><button class="auth-btn primary" id="ufv-add">＋ 파일 가져오기</button><button class="auth-btn outline" id="ufv-create">＋ 새 텍스트 파일</button><button class="auth-btn outline" id="ufv-refresh">새로고침</button><input id="ufv-input" type="file" multiple style="display:none"><input id="ufv-replace-input" type="file" style="display:none"></div><div class="form-hint">📦 업로드한 파일은 원본 그대로 앱 전용 영구 저장소에 <b>앱 내부 내장 파일</b>로 보관합니다. 재실행·오프라인에서도 유지되며 GPT Builder와 채팅에서 다시 선택할 수 있습니다.</div><div class="ufv-list" id="ufv-list"></div><div class="ufv-preview" id="ufv-preview">파일을 선택하면 미리보기/편집이 표시됩니다.</div></div></div>`;
+      async function openUniversalFileVault(){
+        const overlay=document.createElement('div'); overlay.className='modal-overlay';
+        overlay.innerHTML=`<div class="modal" style="max-width:920px;width:94vw"><div class="modal-header"><div class="modal-title">📁 앱 내부 파일 보관함</div><button class="modal-close" id="ufv-close">${iconSvg('X',20)}</button></div><div class="universal-file-vault"><div class="ufv-toolbar"><button class="auth-btn primary" id="ufv-add">＋ 파일 가져오기</button><button class="auth-btn outline" id="ufv-create">＋ 새 텍스트 파일</button><button class="auth-btn outline" id="ufv-refresh">새로고침</button><input id="ufv-input" type="file" multiple style="display:none"></div><div class="form-hint">📦 업로드한 파일은 원본 그대로 앱 전용 영구 저장소에 <b>앱 내부 내장 파일</b>로 보관합니다. 재실행·오프라인에서도 유지되며 GPT Builder와 채팅에서 다시 선택할 수 있습니다.</div><div class="ufv-list" id="ufv-list"></div><div class="ufv-preview" id="ufv-preview">파일을 선택하면 미리보기/편집이 표시됩니다.</div></div></div>`;
         document.body.appendChild(overlay);
-        const close = () => {
-          const u = document.getElementById("ufv-preview")?.dataset.url;
-          if (u) URL.revokeObjectURL(u);
-          overlay.remove();
-        };
-        overlay.querySelector("#ufv-close").onclick = close;
-        const renderList = async () => {
-          const list = overlay.querySelector("#ufv-list");
-          const files = await listAllLocalFiles();
-          list.innerHTML = files.length
-            ? files
-                .map(
-                  (f) =>
-                    `<div class="ufv-item"><div class="ufv-name">${escHtml(f.name)} <span class="form-hint">· ${fmtSize(f.size || 0)} · ${escHtml(f.type || "binary")}</span></div><div class="ufv-actions"><button class="auth-btn outline ufv-view" data-id="${escHtml(f.id)}">보기</button><button class="auth-btn outline ufv-download" data-id="${escHtml(f.id)}">저장</button><button class="auth-btn outline ufv-replace" data-id="${escHtml(f.id)}">갱신</button><button class="ufv-delete" data-id="${escHtml(f.id)}" style="border:0;background:none;color:#f87171">삭제</button></div></div>`,
-                )
-                .join("")
-            : '<div class="form-hint">앱 내부에 저장된 파일이 없습니다.</div>';
-        };
+        const close=()=>{ const u=document.getElementById('ufv-preview')?.dataset.url; if(u) URL.revokeObjectURL(u); overlay.remove(); };
+        overlay.querySelector('#ufv-close').onclick=close;
+        const renderList=async()=>{ const list=overlay.querySelector('#ufv-list'); const files=await listAllLocalFiles(); list.innerHTML=files.length?files.map(f=>`<div class="ufv-item"><div class="ufv-name">${escHtml(f.name)} <span class="form-hint">· ${fmtSize(f.size||0)} · ${escHtml(f.type||'binary')}</span></div><div class="ufv-actions"><button class="auth-btn outline ufv-view" data-id="${escHtml(f.id)}">보기</button><button class="auth-btn outline ufv-download" data-id="${escHtml(f.id)}">저장</button><button class="ufv-delete" data-id="${escHtml(f.id)}" style="border:0;background:none;color:#f87171">삭제</button></div></div>`).join(''):'<div class="form-hint">앱 내부에 저장된 파일이 없습니다.</div>'; };
         await renderList();
-        overlay.querySelector("#ufv-add").onclick = () => overlay.querySelector("#ufv-input").click();
-        overlay.querySelector("#ufv-input").onchange = async (e) => {
-          const fs = [...(e.target.files || [])];
-          for (const f of fs) await storeFileLF(f, { vault: true });
-          e.target.value = "";
-          await renderList();
-          toast(`${fs.length}개 파일을 앱에 영구 저장했습니다.`, "success");
-        };
-        overlay.querySelector("#ufv-create").onclick = async () => {
-          const name = prompt("새 파일 이름", "새파일.txt");
-          if (!name) return;
-          const text = prompt("파일 내용을 입력하세요", "");
-          const f = new File([text || ""], name, { type: "text/plain" });
-          await storeFileLF(f, { vault: true });
-          await renderList();
-        };
-        overlay.querySelector("#ufv-refresh").onclick = renderList;
-        let replacingId = null;
-        const replaceInput = overlay.querySelector("#ufv-replace-input");
-        overlay.querySelector("#ufv-list").onclick = async (e) => {
-          const b = e.target.closest("button");
-          if (!b) return;
-          const meta = await getFileMeta(b.dataset.id);
-          if (!meta) return;
-          if (b.classList.contains("ufv-view")) universalFilePreview(meta, await getFileBlob(meta.id));
-          if (b.classList.contains("ufv-download")) {
-            const blob = await getFileBlob(meta.id);
-            if (blob) {
-              const a = document.createElement("a");
-              a.href = URL.createObjectURL(blob);
-              a.download = meta.name;
-              a.click();
-              setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-            }
-          }
-          if (b.classList.contains("ufv-replace")) {
-            replacingId = meta.id;
-            replaceInput.click();
-          }
-          if (b.classList.contains("ufv-delete")) {
-            if (confirm(`'${meta.name}'을 삭제할까요?`)) {
-              await deleteLocalFileEverywhere(meta.id);
-              await renderList();
-            }
-          }
-        };
-        replaceInput.onchange = async (e) => {
-          const file = e.target.files?.[0];
-          if (!file || !replacingId) return;
-          try {
-            await replaceLocalFileLF(replacingId, file);
-            await renderList();
-            toast("저장 파일을 갱신했습니다.", "success");
-          } catch (error) {
-            toast(`파일 갱신 실패: ${error.message}`, "error");
-          } finally {
-            replacingId = null;
-            e.target.value = "";
-          }
-        };
+        overlay.querySelector('#ufv-add').onclick=()=>overlay.querySelector('#ufv-input').click();
+        overlay.querySelector('#ufv-input').onchange=async e=>{ const fs=[...(e.target.files||[])]; for(const f of fs) await storeFileLF(f,{vault:true}); e.target.value=''; await renderList(); toast(`${fs.length}개 파일을 앱에 영구 저장했습니다.`,'success'); };
+        overlay.querySelector('#ufv-create').onclick=async()=>{ const name=prompt('새 파일 이름','새파일.txt'); if(!name) return; const text=prompt('파일 내용을 입력하세요',''); const f=new File([text||''],name,{type:'text/plain'}); await storeFileLF(f,{vault:true}); await renderList(); };
+        overlay.querySelector('#ufv-refresh').onclick=renderList;
+        overlay.querySelector('#ufv-list').onclick=async e=>{ const b=e.target.closest('button'); if(!b) return; const meta=await getFileMeta(b.dataset.id); if(!meta) return; if(b.classList.contains('ufv-view')) universalFilePreview(meta,await getFileBlob(meta.id)); if(b.classList.contains('ufv-download')){ const blob=await getFileBlob(meta.id); if(blob){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=meta.name; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000); } } if(b.classList.contains('ufv-delete')){ if(confirm(`'${meta.name}'을 삭제할까요?`)){ await deleteLocalFileEverywhere(meta.id); await renderList(); } } };
       }
-      document.getElementById("file-vault-btn")?.addEventListener("click", openUniversalFileVault);
 
       // ═══════════════════════════════════════════════════════════════
       // 💬  CHAT
@@ -3137,23 +2749,11 @@
                 }
               }
             } else if (meta.type === "text") {
-              attachments.push({
-                name: file.name,
-                mimeType: file.type,
-                type: "text",
-                textContent: meta.textContent,
-                localId: meta.id,
-              });
+              attachments.push({ name: file.name, mimeType: file.type, type: "text", textContent: meta.textContent, localId: meta.id });
             } else {
               // 모든 파일은 먼저 기기 IndexedDB에 영구 보관합니다.
               // AI에는 파일 종류/크기/로컬 ID를 전달하고, 지원되는 경우 별도 추출기가 내용을 읽습니다.
-              attachments.push({
-                name: file.name,
-                mimeType: file.type || "application/octet-stream",
-                type: meta.type,
-                size: file.size,
-                localId: meta.id,
-              });
+              attachments.push({ name: file.name, mimeType: file.type || "application/octet-stream", type: meta.type, size: file.size, localId: meta.id });
             }
           } catch (e) {
             console.error(e);
@@ -3229,13 +2829,6 @@
             instructions = cv.instructions;
           }
         }
-
-        // 온라인 API와 온디바이스 GGUF가 같은 언어 정책을 따르도록 시스템 지침에 적용합니다.
-        const koreanLanguagePolicy =
-          "항상 자연스러운 한국어로 답변하세요. 사용자가 외국어로 입력하면 먼저 그 뜻을 한국어로 옮긴 뒤 답하세요. 번역, 인용, 코드 등 원문 보존이 필요한 경우에만 외국어를 함께 표시하세요. 상황에 맞게 친근하고 창의적으로 설명하고 가벼운 유머를 사용할 수 있습니다.";
-        sysPrompt = [sysPrompt, koreanLanguagePolicy]
-          .filter((value) => typeof value === "string" && value.trim())
-          .join("\n\n");
 
         // Create conversation if needed
         if (!convId) {
@@ -3325,11 +2918,7 @@
 
         // 오프라인/API 장애 대비: 현재 GPT에 연결된 GGUF → 앱 저장 GGUF 순으로 자동 폴백합니다.
         if (!S.isOnline && S.ggufAutoFallback && !S.localModel?.ready) {
-          try {
-            await ensureLocalGGUFForFallback(S.currentGPT?.local_gguf_model_id || "");
-          } catch (e) {
-            console.warn("offline GGUF fallback 준비 실패:", e);
-          }
+          try { await ensureLocalGGUFForFallback(S.currentGPT?.local_gguf_model_id || ""); } catch (e) { console.warn("offline GGUF fallback 준비 실패:", e); }
         }
         if (!S.isOnline && S.ggufAutoFallback && !S.localModel?.ready) {
           setState({ isStreaming: false, streamingMsg: "" });
@@ -3341,11 +2930,6 @@
         if (S.localModel?.ready && window.LocalGGUF) {
           try {
             const localMessages = [];
-            localMessages.push({
-              role: "system",
-              content:
-                "앱에 연결된 GGUF 로컬 응답 도우미다. 항상 자연스러운 한국어로 답하고, 외국어 입력은 그 뜻을 한국어로 옮긴 뒤 응답한다. 사용자가 저장한 시스템 프롬프트와 지침, LocalForage에 보관된 업로드 문서의 관련 내용을 반영한다. 친근하고 창의적으로 설명하며 상황에 맞는 가벼운 유머를 사용할 수 있다. 이미지 원본을 직접 분석할 수 없는 모델이면 그 한계를 분명히 알린다.",
-            });
             if (sysPrompt) localMessages.push({ role: "system", content: sysPrompt });
             if (instructions) localMessages.push({ role: "system", content: instructions });
             localMessages.push(...currentMsgs.map((message) => ({ role: message.role, content: message.content })));
@@ -3353,11 +2937,7 @@
             const fileContext = await buildLocalFileContext(chatAttachments, S.currentGPTFiles, currentMsgs);
             if (fileContext && localMessages.length) localMessages[localMessages.length - 1].content += fileContext;
             if (chatAttachments.some((attachment) => attachment.type === "image")) {
-              toast(
-                "현재 로컬 텍스트 모델은 이미지 입력을 분석하지 않습니다. 이미지 없이 텍스트로 응답합니다.",
-                "info",
-                4500,
-              );
+              toast("현재 로컬 텍스트 모델은 이미지 입력을 분석하지 않습니다. 이미지 없이 텍스트로 응답합니다.", "info", 4500);
             }
 
             const full = await window.LocalGGUF.generate(localMessages, {
@@ -3467,8 +3047,7 @@
           console.error("sendMessage API error:", err);
           // API 실패/타임아웃/서버 오류를 로컬 GGUF로 자동 대체합니다.
           try {
-            if (!S.localModel?.ready && (S.ggufAutoFallback || S.currentGPT?.local_gguf_model_id))
-              await ensureLocalGGUFForFallback(S.currentGPT?.local_gguf_model_id || "");
+            if (!S.localModel?.ready && (S.ggufAutoFallback || S.currentGPT?.local_gguf_model_id)) await ensureLocalGGUFForFallback(S.currentGPT?.local_gguf_model_id || "");
             if (S.localModel?.ready && window.LocalGGUF) {
               const fallbackMessages = [];
               if (sysPrompt) fallbackMessages.push({ role: "system", content: sysPrompt });
@@ -3560,11 +3139,7 @@
           toast(editing ? "커스텀 GPT를 이 기기에 수정했습니다." : "커스텀 GPT를 이 기기에 생성했습니다.", "success");
           return true;
         } catch (error) {
-          toast(
-            `GPT를 기기에 저장하지 못했습니다: ${error instanceof Error ? error.message : "알 수 없는 오류"}`,
-            "error",
-            6000,
-          );
+          toast(`GPT를 기기에 저장하지 못했습니다: ${error instanceof Error ? error.message : "알 수 없는 오류"}`, "error", 6000);
           return false;
         }
       }
@@ -3584,11 +3159,8 @@
       async function startGPTChat(gpt) {
         const files = await loadGPTFiles(gpt.id);
         if (gpt.local_gguf_model_id && !S.localModel?.ready) {
-          try {
-            await ensureLocalGGUFForFallback(gpt.local_gguf_model_id);
-          } catch (error) {
-            toast("연결된 GGUF 모델을 자동 로드하지 못했습니다. 설정에서 다시 불러오세요.", "error", 5000);
-          }
+          try { await ensureLocalGGUFForFallback(gpt.local_gguf_model_id); }
+          catch (error) { toast("연결된 GGUF 모델을 자동 로드하지 못했습니다. 설정에서 다시 불러오세요.", "error", 5000); }
         }
         const now = new Date().toISOString();
         const conversation = {
@@ -3601,13 +3173,7 @@
           created_at: now,
           updated_at: now,
         };
-        setState({
-          currentGPT: gpt,
-          currentGPTFiles: files,
-          conversations: [conversation, ...S.conversations],
-          currentConvId: conversation.id,
-          messages: [],
-        });
+        setState({ currentGPT: gpt, currentGPTFiles: files, conversations: [conversation, ...S.conversations], currentConvId: conversation.id, messages: [] });
         await cacheConv(conversation).catch(() => {});
         toast(`${gpt.name}과(와) 로컬 대화를 시작합니다.`, "success");
       }
@@ -3854,8 +3420,7 @@
 
       async function saveProfileAvatar(file) {
         if (!file?.type?.startsWith("image/")) throw new Error("프로필 이미지는 이미지 파일만 사용할 수 있습니다.");
-        if (!file.size || file.size > PROFILE_IMAGE_MAX_BYTES)
-          throw new Error("프로필 이미지는 5MB 이하만 사용할 수 있습니다.");
+        if (!file.size || file.size > PROFILE_IMAGE_MAX_BYTES) throw new Error("프로필 이미지는 5MB 이하만 사용할 수 있습니다.");
         const oldAvatarId = S.user?.avatarFileId;
         const meta = await storeFileLF(file, { profileId: S.user?.id, role: "profile-avatar" });
         await queueSync("profileFile", { ...meta, role: "profile-avatar" });
@@ -3878,18 +3443,10 @@
           if (total + file.size > PROFILE_DOCUMENT_TOTAL_MAX_BYTES) break;
           const meta = await storeFileLF(file, { profileId: S.user?.id, role: "profile-document" });
           await queueSync("profileFile", { ...meta, role: "profile-document" });
-          accepted.push({
-            id: meta.id,
-            name: meta.name,
-            mimeType: meta.mimeType,
-            size: meta.size,
-            type: meta.type,
-            createdAt: meta.createdAt,
-          });
+          accepted.push({ id: meta.id, name: meta.name, mimeType: meta.mimeType, size: meta.size, type: meta.type, createdAt: meta.createdAt });
           total += file.size;
         }
-        if (!accepted.length && files?.length)
-          throw new Error("문서는 파일당 10MB, 총 25MB, 최대 10개까지 저장할 수 있습니다.");
+        if (!accepted.length && files?.length) throw new Error("문서는 파일당 10MB, 총 25MB, 최대 10개까지 저장할 수 있습니다.");
         return [...existing, ...accepted];
       }
 
@@ -3944,9 +3501,7 @@
         const close = () => closeModalById("profile-modal");
         overlay.querySelector("#profile-close")?.addEventListener("click", close);
         overlay.querySelector("#profile-cancel")?.addEventListener("click", close);
-        overlay.addEventListener("click", (event) => {
-          if (event.target === overlay) close();
-        });
+        overlay.addEventListener("click", (event) => { if (event.target === overlay) close(); });
         overlay.querySelectorAll(".profile-doc-remove").forEach((button) => {
           button.addEventListener("click", async () => {
             try {
@@ -3981,9 +3536,7 @@
           saveButton.disabled = true;
           try {
             const avatarChanges = avatarFile ? await saveProfileAvatar(avatarFile) : {};
-            const documents = documentFiles?.length
-              ? await addProfileDocuments(documentFiles)
-              : await getProfileDocuments();
+            const documents = documentFiles?.length ? await addProfileDocuments(documentFiles) : await getProfileDocuments();
             if (googleEmail && !googleEmail.includes("@")) throw new Error("Google 계정 이메일을 확인하세요.");
             if (googlePassword && googlePassword.length < 4) throw new Error("비밀번호는 4자 이상이어야 합니다.");
             const saved = await saveDeviceProfile({
@@ -4034,9 +3587,7 @@
         document.body.appendChild(overlay);
         const close = () => closeModalById("account-modal");
         overlay.querySelector("#account-close")?.addEventListener("click", close);
-        overlay.addEventListener("click", (event) => {
-          if (event.target === overlay) close();
-        });
+        overlay.addEventListener("click", (event) => { if (event.target === overlay) close(); });
         const status = overlay.querySelector("#account-status");
         const prepareClient = async () => {
           const url = overlay.querySelector("#account-url").value;
@@ -4056,9 +3607,7 @@
             if (!localEmail || !localEmail.includes("@")) throw new Error("Google 계정을 입력하세요.");
             if (localPassword.length < 4) throw new Error("비밀번호를 4자 이상 입력하세요.");
             // 비밀번호 원문은 저장하지 않고 입력 검증에만 사용합니다.
-            const localId = `local-google-${btoa(unescape(encodeURIComponent(localEmail)))
-              .replace(/[^a-zA-Z0-9]/g, "")
-              .slice(0, 24)}-${crypto.randomUUID?.() || Date.now()}`;
+            const localId = `local-google-${btoa(unescape(encodeURIComponent(localEmail))).replace(/[^a-zA-Z0-9]/g, "").slice(0, 24)}-${crypto.randomUUID?.() || Date.now()}`;
             const local = await saveDeviceProfile({
               ...(S.user || {}),
               id: S.user?.localGoogleAccount && S.user?.email === localEmail ? S.user.id : localId,
@@ -4068,11 +3617,7 @@
               localGoogleAccount: true,
               localPasswordConfigured: true,
             });
-            setState({
-              user: local,
-              account: { connected: true, provider: "google-local" },
-              syncStatus: "기기 내 Google 계정 모드",
-            });
+            setState({ user: local, account: { connected: true, provider: "google-local" }, syncStatus: "기기 내 Google 계정 모드" });
             await loadUserData();
             status.textContent = "Google 계정 모드로 연결했습니다. 모든 데이터는 이 기기 내부에만 저장됩니다.";
             toast("Google 계정 모드가 켜졌습니다. 데이터는 기기에 저장됩니다.", "success", 5000);
@@ -4101,19 +3646,14 @@
             const email = overlay.querySelector("#account-email").value.trim();
             const password = overlay.querySelector("#account-password").value;
             if (!email || password.length < 6) throw new Error("유효한 이메일과 6자 이상 비밀번호를 입력하세요.");
-            const { data, error } = await client.auth.signUp({
-              email,
-              password,
-              options: { data: { username: S.user?.username || "사용자" }, emailRedirectTo: window.location.href },
-            });
+            const { data, error } = await client.auth.signUp({ email, password, options: { data: { username: S.user?.username || "사용자" }, emailRedirectTo: window.location.href } });
             if (error) throw error;
             if (data.session) {
               await refreshCloudAccount();
               toast("회원가입과 계정 연결이 완료되었습니다.", "success");
               close();
             } else {
-              status.textContent =
-                "확인 이메일을 보냈습니다. 메일의 링크를 연 뒤 이 페이지로 돌아오면 자동 연결됩니다.";
+              status.textContent = "확인 이메일을 보냈습니다. 메일의 링크를 연 뒤 이 페이지로 돌아오면 자동 연결됩니다.";
             }
           } catch (error) {
             status.textContent = error instanceof Error ? error.message : "회원가입에 실패했습니다.";
@@ -4140,12 +3680,7 @@
           console.warn("계정 연결 해제 실패:", error);
         }
         const local = await saveDeviceProfile({ accountId: "", email: "", isAnonymous: true });
-        setState({
-          user: local,
-          account: { connected: false, provider: "" },
-          dropdownOpen: false,
-          syncStatus: "기기 전용 모드",
-        });
+        setState({ user: local, account: { connected: false, provider: "" }, dropdownOpen: false, syncStatus: "기기 전용 모드" });
         toast("계정 연결만 해제했습니다. 이 기기의 대화와 프로필은 그대로 유지됩니다.", "info", 5000);
       }
 
@@ -4362,17 +3897,13 @@
       }
 
       // 사이드바 부분 렌더로 개별 버튼 리스너가 교체되어도 생성 동작을 보장합니다.
-      document.addEventListener(
-        "click",
-        (event) => {
-          const target = event.target instanceof Element ? event.target.closest("#btn-create-gpt") : null;
-          if (!target) return;
-          event.preventDefault();
-          event.stopPropagation();
-          openGPTBuilder(null);
-        },
-        true,
-      );
+      document.addEventListener("click", (event) => {
+        const target = event.target instanceof Element ? event.target.closest("#btn-create-gpt") : null;
+        if (!target) return;
+        event.preventDefault();
+        event.stopPropagation();
+        openGPTBuilder(null);
+      }, true);
 
       // Messages render (incremental append)
       const _renderedMsgIds = new Set();
@@ -4532,9 +4063,7 @@
 
       async function getSavedGGUFModels() {
         const models = [];
-        await ggufModelStore.iterate((model) => {
-          if (model?.id) models.push(model);
-        });
+        await ggufModelStore.iterate((model) => { if (model?.id) models.push(model); });
         return models.sort((a, b) => new Date(b.updated_at || b.created_at) - new Date(a.updated_at || a.created_at));
       }
 
@@ -4548,21 +4077,13 @@
           throw new Error("빈 파일 또는 2GB를 초과하는 GGUF 파일은 브라우저에 저장할 수 없습니다.");
         }
         const header = new Uint8Array(await sorted[0].slice(0, 4).arrayBuffer());
-        if (
-          header.length !== 4 ||
-          header[0] !== 0x47 ||
-          header[1] !== 0x47 ||
-          header[2] !== 0x55 ||
-          header[3] !== 0x46
-        ) {
+        if (header.length !== 4 || header[0] !== 0x47 || header[1] !== 0x47 || header[2] !== 0x55 || header[3] !== 0x46) {
           throw new Error("선택한 첫 파일이 유효한 GGUF 헤더를 포함하지 않습니다.");
         }
         const totalBytes = sorted.reduce((sum, file) => sum + file.size, 0);
         const estimate = await navigator.storage?.estimate?.().catch(() => null);
         if (estimate?.quota && estimate.usage + totalBytes > estimate.quota * 0.9) {
-          throw new Error(
-            `기기 저장 공간이 부족합니다. 현재 브라우저에 약 ${formatModelSize(Math.max(0, estimate.quota - estimate.usage))}만 남아 있습니다.`,
-          );
+          throw new Error(`기기 저장 공간이 부족합니다. 현재 브라우저에 약 ${formatModelSize(Math.max(0, estimate.quota - estimate.usage))}만 남아 있습니다.`);
         }
         return { sorted, totalBytes };
       }
@@ -4577,28 +4098,9 @@
             const file = sorted[index];
             const key = `${id}:${index}`;
             await ggufModelFileStore.setItem(key, file.slice(0, file.size, file.type || "application/octet-stream"));
-            parts.push({
-              key,
-              name: file.name,
-              size: file.size,
-              type: file.type || "application/octet-stream",
-              lastModified: file.lastModified || Date.now(),
-            });
+            parts.push({ key, name: file.name, size: file.size, type: file.type || "application/octet-stream", lastModified: file.lastModified || Date.now() });
           }
-          const model = {
-            id,
-            name: sorted[0].name,
-            totalBytes,
-            fileCount: sorted.length,
-            parts,
-            created_at: now,
-            updated_at: now,
-            storage: "indexeddb",
-            category: "user-imported",
-            source: "device-file-picker",
-            persistent: true,
-            version: 1,
-          };
+          const model = { id, name: sorted[0].name, totalBytes, fileCount: sorted.length, parts, created_at: now, updated_at: now, storage: "indexeddb", category: "user-imported", source: "device-file-picker", persistent: true, version: 1 };
           await ggufModelStore.setItem(id, model);
           // 가능한 브라우저에서는 저장소가 자동 정리되지 않도록 지속 저장을 요청합니다.
           await navigator.storage?.persist?.().catch(() => false);
@@ -4606,9 +4108,7 @@
         } catch (error) {
           for (const part of parts) await ggufModelFileStore.removeItem(part.key).catch(() => {});
           await ggufModelStore.removeItem(id).catch(() => {});
-          throw new Error(
-            `GGUF 파일을 기기에 저장하지 못했습니다: ${error instanceof Error ? error.message : "저장 공간 또는 브라우저 오류"}`,
-          );
+          throw new Error(`GGUF 파일을 기기에 저장하지 못했습니다: ${error instanceof Error ? error.message : "저장 공간 또는 브라우저 오류"}`);
         }
       }
 
@@ -4618,12 +4118,7 @@
         for (const part of model.parts) {
           const blob = await ggufModelFileStore.getItem(part.key);
           if (!blob) throw new Error(`저장된 모델 조각을 찾지 못했습니다: ${part.name}`);
-          files.push(
-            new File([blob], part.name, {
-              type: part.type || "application/octet-stream",
-              lastModified: part.lastModified || Date.now(),
-            }),
-          );
+          files.push(new File([blob], part.name, { type: part.type || "application/octet-stream", lastModified: part.lastModified || Date.now() }));
         }
         return files;
       }
@@ -4659,24 +4154,12 @@
           host.appendChild(badge);
         }
         const model = S.localModel?.modelName || "저장 GGUF";
-        badge.textContent = S.localModel?.ready
-          ? `🤖 로컬 GGUF 응답 엔진: ${model}`
-          : S.ggufAutoFallback
-            ? "☁️ API 우선 · API 장애/오프라인 시 저장 GGUF 자동 전환"
-            : "☁️ API 모드";
+        badge.textContent = S.localModel?.ready ? `🤖 로컬 GGUF 응답 엔진: ${model}` : (S.ggufAutoFallback ? "☁️ API 우선 · API 장애/오프라인 시 저장 GGUF 자동 전환" : "☁️ API 모드");
       }
 
       async function ensureLocalGGUFForFallback(preferredModelId = "") {
         if (!window.LocalGGUF) throw new Error("로컬 GGUF 런타임이 아직 준비되지 않았습니다. 잠시 후 다시 시도하세요.");
         if (S.localModel?.ready) return true;
-        if (window.LocalGGUF.isBundled) {
-          const status = await window.LocalGGUF.load([], {
-            contextLength: Number(localStorage.getItem("gfd-gguf-context") || 1024),
-            useGpu: false,
-          });
-          setState({ localModel: { ...status, savedModelId: "bundled-kogpt2" } });
-          return true;
-        }
         const savedModels = await getSavedGGUFModels();
         if (!savedModels.length) return false;
         const target = savedModels.find((m) => m.id === preferredModelId) || savedModels[0];
@@ -4693,37 +4176,17 @@
         const chunks = [];
         const add = (name, text, limit = 12000) => {
           if (!text) return;
-          const clean = String(text)
-            .replace(/\u0000/g, "")
-            .trim();
+          const clean = String(text).replace(/\u0000/g, "").trim();
           if (clean) chunks.push(`\n\n[파일: ${name}]\n${clean.slice(0, limit)}`);
         };
-        // 로컬 GGUF에서도 저장소를 기준으로 최신 첨부 내용과 GPT 파일을 다시 읽습니다.
-        await Promise.all([blobStore.ready(), metaStore.ready(), localGPTFileStore.ready()]);
         for (const a of attachments) {
-          if (a?.localId) {
-            const stored = await getFileMeta(a.localId).catch(() => null);
-            if (stored?.type === "text") add(stored.name || a.name, stored.textContent);
-            else if (stored?.type === "image")
-              add(
-                stored.name || a.name,
-                "이미지 원본은 LocalForage에 저장되어 있으나 현재 연결된 GGUF는 텍스트 전용 모델입니다.",
-                1000,
-              );
-          } else if (a?.type === "text") add(a.name, a.textContent);
+          if (a?.type === "text") add(a.name, a.textContent);
         }
         for (const f of gptFiles || []) {
-          const stored = f.local_file_id ? await getFileMeta(f.local_file_id).catch(() => null) : null;
-          add(
-            stored?.name || f.file_name || f.name || "GPT 자료",
-            stored?.textContent || f.file_content || f.textContent,
-            16000,
-          );
+          add(f.file_name || f.name || "GPT 자료", f.file_content || f.textContent, 16000);
         }
         // 과거 메시지에 연결된 로컬 파일도 다시 읽어 로컬 GGUF가 문맥을 잃지 않게 합니다.
-        const ids = [
-          ...new Set((historyMessages || []).flatMap((m) => (Array.isArray(m.localFileIds) ? m.localFileIds : []))),
-        ];
+        const ids = [...new Set((historyMessages || []).flatMap((m) => Array.isArray(m.localFileIds) ? m.localFileIds : []))];
         for (const id of ids) {
           const meta = await getFileMeta(id).catch(() => null);
           if (meta?.type === "text" && meta.textContent) add(meta.name, meta.textContent, 12000);
@@ -4763,7 +4226,7 @@
             </div>
             <div class="modal-body">
               <div class="form-hint" style="margin-bottom:14px;line-height:1.6;">
-                기본 모델은 APK에 포함된 KoGPT-2 GGUF이며, 모델 파일을 외부 서버로 보내지 않고 기기에서 실행합니다. 직접 선택한 GGUF는 브라우저 저장소에 보관됩니다. 분할 모델은 모든 조각을 함께 선택하세요.
+                선택한 GGUF 파일은 서버로 업로드되지 않고 이 브라우저의 LocalForage 저장소에 보관됩니다. 새로고침·오프라인 후에도 아래 목록에서 다시 불러올 수 있습니다. 분할 모델은 모든 조각을 함께 선택하세요.
               </div>
               <div class="form-group">
                 <label class="form-label">새 GGUF 파일 저장</label>
@@ -4795,7 +4258,6 @@
               </div>
               <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px;">
                 ${status.ready ? '<button class="auth-btn outline" id="local-model-unload" style="width:auto;margin:0;padding:10px 14px;">모델 해제</button>' : ""}
-                <button class="auth-btn outline" id="local-model-load-bundled" style="width:auto;margin:0;padding:10px 14px;">앱 내장 KoGPT-2 불러오기</button>
                 <button class="auth-btn primary" id="local-model-load" style="width:auto;margin:0;padding:10px 14px;">저장하고 불러오기</button>
               </div>
             </div>
@@ -4817,8 +4279,7 @@
           void setGGUFAutoFallback(event.target.checked);
         });
         const loadSavedFiles = async (files, savedModel, button) => {
-          if (!window.LocalGGUF)
-            throw new Error("로컬 모델 런타임을 아직 준비하지 못했습니다. 잠시 후 다시 시도하세요.");
+          if (!window.LocalGGUF) throw new Error("로컬 모델 런타임을 아직 준비하지 못했습니다. 잠시 후 다시 시도하세요.");
           if (button) button.disabled = true;
           setState({ localModel: { ...S.localModel, loading: true } });
           try {
@@ -4826,9 +4287,7 @@
             localStorage.setItem("gfd-gguf-gpu", getLoadOptions().useGpu ? "1" : "0");
             const modelStatus = await window.LocalGGUF.load(files, {
               ...getLoadOptions(),
-              onProgress: (message) => {
-                statusEl.textContent = message;
-              },
+              onProgress: (message) => { statusEl.textContent = message; },
             });
             setState({ localModel: { ...modelStatus, savedModelId: savedModel?.id || "" } });
             updateLocalModelHint();
@@ -4843,16 +4302,6 @@
             if (button) button.disabled = false;
           }
         };
-
-        overlay.querySelector("#local-model-load-bundled")?.addEventListener("click", async (event) => {
-          const button = event.currentTarget;
-          try {
-            statusEl.textContent = "앱 내장 KoGPT-2 GGUF를 기기에서 준비하고 있습니다…";
-            await loadSavedFiles([], { id: "bundled-kogpt2", name: "assembled-kogpt2-sexy-llama-f16.gguf" }, button);
-          } catch (error) {
-            statusEl.textContent = error instanceof Error ? error.message : "내장 GGUF 모델을 불러오지 못했습니다.";
-          }
-        });
 
         overlay.querySelector("#local-model-load")?.addEventListener("click", async () => {
           const input = overlay.querySelector("#local-model-files");
@@ -5000,31 +4449,16 @@
         const ggufSelect = document.getElementById("gf-gguf-model");
         if (ggufSelect) {
           const savedModels = await getSavedGGUFModels().catch(() => []);
-          ggufSelect.innerHTML =
-            `<option value="">선택 안 함 — API 우선 · 장애 시 자동 GGUF</option>` +
-            savedModels
-              .map(
-                (m) =>
-                  `<option value="${escHtml(m.id)}">${escHtml(m.name)} · ${formatModelSize(m.totalBytes)}</option>`,
-              )
-              .join("");
+          ggufSelect.innerHTML = `<option value="">선택 안 함 — API 우선 · 장애 시 자동 GGUF</option>` + savedModels.map((m) =>
+            `<option value="${escHtml(m.id)}">${escHtml(m.name)} · ${formatModelSize(m.totalBytes)}</option>`).join("");
           ggufSelect.value = editing?.local_gguf_model_id || "";
           const refreshGGUFSelect = async () => {
             const current = ggufSelect.value;
             const models = await getSavedGGUFModels().catch(() => []);
-            ggufSelect.innerHTML =
-              `<option value="">선택 안 함 — API 우선 · 장애 시 자동 GGUF</option>` +
-              models
-                .map(
-                  (m) =>
-                    `<option value="${escHtml(m.id)}">🤖 ${escHtml(m.name)} · ${formatModelSize(m.totalBytes)}</option>`,
-                )
-                .join("");
-            ggufSelect.value = models.some((m) => m.id === current) ? current : editing?.local_gguf_model_id || "";
+            ggufSelect.innerHTML = `<option value="">선택 안 함 — API 우선 · 장애 시 자동 GGUF</option>` + models.map((m) => `<option value="${escHtml(m.id)}">🤖 ${escHtml(m.name)} · ${formatModelSize(m.totalBytes)}</option>`).join("");
+            ggufSelect.value = (models.some((m) => m.id === current) ? current : (editing?.local_gguf_model_id || ""));
           };
-          document.getElementById("gf-refresh-gguf")?.addEventListener("click", () => {
-            void refreshGGUFSelect();
-          });
+          document.getElementById("gf-refresh-gguf")?.addEventListener("click", () => { void refreshGGUFSelect(); });
           document.getElementById("gf-open-gguf-manager")?.addEventListener("click", () => {
             closeBuilder().then(() => openLocalModelModal());
           });
@@ -5041,73 +4475,35 @@
 
         async function pickVaultFiles(ggufOnly = false) {
           const all = await listAllLocalFiles().catch(() => []);
-          const candidates = ggufOnly
-            ? all.filter((f) => /\.gguf$/i.test(f.name || "") || /gguf/i.test(f.type || ""))
-            : all;
-          if (!candidates.length) {
-            toast(ggufOnly ? "앱 내부에 저장된 GGUF가 없습니다." : "앱 내부 파일 보관함이 비어 있습니다.", "error");
-            return;
-          }
-          const labels = candidates.map((f, i) => `${i + 1}. ${f.name} (${fmtSize(f.size || 0)})`).join("\n");
-          const answer = prompt(
-            `GPT에 연결할 ${ggufOnly ? "GGUF 모델" : "파일"} 번호를 입력하세요. 여러 개는 쉼표로 구분합니다.\n\n${labels}`,
-            "1",
-          );
+          const candidates = ggufOnly ? all.filter(f => /\.gguf$/i.test(f.name || "") || /gguf/i.test(f.type || "")) : all;
+          if (!candidates.length) { toast(ggufOnly ? "앱 내부에 저장된 GGUF가 없습니다." : "앱 내부 파일 보관함이 비어 있습니다.", "error"); return; }
+          const labels = candidates.map((f,i) => `${i+1}. ${f.name} (${fmtSize(f.size||0)})`).join("\n");
+          const answer = prompt(`GPT에 연결할 ${ggufOnly ? "GGUF 모델" : "파일"} 번호를 입력하세요. 여러 개는 쉼표로 구분합니다.\n\n${labels}`, "1");
           if (!answer) return;
-          const indexes = [
-            ...new Set(
-              answer
-                .split(/[,\s]+/)
-                .map((x) => Number(x) - 1)
-                .filter((i) => i >= 0 && i < candidates.length),
-            ),
-          ];
+          const indexes = [...new Set(answer.split(/[,\s]+/).map(x => Number(x)-1).filter(i => i >= 0 && i < candidates.length))];
           for (const i of indexes) {
             const f = candidates[i];
             if (ggufOnly) {
               ggufSelect.value = f.id;
               const saved = await getSavedGGUFModels().catch(() => []);
-              if (!saved.some((m) => m.id === f.id)) {
-                const match = saved.find((m) => (m.name || "").toLowerCase() === (f.name || "").toLowerCase());
+              if (!saved.some(m => m.id === f.id)) {
+                const match = saved.find(m => (m.name||"").toLowerCase() === (f.name||"").toLowerCase());
                 if (match) ggufSelect.value = match.id;
               }
-            } else if (!gptModalFiles.some((x) => x.local_file_id === f.id)) {
-              gptModalFiles.push({
-                id: `vault-gpt-file-${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`,
-                custom_gpt_id: "",
-                file_name: f.name,
-                file_size: f.size || 0,
-                mime_type: f.type || "application/octet-stream",
-                file_content: f.textContent || "",
-                local_file_id: f.id,
-                created_at: f.createdAt || new Date().toISOString(),
-                isLocal: true,
-                fromVault: true,
-              });
+            } else if (!gptModalFiles.some(x => x.local_file_id === f.id)) {
+              gptModalFiles.push({ id:`vault-gpt-file-${crypto.randomUUID ? crypto.randomUUID() : Date.now()}`, custom_gpt_id:"", file_name:f.name, file_size:f.size||0, mime_type:f.type||"application/octet-stream", file_content:f.textContent||"", local_file_id:f.id, created_at:f.createdAt||new Date().toISOString(), isLocal:true, fromVault:true });
             }
           }
           renderGPTFileList();
           renderVaultSelected();
         }
         function renderVaultSelected() {
-          const el = document.getElementById("gf-vault-selected");
-          if (!el) return;
-          const vault = gptModalFiles.filter((f) => f.fromVault);
-          el.innerHTML = vault.length
-            ? vault
-                .map(
-                  (f) =>
-                    `<div class="file-list-item"><div class="file-list-name">📌 ${escHtml(f.file_name)}</div><span class="file-list-size">${fmtSize(f.file_size || 0)}</span></div>`,
-                )
-                .join("")
-            : '<div class="form-hint">연결된 보관함 파일이 없습니다.</div>';
+          const el=document.getElementById("gf-vault-selected"); if(!el) return;
+          const vault=gptModalFiles.filter(f=>f.fromVault);
+          el.innerHTML=vault.length ? vault.map(f=>`<div class="file-list-item"><div class="file-list-name">📌 ${escHtml(f.file_name)}</div><span class="file-list-size">${fmtSize(f.file_size||0)}</span></div>`).join("") : '<div class="form-hint">연결된 보관함 파일이 없습니다.</div>';
         }
-        document.getElementById("gf-pick-vault")?.addEventListener("click", () => {
-          void pickVaultFiles(false);
-        });
-        document.getElementById("gf-pick-vault-gguf")?.addEventListener("click", () => {
-          void pickVaultFiles(true);
-        });
+        document.getElementById("gf-pick-vault")?.addEventListener("click",()=>{ void pickVaultFiles(false); });
+        document.getElementById("gf-pick-vault-gguf")?.addEventListener("click",()=>{ void pickVaultFiles(true); });
         renderVaultSelected();
 
         const closeBuilder = async () => {
@@ -5115,12 +4511,8 @@
           overlay.classList.add("hidden");
           setState({ gptBuilderOpen: false, gptBuilderEditing: null });
         };
-        document.getElementById("modal-close").addEventListener("click", () => {
-          void closeBuilder();
-        });
-        document.getElementById("modal-cancel").addEventListener("click", () => {
-          void closeBuilder();
-        });
+        document.getElementById("modal-close").addEventListener("click", () => { void closeBuilder(); });
+        document.getElementById("modal-cancel").addEventListener("click", () => { void closeBuilder(); });
         overlay.addEventListener("click", (e) => {
           if (e.target === overlay) void closeBuilder();
         });
@@ -5253,10 +4645,8 @@
           let total = alreadySelected;
           for (const file of files) {
             try {
-              if (!file.size || file.size > 100 * 1024 * 1024)
-                throw new Error("파일당 100MB 이하만 전용 폴더 자료로 읽을 수 있습니다.");
-              if (total + file.size > 500 * 1024 * 1024)
-                throw new Error("전용 폴더 자료 총합은 500MB 이하만 읽을 수 있습니다.");
+              if (!file.size || file.size > 100 * 1024 * 1024) throw new Error("파일당 100MB 이하만 전용 폴더 자료로 읽을 수 있습니다.");
+              if (total + file.size > 500 * 1024 * 1024) throw new Error("전용 폴더 자료 총합은 500MB 이하만 읽을 수 있습니다.");
               const meta = await storeFileLF(file, { ownerId: S.user?.id, role: "custom-gpt-file" });
               gptModalFiles.push({
                 id: `pending-gpt-file-${crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`}`,
@@ -5333,11 +4723,7 @@
         document.getElementById("dd-sync")?.addEventListener("click", async () => {
           setState({ dropdownOpen: false });
           if (!S.account?.connected) {
-            toast(
-              "계정 연결 전에도 모든 데이터는 이 기기에 저장됩니다. 계정을 연결하면 다른 기기와 동기화할 수 있습니다.",
-              "info",
-              5000,
-            );
+            toast("계정 연결 전에도 모든 데이터는 이 기기에 저장됩니다. 계정을 연결하면 다른 기기와 동기화할 수 있습니다.", "info", 5000);
             return;
           }
           const ok = await flushSyncQueue();
@@ -5549,8 +4935,7 @@
         const native = window.GoldFireNative;
         const modal = document.createElement("div");
         modal.id = "vpn-settings-modal";
-        modal.style.cssText =
-          "position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px;";
+        modal.style.cssText = "position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px;";
         modal.innerHTML = `<div style="width:min(460px,100%);background:#202124;color:#fff;border:1px solid #555;border-radius:14px;padding:20px;box-shadow:0 20px 80px #000;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;"><strong>VPN 설정</strong><button id="vpn-close" style="background:none;border:0;color:#fff;font-size:22px;cursor:pointer;">×</button></div>
           <div id="vpn-status" style="font-size:13px;color:#bbb;margin-bottom:14px;">상태 확인 중…</div>
@@ -5573,35 +4958,31 @@
           return;
         }
 
-        const escapeHtml = (value) =>
-          String(value)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#39;");
+        const escapeHtml = value => String(value)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
 
         async function loadOvpnProfiles() {
           select.innerHTML = '<option value="">프로필 목록 읽는 중…</option>';
           try {
             const raw = await native.getOvpnList();
             const names = Array.isArray(raw)
-              ? raw.map((x) => (typeof x === "string" ? x : x?.name || x?.path || x?.file || ""))
+              ? raw.map(x => typeof x === "string" ? x : (x?.name || x?.path || x?.file || ""))
               : Object.keys(raw || {});
 
-            const profiles = [
-              ...new Set(
-                names.map((x) => String(x || "").trim()).filter((x) => String(x).toLowerCase().endsWith(".ovpn")),
-              ),
-            ].sort((a, b) =>
-              a.localeCompare(b, undefined, {
-                numeric: true,
-                sensitivity: "base",
-              }),
-            );
+            const profiles = [...new Set(names
+              .map(x => String(x || "").trim())
+              .filter(x => String(x).toLowerCase().endsWith(".ovpn"))
+            )].sort((a, b) => a.localeCompare(b, undefined, {
+              numeric: true,
+              sensitivity: "base"
+            }));
 
             select.innerHTML = profiles.length
-              ? profiles.map((name) => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")
+              ? profiles.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")
               : '<option value="">.ovpn 프로필 없음</option>';
 
             const state = await native.getVpnStatus();
@@ -5627,11 +5008,7 @@
         modal.querySelector("#vpn-connect").onclick = async () => {
           try {
             const profile = select.value;
-            if (
-              !String(profile || "")
-                .toLowerCase()
-                .endsWith(".ovpn")
-            ) {
+            if (!String(profile || "").toLowerCase().endsWith(".ovpn")) {
               status.textContent = "연결할 .ovpn 프로필을 선택하세요.";
               return;
             }
@@ -5748,17 +5125,13 @@
         bindBrowserOverlay();
         try {
           try {
-            await withTimeout(
-              Promise.all([
-                blobStore.ready(),
-                metaStore.ready(),
-                msgFileStore.ready(),
-                convStore.ready(),
-                msgStore.ready(),
-              ]),
-              2500,
-              undefined,
-            );
+            await withTimeout(Promise.all([
+              blobStore.ready(),
+              metaStore.ready(),
+              msgFileStore.ready(),
+              convStore.ready(),
+              msgStore.ready(),
+            ]), 2500, undefined);
           } catch (e) {
             console.warn("LocalForage init:", e);
           }
@@ -5773,36 +5146,21 @@
           if (S.loading) setState({ loading: false, view: S.user ? "chat" : "auth" });
           render();
           // 기존 버전에서 이미 저장된 파일도 v26 앱 내장 파일 인덱스로 자동 편입합니다.
-          async function migrateExistingFilesToEmbeddedIndex() {
-            try {
-              const existing = [];
-              await metaStore.iterate((v) => {
-                if (v?.id && (v.persistent || v.vault || v.local_file_id)) existing.push(v);
-              });
-              for (const m of existing) {
-                if (!m.embeddedInApp || m.storageScope !== "app-internal") {
-                  const next = { ...m, embeddedInApp: true, storageScope: "app-internal", vaultVersion: 1 };
-                  await metaStore.setItem(m.id, next);
-                  await embeddedFileIndexStore.setItem(m.id, {
-                    id: m.id,
-                    name: next.name,
-                    mimeType: next.mimeType,
-                    size: next.size,
-                    type: next.type,
-                    createdAt: next.createdAt,
-                    embeddedInApp: true,
-                    storageScope: "app-internal",
-                  });
-                }
-              }
-            } catch (e) {
-              console.warn("내장 파일 인덱스 마이그레이션 실패:", e);
+      async function migrateExistingFilesToEmbeddedIndex() {
+        try {
+          const existing = [];
+          await metaStore.iterate(v => { if (v?.id && (v.persistent || v.vault || v.local_file_id)) existing.push(v); });
+          for (const m of existing) {
+            if (!m.embeddedInApp || m.storageScope !== "app-internal") {
+              const next = { ...m, embeddedInApp: true, storageScope: "app-internal", vaultVersion: 1 };
+              await metaStore.setItem(m.id, next);
+              await embeddedFileIndexStore.setItem(m.id, { id:m.id, name:next.name, mimeType:next.mimeType, size:next.size, type:next.type, createdAt:next.createdAt, embeddedInApp:true, storageScope:"app-internal" });
             }
           }
-          try {
-            await migrateExistingFilesToEmbeddedIndex();
-          } catch {}
-          window.__bootReady = true;
+        } catch (e) { console.warn("내장 파일 인덱스 마이그레이션 실패:", e); }
+      }
+      try { await migrateExistingFilesToEmbeddedIndex(); } catch {}
+      window.__bootReady = true;
           clearTimeout(window.__bootWatchdog);
           document.getElementById("loading-screen").classList.add("hidden");
         }
@@ -5816,26 +5174,24 @@
         if (!window.LocalGGUF || !window.GoldFireNative?.isElectron) return;
         if (window.LocalGGUF.getStatus()?.ready) return;
         try {
-          const response = await fetch("/api/gguf/models", { cache: "no-store" });
+          const response = await fetch('/api/gguf/models', { cache: 'no-store' });
           if (!response.ok) return;
           const payload = await response.json();
           const model = Array.isArray(payload?.models) ? payload.models[0] : null;
           if (!model?.url) return;
           const status = await window.LocalGGUF.loadFromUrl(model.url, {
-            contextLength: Number(localStorage.getItem("gfd-gguf-context") || 2048),
-            useGpu: localStorage.getItem("gfd-gguf-gpu") !== "0",
-            onProgress: (message) => console.log("[GFD GGUF]", message),
+            contextLength: Number(localStorage.getItem('gfd-gguf-context') || 2048),
+            useGpu: localStorage.getItem('gfd-gguf-gpu') !== '0',
+            onProgress: (message) => console.log('[GFD GGUF]', message),
           });
           setState({ localModel: status });
           updateLocalModelHint();
-          toast(`Windows 내장 GGUF 모델 준비 완료: ${status.modelName || model.name}`, "success", 3500);
+          toast(`Windows 내장 GGUF 모델 준비 완료: ${status.modelName || model.name}`, 'success', 3500);
         } catch (error) {
-          console.warn("[GFD GGUF] bundled model auto-load skipped:", error);
+          console.warn('[GFD GGUF] bundled model auto-load skipped:', error);
         }
       }
-      setTimeout(() => {
-        void autoLoadBundledGGUFForWindows();
-      }, 1200);
+      setTimeout(() => { void autoLoadBundledGGUFForWindows(); }, 1200);
 
       // PWA Service Worker
       if ("serviceWorker" in navigator) {
