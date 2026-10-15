@@ -1,0 +1,106 @@
+{
+  "version": "1.30.0",
+  "file_input_priority": "direct_user_upload",
+  "models": {
+    "preferred": "gguf",
+    "also": [
+      "pytorch",
+      "safetensors",
+      "custom"
+    ],
+    "stages": [
+      "import",
+      "inspect",
+      "preserve",
+      "load_test",
+      "inference_test",
+      "approved_selection"
+    ],
+    "no_auto_download": true
+  },
+  "website": {
+    "kind": "ChatGPT-style chat UI",
+    "modes": [
+      "local_files",
+      "hosted",
+      "separate",
+      "hybrid",
+      "selective_transplant"
+    ],
+    "workflows": [
+      "preserve_original",
+      "repair_copy",
+      "integrate",
+      "test",
+      "rollback"
+    ],
+    "api_debug": [
+      "network",
+      "method",
+      "auth",
+      "CORS",
+      "timeout",
+      "SSE",
+      "model_backend"
+    ]
+  },
+  "prompt": {
+    "source": "custom/system_prompts/my_system_prompt.txt",
+    "require_approval_sha256": true,
+    "training_examples_include_prompt": true,
+    "runtime_injection_required": true,
+    "guaranteed_weight_imprint": false
+  },
+  "translation": {
+    "language_priority": [
+      "ko-KR",
+      "en-US"
+    ],
+    "learn_from_approved_pairs": true,
+    "offline_exact_match_available": true,
+    "general_engine_requires_training": true
+  },
+  "targets": {
+    "primary": [
+      "windows-x86_64-portable-exe",
+      "android-arm64-v8a-apk"
+    ],
+    "deferred": [
+      "linux",
+      "x86",
+      "arm32"
+    ]
+  },
+  "toolchains": [
+    "IntelliJ IDEA",
+    "Android Studio",
+    "Apktool",
+    "Apktool M",
+    "APKEditorPro",
+    "Java",
+    "Kotlin",
+    "Smali",
+    "JAR",
+    "EXE",
+    "BAT",
+    "CMD",
+    "PowerShell",
+    "Termux",
+    "Node.js",
+    "npm",
+    "pnpm",
+    "Electron",
+    "Cordova",
+    "Capacitor",
+    "Git",
+    "GitHub",
+    "GitLab",
+    "Python",
+    "HTML",
+    "JavaScript",
+    "Gradle"
+  ],
+  "non_destructive": true,
+  "do_not_run_untrusted_code": true,
+  "no_unapproved_network_or_paid_api": true
+}

@@ -1,0 +1,232 @@
+{
+  "version": "1.28.0",
+  "entries": [
+    {
+      "group": "ide",
+      "name": "IntelliJ IDEA",
+      "id": "ide",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "ide",
+      "name": "Android Studio",
+      "id": "ide",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "android",
+      "name": "Apktool",
+      "id": "apktool",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "android",
+      "name": "Apktool M",
+      "id": "apktoolm",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "android",
+      "name": "APKEditorPro",
+      "id": "apkeditorpro",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "android",
+      "name": "Android SDK",
+      "id": "sdk",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "android",
+      "name": "Gradle",
+      "id": "gradle",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "android",
+      "name": "ADB",
+      "id": "adb",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "languages",
+      "name": "Java",
+      "id": "java",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "languages",
+      "name": "Smali",
+      "id": "smali",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "languages",
+      "name": "JavaScript",
+      "id": "javascript",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "languages",
+      "name": "Python",
+      "id": "python",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "languages",
+      "name": "HTML",
+      "id": "html",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "runtimes",
+      "name": "Node.js",
+      "id": "node",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "runtimes",
+      "name": "JDK",
+      "id": "jdk",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "package_managers",
+      "name": "npm",
+      "id": "npm",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "package_managers",
+      "name": "pnpm",
+      "id": "pnpm",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "package_managers",
+      "name": "Yarn",
+      "id": "yarn",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "package_managers",
+      "name": "pip",
+      "id": "pip",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "frameworks",
+      "name": "Electron",
+      "id": "electron",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "frameworks",
+      "name": "Cordova",
+      "id": "cordova",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "frameworks",
+      "name": "Capacitor",
+      "id": "capacitor",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "frameworks",
+      "name": "Vite",
+      "id": "vite",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "vcs",
+      "name": "Git",
+      "id": "git",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "vcs",
+      "name": "GitHub",
+      "id": "github",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "vcs",
+      "name": "GitLab",
+      "id": "gitlab",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "artifacts",
+      "name": "JAR",
+      "id": "jar",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "artifacts",
+      "name": "EXE",
+      "id": "exe",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "artifacts",
+      "name": "APK",
+      "id": "apk",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "artifacts",
+      "name": "AAB",
+      "id": "aab",
+      "installed": null,
+      "user_selected": false
+    },
+    {
+      "group": "artifacts",
+      "name": "ZIP",
+      "id": "zip",
+      "installed": null,
+      "user_selected": false
+    }
+  ],
+  "primary_targets": [
+    "windows-x86_64",
+    "android-arm64"
+  ],
+  "deferred_targets": [
+    "linux-x86_64",
+    "windows-x86",
+    "android-arm32"
+  ],
+  "notes": "Catalog only; no third-party binaries, package caches or SDKs are included."
+}

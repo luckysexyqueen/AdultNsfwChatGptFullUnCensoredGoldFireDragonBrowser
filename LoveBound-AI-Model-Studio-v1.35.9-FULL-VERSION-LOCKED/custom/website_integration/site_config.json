@@ -1,0 +1,6 @@
+{
+  "backend_url": "http://127.0.0.1:8765/api/chat",
+  "model_id": null,
+  "approved_prompt_sha256": null,
+  "deployment": "local-only-mock"
+}

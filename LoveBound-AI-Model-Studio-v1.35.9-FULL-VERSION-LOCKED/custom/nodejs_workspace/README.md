@@ -1,0 +1,2 @@
+# Node.js workspace
+Store user-supplied website project originals in originals/, editable copies in working/, and versioned patches in proposals/ and verified_patches/. Lockfiles and package manifests belong in manifests/. Optional user-authorized distributable dependency archives go into approved_dependency_bundles/ (not preinstalled). Preserve reports and rollback snapshots. Run `python scripts/node_project_doctor.py --project /local/site --output /local/report.json` for read-only inspection.

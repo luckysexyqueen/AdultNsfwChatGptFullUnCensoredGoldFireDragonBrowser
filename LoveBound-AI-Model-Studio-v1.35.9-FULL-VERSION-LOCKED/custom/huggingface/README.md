@@ -1,0 +1,1 @@
+Upload-first Hugging Face Hub, Datasets and Spaces support. This package only inspects source/ZIP metadata and produces plans; it does not download, upload, authenticate, deploy or execute inference. Spaces GPU/CPU hosting and Inference Providers may incur costs. Review licenses and keep credentials out of archives.

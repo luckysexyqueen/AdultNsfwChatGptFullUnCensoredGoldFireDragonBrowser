@@ -1,0 +1,18 @@
+{
+  "version": "1.34.0",
+  "preferred_import": "direct_upload",
+  "providers": [
+    {"id":"github-pages","role":"static_host","supports_backend":false,"integration":["git_repository","build_artifacts","static_assets"]},
+    {"id":"cloudflare-pages","role":"static_host","supports_backend":false,"integration":["static_assets","git_repository"]},
+    {"id":"cloudflare-workers","role":"serverless_backend","supports_backend":true,"integration":["worker_source","routes","bindings_manifest"]},
+    {"id":"onspace-ai","role":"external_ai_builder","integration":["user_exported_zip","source_files"]},
+    {"id":"readdy-ai","role":"external_ai_builder","integration":["user_exported_zip","source_files"]},
+    {"id":"manus","role":"external_ai_builder","integration":["user_exported_zip","source_files"]},
+    {"id":"chatgpt","role":"assistant_and_plugin","integration":["user_uploaded_files","explicit_plugin_actions"]},
+    {"id":"codex","role":"coding_agent","integration":["git_diff","source_files","user_exported_zip"]},
+    {"id":"grok","role":"external_ai_service","integration":["user_exported_files","authorized_api_adapter"]}
+  ],
+  "deployment_rules": {"never_upload_secrets":true,"never_auto_deploy":true,"require_user_approval":true,"retain_originals":true,"github_pages_cannot_run_node_server":true,"native_gguf_requires_separate_runtime":true},
+  "browser_engines":["geckoview","chromium-webview","firefox-gecko","custom-webview"],
+  "environments":["windows","android","linux","offline","localhost","online","vm","custom"]
+}

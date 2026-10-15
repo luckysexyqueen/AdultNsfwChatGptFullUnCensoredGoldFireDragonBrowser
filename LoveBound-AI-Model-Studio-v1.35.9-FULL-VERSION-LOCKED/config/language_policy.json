@@ -1,0 +1,27 @@
+{
+  "primary_language": "ko-KR",
+  "secondary_language": "en-US",
+  "allowed_output_languages": [
+    "ko-KR",
+    "en-US"
+  ],
+  "other_languages_action": "translate_or_defer",
+  "default_translation_target": "ko-KR",
+  "optional_translation_target": "en-US",
+  "auto_download_models": false,
+  "translation_billing": "never",
+  "allow_paid_apis": false,
+  "free_provider_priority": [
+    "argos_offline",
+    "google_unofficial_free_web",
+    "papago_user_supplied_free_adapter"
+  ],
+  "translation_ambiguous": "defer",
+  "applies_to": [
+    "training_data",
+    "fine_tuning",
+    "model_evaluation",
+    "chat_input",
+    "chat_output"
+  ]
+}

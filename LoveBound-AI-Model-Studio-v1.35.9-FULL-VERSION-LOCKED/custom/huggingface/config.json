@@ -1,0 +1,45 @@
+{
+  "version": "1.35.0",
+  "provider": "huggingface",
+  "surfaces": [
+    "Hub model repositories",
+    "Datasets",
+    "Spaces",
+    "Inference Providers optional",
+    "Git/LFS"
+  ],
+  "input_preference": "direct_upload",
+  "formats": [
+    "gguf",
+    "safetensors",
+    "pytorch",
+    "custom"
+  ],
+  "checks": [
+    "model card and license",
+    "config.json and tokenizer assets",
+    "GGUF architecture and quantization",
+    "safetensors shard index",
+    "Git LFS pointer detection",
+    "Space README YAML and app entrypoint",
+    "requirements.txt and packages.txt",
+    "Dockerfile and SDK compatibility",
+    "secrets exclusion",
+    "backend inference compatibility",
+    "API authentication and CORS"
+  ],
+  "deploy": "explicit approval only",
+  "download": "explicit approval only",
+  "cost": "check provider and hardware fees before use",
+  "model_selection": "user_only",
+  "platforms": [
+    "Windows x86_64",
+    "Android arm64",
+    "Linux",
+    "offline",
+    "localhost",
+    "online",
+    "VM",
+    "custom browser GeckoView/Chromium WebView"
+  ]
+}

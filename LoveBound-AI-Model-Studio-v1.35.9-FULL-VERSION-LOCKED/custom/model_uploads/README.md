@@ -1,0 +1,2 @@
+# Direct-upload-first model intake
+GGUF is preferred. PyTorch (.pt/.pth), SafeTensors (.safetensors) and user-defined formats are inspection candidates, not automatically executable. Keep originals in `originals/` and copies in `staging/`. Store reports in `reports/`; never put credentials or raw private prompts into published site assets. `scripts/upload_diagnostics.py` is read-only and never loads model weights or makes network calls.

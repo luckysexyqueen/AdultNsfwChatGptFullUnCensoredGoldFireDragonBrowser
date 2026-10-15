@@ -1,0 +1,79 @@
+{
+  "version": "1.32.0",
+  "browser_targets": [
+    {
+      "name": "firefox-gecko",
+      "platforms": [
+        "windows",
+        "linux"
+      ],
+      "bridge": "webextension-or-local-service"
+    },
+    {
+      "name": "geckoview",
+      "platforms": [
+        "android"
+      ],
+      "bridge": "native-android-gecko"
+    },
+    {
+      "name": "chromium-chrome",
+      "platforms": [
+        "windows",
+        "linux",
+        "android"
+      ],
+      "bridge": "web-or-extension"
+    },
+    {
+      "name": "android-system-webview",
+      "platforms": [
+        "android"
+      ],
+      "bridge": "android-js-bridge"
+    },
+    {
+      "name": "custom-webview",
+      "platforms": [
+        "windows",
+        "android",
+        "linux"
+      ],
+      "bridge": "host-specific-adapter"
+    }
+  ],
+  "connectivity": [
+    "offline",
+    "localhost",
+    "online"
+  ],
+  "checks": [
+    "origin-and-cors",
+    "mixed-content",
+    "https-loopback",
+    "file-origin",
+    "fetch",
+    "streaming-sse",
+    "websocket",
+    "wasm",
+    "webgpu-optional",
+    "indexeddb",
+    "service-worker",
+    "permissions",
+    "native-bridge",
+    "model-runner",
+    "android-arm64-abi",
+    "windows-x86_64",
+    "linux"
+  ],
+  "primary": [
+    "windows-x86_64",
+    "android-arm64"
+  ],
+  "deferred": [
+    "linux-production",
+    "arm32",
+    "x86"
+  ],
+  "guarantee_all_environments": false
+}

@@ -1,0 +1,10 @@
+{
+  "version":"1.33.0",
+  "principle":"Keep GeckoView and Android Chromium WebView separately configured; compose through a custom host adapter, not by merging rendering engines",
+  "engines":{"gecko":{"android":"GeckoView + GeckoSession","desktop":"Firefox or Gecko-specific host bridge"},"chromium":{"android":"android.webkit.WebView","desktop":"Electron/Chromium or dedicated host bridge"}},
+  "host_contract":{"operations":["createTab","navigate","goBack","goForward","reload","evaluateJavaScript","setPermissions","openDownload","closeTab","getState"],"state":["engine","tabId","url","loading","error"],"native_bridge":"engine-specific, least privilege, trusted origins only"},
+  "integration_order":["user_project_original_snapshot","inspect_separate_engine_settings","custom_webview_adapter","user_chatgpt_like_website","lovebound_plugin_capabilities_via_explicit_backend","other_authorized_projects","bugfix_staging","tests","optional_build"],
+  "network_modes":["offline","localhost","online"],
+  "testing":{"android":["geckoview","android_system_webview","android_arm64_native_abi","back_navigation","permissions","file_upload","streaming","storage"],"windows":["firefox_or_gecko_bridge","chromium_host","localhost","offline"],"required_status":"not_tested_until_executed"},
+  "original_preservation":true,"automatic_repairs":"proposal_and_test_in_staging_only","guaranteed_zero_bugs":false
+}

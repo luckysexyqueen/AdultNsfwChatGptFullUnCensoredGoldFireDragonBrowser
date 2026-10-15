@@ -1,0 +1,2 @@
+# ChatGPT-style website troubleshooting
+Import a user-selected site archive to a versioned workspace. Analyze package.json, lockfiles, API routes and frontend request code without running untrusted scripts. Diagnose: missing server, bad endpoint, CORS, auth, 4xx/5xx, timeout, streaming SSE, model backend failure, and platform-specific WebView restrictions. Always keep original website files intact. Windows x86_64 and Android arm64 use different native model runners. Only claim a fix after end-to-end tests.

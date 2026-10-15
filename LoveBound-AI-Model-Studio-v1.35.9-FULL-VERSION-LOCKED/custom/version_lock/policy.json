@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "fixed_version": "1.35.9",
+  "policy": "user-requested version pin",
+  "allow_version_change_only_with_explicit_user_approval": true,
+  "required_manifest_paths": [
+    "plugin.json",
+    ".codex-plugin/plugin.json"
+  ],
+  "retain_original_archives": 24,
+  "compatible_patches_keep_version": true,
+  "immutable_platform_lock": false
+}

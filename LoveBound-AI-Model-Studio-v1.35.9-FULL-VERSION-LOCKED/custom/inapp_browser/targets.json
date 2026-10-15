@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "primary": [
+    {
+      "id": "windows-x86_64",
+      "os": "windows",
+      "arch": "x86_64",
+      "candidate_shells": [
+        "electron"
+      ],
+      "artifact": "portable-exe",
+      "status": "planned"
+    },
+    {
+      "id": "android-arm64",
+      "os": "android",
+      "arch": "arm64-v8a",
+      "candidate_shells": [
+        "capacitor-webview",
+        "native-webview",
+        "geckoview"
+      ],
+      "artifact": "apk",
+      "status": "planned"
+    }
+  ],
+  "deferred": [
+    {
+      "os": "linux",
+      "arch": "x86_64"
+    },
+    {
+      "os": "windows",
+      "arch": "x86"
+    },
+    {
+      "os": "android",
+      "arch": "armeabi-v7a"
+    }
+  ],
+  "policy": {
+    "keep_website_original": true,
+    "keep_model_original": true,
+    "do_not_build_without_approval": true,
+    "runtime_compatibility_must_be_verified": true,
+    "prompt_applied_by_trusted_backend": true,
+    "no_bundled_executables": true
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "mode": "diagnose_and_propose",
+  "automatic_safe_audit": true,
+  "automatic_source_modification": false,
+  "approval_required_for_edits": true,
+  "test_before_promotion": true,
+  "keep_originals": true,
+  "keep_lockfiles": true,
+  "offline_dependency_bundles": "user_supplied_and_license_checked",
+  "platforms": [
+    "windows-x86_64",
+    "android-arm64-v8a"
+  ]
+}

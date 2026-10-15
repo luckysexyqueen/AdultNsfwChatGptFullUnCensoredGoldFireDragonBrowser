@@ -1,0 +1,2 @@
+# My Websites — user-owned projects
+Put uploaded website ZIPs in `original_uploads/<SiteName>/` or use `scripts/website_workspace.py` to snapshot a locally extracted website directory. All categories are pre-created and are regenerated if missing. Source snapshots and separate repair copies prevent edits to the original. Runtime packages (Node.js, Python, npm, etc.) are NOT shipped; only your own project files and package manifests are staged. No dependency installation, builds or site repairs occur automatically. Never upload secrets or publish private model data.
