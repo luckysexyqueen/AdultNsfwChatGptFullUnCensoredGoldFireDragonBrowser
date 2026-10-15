@@ -1,0 +1,1 @@
+Browser compatibility targets and checklists. Each engine requires real-device integration tests. Offline file://, localhost and online origins differ; no universal promise. Never relax security policies merely to bypass CORS. Preserve existing user project files.

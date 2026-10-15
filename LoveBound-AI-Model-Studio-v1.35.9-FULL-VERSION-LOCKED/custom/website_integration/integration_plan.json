@@ -1,0 +1,16 @@
+{
+  "mode": "hybrid",
+  "modules": [
+    "frontend_api_client",
+    "backend_mock",
+    "integration_config",
+    "documentation"
+  ],
+  "site_framework": null,
+  "site_source_path": null,
+  "hosted_origin": null,
+  "model_runner": null,
+  "selected_model": null,
+  "approved_prompt_sha256": null,
+  "notes": "User must review and edit this plan before export or deployment. This is a mock integration package, not a running model."
+}

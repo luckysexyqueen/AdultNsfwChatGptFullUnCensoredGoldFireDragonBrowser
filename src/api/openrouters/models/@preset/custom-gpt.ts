@@ -1,12 +1,30 @@
-curl https://openrouter.ai/api/v1/chat/completions \
--H "Authorization: Bearer $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" \
--H "Content-Type: application/json" \
--d '{
-  "model": "@preset/custom-gpt",
-  "messages": [
-      {
-          "role": "user",
-          "content": "Hello! How are you today?"
-      }
-  ]
-}'
+// OpenRouter API configuration for custom GPT preset
+export const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+export const OPENROUTER_MODEL = '@preset/custom-gpt';
+
+export interface OpenRouterMessage {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+export interface OpenRouterRequest {
+  model: string;
+  messages: OpenRouterMessage[];
+  stream?: boolean;
+}
+
+export async function callOpenRouter(messages: OpenRouterMessage[], apiKey: string, stream = false) {
+  const response = await fetch(OPENROUTER_API_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      messages,
+      stream,
+    } satisfies OpenRouterRequest),
+  });
+  return response;
+}
