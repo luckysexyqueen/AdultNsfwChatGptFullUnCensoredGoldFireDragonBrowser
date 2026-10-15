@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "spec-direct-auto-inject",
+  "version": "1.5.7",
+  "description": "Portable user-editable patch manager with preview, backups, rollback and GitHub/Cloudflare deployment templates; cloud authorization separate.",
+  "author": {
+    "name": "Plugin author"
+  },
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "Spec Direct Auto Inject",
+        "shortDescription": "OpenAPI 누적 자동 등록",
+        "longDescription": "Analyze OpenAPI specs and assist with a deployable MCP execution server. Cloud deployment and client authorization are separate.",
+        "developerName": "Plugin author",
+        "category": "Productivity",
+        "defaultPrompt": "접근 가능한 OpenAPI 명세를 누적 병합하고 사용 가능한 기능을 적용해줘."
+      }
+    }
+  }
+}

@@ -1,0 +1,7 @@
+name = "spec-direct-auto-inject-mcp"
+main = "src/index.mjs"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[vars]
+ALLOWED_API_HOSTS = ""

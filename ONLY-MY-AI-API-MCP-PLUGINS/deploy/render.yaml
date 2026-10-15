@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: spec-direct-mcp
+    runtime: docker
+    plan: starter
+    envVars:
+      - key: MCP_BEARER_TOKEN
+        sync: false
+      - key: ALLOWED_API_HOSTS
+        sync: false

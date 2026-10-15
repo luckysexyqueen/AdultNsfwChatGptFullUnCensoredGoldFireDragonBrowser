@@ -1,0 +1,20 @@
+{
+  "name": "spec-direct-auto-inject",
+  "private": true,
+  "version": "1.5.7",
+  "scripts": {
+    "host:setup": "npm install --prefix cloudflare",
+    "host:preview": "node cloudflare/scripts/host.mjs",
+    "host": "node cloudflare/scripts/host.mjs",
+    "host:doctor": "node cloudflare/scripts/doctor.mjs",
+    "pages:build": "node scripts/build-pages.mjs",
+    "worker:bundle": "node scripts/bundle-worker.mjs",
+    "patch:preview": "node scripts/patch-manager.mjs preview",
+    "patch:apply": "node scripts/patch-manager.mjs apply",
+    "patch:rollback": "node scripts/patch-manager.mjs rollback",
+    "patch:test": "node --test tests/patch-manager.test.mjs",
+    "build": "npm install --prefix cloudflare --no-audit --no-fund && npm run worker:bundle",
+    "deploy": "cd cloudflare && npx wrangler deploy",
+    "deploy:check": "npm run build && npm run deploy"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "id": "sample_readme_patch",
+  "files": [
+    {
+      "source": "custom/sample-note.txt",
+      "target": "docs/user-note.txt"
+    }
+  ]
+}
