@@ -6,6 +6,13 @@
   "main": "server.js",
   "homepage": "https://luckysexyqueen.github.io/AdultNsfwChatGptFullUnCensoredGoldFireDragonBrowser/",
   "scripts": {
+    "plugins:build": "node scripts/build-plugin-catalog.mjs",
+    "plugins:test": "node --test tests/plugins.test.mjs tests/ai.test.mjs tests/packed-model.test.mjs",
+    "plugins:test:browser": "node tests/browser-plugins.mjs",
+    "ai:test:live": "node tests/live-ai.mjs",
+    "build:static": "node scripts/build-static-site.mjs",
+    "predev": "npm run plugins:build",
+    "prebuild": "npm run plugins:build",
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
@@ -14,8 +21,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
     "build:alt": "echo \"npm run build\"",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d ."
+    "predeploy": "npm run build:static",
+    "deploy": "gh-pages -d site-dist --dotfiles"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",

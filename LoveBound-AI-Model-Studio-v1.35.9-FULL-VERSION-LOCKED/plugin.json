@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "lovebound-ai-model-studio",
-  "version": "1.35.9",
+  "version": "1.35.11",
   "description": "Hugging Face Hub, Spaces and model ZIP audit support for upload-first AI browser and website workflows.",
   "author": {
     "name": "LoveBound"

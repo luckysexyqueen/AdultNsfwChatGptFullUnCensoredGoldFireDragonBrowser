@@ -1,5 +1,10 @@
 # Welcome to your OnSpace project
 
+Website plugin discovery, safe static builds and optional hosting instructions:
+[PLUGIN_SYSTEM.md](./PLUGIN_SYSTEM.md).
+
+Key-free Cloudflare AI and real local GGUF inference: [AI_CONNECTIONS.md](./AI_CONNECTIONS.md).
+
 ## How can I edit this code?
 
 There are several ways of editing your application.

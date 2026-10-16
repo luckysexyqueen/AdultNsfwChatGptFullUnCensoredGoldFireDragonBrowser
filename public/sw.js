@@ -4,10 +4,10 @@ const DYNAMIC_CACHE = 'dynamic-v1';
 
 // 캐시할 정적 파일 목록
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/icon.png',
-  '/manifest.json'
+  './',
+  './index.html',
+  './icon.png',
+  './manifest.json'
 ];
 
 // Service Worker 설치
@@ -40,6 +40,9 @@ self.addEventListener('activate', (event) => {
 // Fetch 이벤트 - 네트워크 우선, 실패 시 캐시
 self.addEventListener('fetch', (event) => {
   const { request } = event;
+  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin || /\.gguf(?:\.part\d+)?(?:$|\?)/i.test(request.url)) return;
+  // Do not persist plugin catalogs or serve stale activation metadata.
+  if (new URL(request.url).pathname.startsWith(new URL('./plugins/', self.location.href).pathname)) return;
   
   // API 요청은 캐싱하지 않음
   if (request.url.includes('/functions/v1/') || request.url.includes('/rest/v1/')) {

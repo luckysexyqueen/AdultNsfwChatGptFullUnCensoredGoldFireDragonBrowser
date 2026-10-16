@@ -1,0 +1,10 @@
+# Example only. Choose compatible models with the SAME architecture/tokenizer.
+merge_method: linear
+models:
+  - model: org/model-a
+    parameters:
+      weight: 0.5
+  - model: org/model-b
+    parameters:
+      weight: 0.5
+dtype: bfloat16

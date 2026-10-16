@@ -1,0 +1,22 @@
+{
+  "version": "1.35.9",
+  "primary_language": "ko-KR",
+  "secondary_language": "en-US",
+  "other_languages": {
+    "first_translate_to": "en-US",
+    "then_translate_to": "ko-KR",
+    "direct_other_to_ko": false
+  },
+  "english_to_korean": "en-US -> ko-KR",
+  "default_response_language": "ko-KR",
+  "user_system_prompt": {
+    "source": "training/system_prompt.txt",
+    "training_requires_explicit_approval": true,
+    "runtime_injection": true
+  },
+  "translation": {
+    "offline_without_engine": "hold_untranslated",
+    "external_network_requires_approval": true,
+    "prohibit_fabricated_translations": true
+  }
+}

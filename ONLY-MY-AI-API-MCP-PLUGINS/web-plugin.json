@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "autoEnable": false,
+  "context": "When discussing OpenAPI or MCP integrations, distinguish a static website from an execution server. Never request or embed private API credentials in public files. Describe tools as available only after a real server connection and authorization have been verified."
+}

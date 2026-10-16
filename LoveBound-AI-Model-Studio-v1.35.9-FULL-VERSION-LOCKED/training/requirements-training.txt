@@ -1,0 +1,8 @@
+torch>=2.3,<3
+transformers>=4.45,<5
+datasets>=3,<5
+accelerate>=1,<2
+peft>=0.13,<1
+bitsandbytes>=0.44,<1; platform_system == "Linux"
+mergekit>=0.0.5
+safetensors>=0.4

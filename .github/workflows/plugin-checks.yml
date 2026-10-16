@@ -1,0 +1,24 @@
+name: Plugin compatibility checks
+on:
+  pull_request:
+  push:
+    branches: [gh-pages]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  plugins:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 22
+      - run: npm run plugins:test
+      - run: git diff --exit-code -- plugins public/plugins
+      - run: npm run build:static
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: static-website
+          path: site-dist/
+          include-hidden-files: true

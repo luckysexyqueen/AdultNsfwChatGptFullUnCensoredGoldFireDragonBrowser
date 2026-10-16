@@ -1,0 +1,14 @@
+{
+  "version": "1.35.9",
+  "categories": {
+    "models": "원본 Transformers 모델",
+    "adapters": "LoRA 및 QLoRA 어댑터",
+    "gguf": "GGUF 변환 및 경량화 결과",
+    "datasets": "학습 및 검증 데이터",
+    "prompts": "사용자 승인 시스템 프롬프트",
+    "configs": "학습/병합 설정",
+    "plugins": "플러그인 패치 및 실행 코드",
+    "archives": "원본 ZIP 보관",
+    "reports": "오류 진단 및 품질 평가 보고서"
+  }
+}

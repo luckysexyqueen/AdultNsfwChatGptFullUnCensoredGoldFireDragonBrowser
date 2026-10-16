@@ -1,0 +1,106 @@
+{
+  "schema": 1,
+  "version": "1.35.9",
+  "requirements": [
+    {
+      "id": "primary_language",
+      "text": "기본 언어는 대한민국 한국어 ko-KR",
+      "approved": true,
+      "checks": [
+        {
+          "type": "json_equals",
+          "path": "training/language_policy.json",
+          "key_path": [
+            "primary_language"
+          ],
+          "expected": "ko-KR"
+        }
+      ]
+    },
+    {
+      "id": "secondary_language",
+      "text": "보조 언어는 미국 영어 en-US",
+      "approved": true,
+      "checks": [
+        {
+          "type": "json_equals",
+          "path": "training/language_policy.json",
+          "key_path": [
+            "secondary_language"
+          ],
+          "expected": "en-US"
+        }
+      ]
+    },
+    {
+      "id": "foreign_language_route",
+      "text": "외국어는 en-US를 거쳐 ko-KR로 변환",
+      "approved": true,
+      "checks": [
+        {
+          "type": "json_equals",
+          "path": "training/language_policy.json",
+          "key_path": [
+            "other_languages",
+            "first_translate_to"
+          ],
+          "expected": "en-US"
+        },
+        {
+          "type": "json_equals",
+          "path": "training/language_policy.json",
+          "key_path": [
+            "other_languages",
+            "then_translate_to"
+          ],
+          "expected": "ko-KR"
+        }
+      ]
+    },
+    {
+      "id": "user_prompt",
+      "text": "사용자가 승인한 시스템 프롬프트를 학습 데이터에 포함",
+      "approved": true,
+      "checks": [
+        {
+          "type": "file_exists",
+          "path": "training/prepare_korean_sft.py"
+        }
+      ]
+    },
+    {
+      "id": "training_modes",
+      "text": "Full Fine-tuning, LoRA, QLoRA 모두 한국어 정책 검사",
+      "approved": true,
+      "checks": [
+        {
+          "type": "file_exists",
+          "path": "training/train_peft.py"
+        }
+      ]
+    },
+    {
+      "id": "gguf",
+      "text": "GGUF 변환·경량화·Hub 업로드 파이프라인 제공",
+      "approved": true,
+      "checks": [
+        {
+          "type": "file_exists",
+          "path": "training/gguf_pipeline.py"
+        }
+      ]
+    },
+    {
+      "id": "self_heal",
+      "text": "자가 진단 및 안전한 설정 복구",
+      "approved": true,
+      "checks": [
+        {
+          "type": "file_exists",
+          "path": "training/self_heal.py"
+        }
+      ]
+    }
+  ],
+  "history": []
+}
