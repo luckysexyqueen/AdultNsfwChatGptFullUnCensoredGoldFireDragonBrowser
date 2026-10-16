@@ -66,3 +66,53 @@ test('both entrypoints load classic adapter early and hard search delegates',()=
   const browser=fs.readFileSync(new URL('../GoldFireDragonBrowser.html',import.meta.url),'utf8');
   assert.ok(browser.slice(browser.indexOf('id="gfd-hard-search-router"')).includes('await window.GFDInAppBrowser.open(target)'));
 });
+
+test('Chromium Electron uses inAppOpen without requiring a Gecko bridge',async()=>{
+  const calls=[];
+  const s=shell('file:///C:/app/index.html',{GoldFireNative:{inAppOpen:async url=>{calls.push(url);return {opened:true};}}});
+  await s.window.GFDInAppBrowser.open('https://example.org');
+  assert.deepEqual(calls,['https://example.org/']);
+  assert.equal(s.navigations.length,0);
+});
+test('Android Chromium uses standard Capacitor Browser with object options',async()=>{
+  const calls=[];
+  const s=shell('https://localhost/index.html',{Capacitor:{Plugins:{Browser:{open:async options=>calls.push(options)}}}});
+  await s.window.GFDInAppBrowser.open('https://example.org');
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)),[{url:'https://example.org/'}]);
+  assert.equal(s.navigations.length,0);
+});
+test('parent embedded adapter precedes child system browser',async()=>{
+  const calls=[];
+  const s=shell(undefined,{Capacitor:{Plugins:{Browser:{open:async()=>calls.push('system')}}},parent:{document:{},GoldFireNative:{inAppOpen:async()=>{calls.push('embedded');return {opened:true};}}}});
+  await s.window.GFDInAppBrowser.open('https://example.org');
+  assert.deepEqual(calls,['embedded']);
+});
+test('failed Gecko and custom adapters fall through to standard Browser',async()=>{
+  const calls=[];
+  const s=shell(undefined,{Capacitor:{Plugins:{
+    GeckoView:{open:async()=>{throw Error('not implemented');}},
+    GoldFireInAppBrowser:{open:async()=>({opened:false})},
+    Browser:{open:async()=>calls.push('browser')}
+  }}});
+  await s.window.GFDInAppBrowser.open('https://example.org');
+  assert.deepEqual(calls,['browser']);
+  assert.equal(s.navigations.length,0);
+});
+test('standard Browser rejection falls back to current Chromium window',async()=>{
+  const s=shell(undefined,{Capacitor:{Plugins:{Browser:{open:async()=>{throw Error('unavailable');}}}}});
+  await s.window.GFDInAppBrowser.open('https://example.org');
+  assert.deepEqual(s.navigations,['https://example.org/']);
+});
+test('plain Chrome blank popup navigates current window without native plugins',async()=>{
+  const s=shell();
+  assert.equal(s.window.open('https://example.org','_blank'),null);
+  await Promise.resolve();
+  assert.deepEqual(s.navigations,['https://example.org/']);
+  assert.equal(s.popups.length,0);
+});
+test('standard Browser can be injected late in the accessible parent',async()=>{
+  const calls=[];const s=shell();
+  s.window.parent={document:{},Capacitor:{Plugins:{Browser:{open:async()=>calls.push('parent-browser')}}}};
+  await s.window.GFDInAppBrowser.open('https://example.org');
+  assert.deepEqual(calls,['parent-browser']);
+});

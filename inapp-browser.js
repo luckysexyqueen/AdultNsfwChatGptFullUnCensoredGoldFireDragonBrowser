@@ -39,6 +39,14 @@
         candidates.push(() => plugins.GoldFireInAppBrowser.open({ url: url.href }));
       }
     }
+    // Chromium/System WebView hosts can expose the standard Capacitor Browser
+    // plugin instead of a custom Gecko bridge. Keep it after embedded adapters.
+    for (const host of owners) {
+      const plugins = host.Capacitor && host.Capacitor.Plugins;
+      if (plugins && plugins.Browser && typeof plugins.Browser.open === 'function') {
+        candidates.push(() => plugins.Browser.open({ url: url.href }));
+      }
+    }
     for (const invoke of candidates) {
       try {
         const result = await invoke();
