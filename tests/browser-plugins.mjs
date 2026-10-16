@@ -35,15 +35,15 @@ try {
   for (const base of ['/', prefix]) {
     await page.goto(origin + base);
     await page.waitForFunction(() => window.GFDPlugins?.list().length === 3);
-    assert.equal(await page.locator('#gfd-plugin-controls summary').innerText(), '플러그인 3개');
-    await page.locator('#gfd-plugin-controls summary').click();
+    assert.equal(await page.locator('#gfd-plugin-controls .menu > summary').innerText(), '플러그인 3개');
+    await page.locator('#gfd-plugin-controls .menu > summary').click();
     const checkbox = page.locator('#gfd-plugin-controls input').first();
     await checkbox.check();
     assert.match(await page.evaluate(() => window.GFDPlugins.extendInstructions('Original')), /^Original\n\n\[Website plugin:/);
     await page.reload();
     await page.waitForFunction(() => window.GFDPlugins?.list().length === 3);
     assert.equal(await page.evaluate(() => window.GFDPlugins.list()[0].enabled), true);
-    await page.locator('#gfd-plugin-controls summary').click();
+    await page.locator('#gfd-plugin-controls .menu > summary').click();
     await checkbox.uncheck();
     assert.equal(await page.evaluate(() => window.GFDPlugins.extendInstructions('Original')), 'Original');
   }
@@ -96,10 +96,36 @@ try {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(origin + prefix);
   await page.waitForFunction(() => window.GFDPlugins?.list().length === 3);
-  await page.locator('#gfd-plugin-controls summary').click();
+  await page.locator('#gfd-plugin-controls .menu > summary').click();
   assert.equal(await page.locator('#gfd-plugin-controls img').count(), 0);
   assert.equal(await page.evaluate(() => window.pwned), undefined);
-  assert.ok((await page.locator('#gfd-plugin-controls details').boundingBox()).x >= 0);
+  assert.ok((await page.locator('#gfd-plugin-controls .menu').boundingBox()).x >= 0);
+
+  // All plugin names and switches must be visible without scrolling on mobile.
+  const menuGeometry = await page.evaluate(() => {
+    const root = document.querySelector('#gfd-plugin-controls').shadowRoot;
+    const list = root.querySelector('.plugin-list');
+    const bounds = list.getBoundingClientRect();
+    return {
+      names: [...root.querySelectorAll('strong')].map(title => {
+        const box = title.getBoundingClientRect();
+        return { visible: box.top >= bounds.top && box.bottom <= bounds.bottom };
+      }),
+      switches: root.querySelectorAll('input[type=checkbox]').length,
+      expanded: root.querySelectorAll('.plugin-info[open]').length
+    };
+  });
+  assert.equal(menuGeometry.names.length, registry.plugins.length);
+  assert.ok(menuGeometry.names.every(name => name.visible));
+  assert.equal(menuGeometry.switches, registry.plugins.length);
+  assert.equal(menuGeometry.expanded, 0);
+  const lastSwitch = page.locator('#gfd-plugin-controls input').last();
+  await lastSwitch.check();
+  assert.equal(await page.evaluate(() => GFDPlugins.list().at(-1).enabled), true);
+  await lastSwitch.uncheck();
+  await page.locator('#gfd-plugin-controls .plugin-info > summary').last().click();
+  assert.equal(await page.locator('#gfd-plugin-controls .plugin-info[open]').count(), 1);
+  await page.locator('#gfd-plugin-controls .plugin-info > summary').last().click();
 
   for (const failure of ['missing', 'malformed', 'timeout']) {
     await page.unroute('**/plugins/registry.json');
