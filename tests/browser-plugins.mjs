@@ -80,9 +80,9 @@ try {
     return captured;
   });
   assert.equal(inference.original, 'Original instructions');
-  assert.match(inference.local.find(m => m.content.startsWith('Original instructions')).content, /Website plugin:/);
+  assert.match(inference.local.find(m => m.content.includes('Original instructions')).content, /Website plugin:/);
   assert.match(inference.remote.instructions, /Website plugin:/);
-  assert.match(inference.fallback.find(m => m.content.startsWith('Original instructions')).content, /Website plugin:/);
+  assert.match(inference.fallback.find(m => m.content.includes('Original instructions')).content, /Website plugin:/);
 
   await page.goto(origin + prefix + 'GoldFireDragonBrowser.html');
   await page.waitForFunction(() => window.GFDPlugins?.list().length === 3);

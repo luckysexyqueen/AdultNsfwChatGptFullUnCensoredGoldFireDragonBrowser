@@ -40,7 +40,7 @@ self.addEventListener('activate', (event) => {
 // Fetch 이벤트 - 네트워크 우선, 실패 시 캐시
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin || /\.gguf(?:$|\?)/i.test(request.url)) return;
+  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin || /\.gguf(?:\.part\d+)?(?:$|\?)/i.test(request.url)) return;
   // Do not persist plugin catalogs or serve stale activation metadata.
   if (new URL(request.url).pathname.startsWith(new URL('./plugins/', self.location.href).pathname)) return;
   

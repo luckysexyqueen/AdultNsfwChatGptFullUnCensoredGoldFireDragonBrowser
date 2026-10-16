@@ -1,5 +1,36 @@
 # Free API and local GGUF connections
 
+## Korean default and bundled lightweight uncensored model
+
+Responses default to Korean across the existing API, free API and local inference
+paths. Explicit requests for another language remain possible. User/GPT instructions
+are retained, and language instructions are added only for inference.
+
+The model dialog now offers **무검열 계열·한국어 모델 다운로드·실행**:
+`mlabonne/Qwen3-0.6B-abliterated-GGUF`, Q4_K_M, about 378 MiB. The author describes
+it as an uncensored version of Qwen3; the app does not relabel the ordinary Instruct
+model as uncensored. This classification does not guarantee all outputs or quality.
+The model card is linked in `models/korean-uncensored/NOTICE.md`.
+
+The actual weights are included under `models/korean-uncensored/` as 19 static data
+parts, each at most 20 MiB. Their concatenation matches the pinned original SHA-256.
+The site verifies part hashes and reassembles the original GGUF before inference.
+It reads the weights from its own hosting origin, with verified parts cached on the
+device. It does not require a Hugging Face login or fetch external model code.
+The original GPT-2 model remains available separately. First preparation requires
+downloading the model assets to the device; the app does not claim instant loading
+or support on memory-constrained devices.
+
+`GFD_TEST_KOREAN=1 npm run ai:test:live` verifies Korean greetings from the real free
+API and the actual local abliterated model. Both returned `안녕하세요!` in desktop Edge.
+The remote API still uses Cloudflare's standard Llama model, not the abliterated
+weights; uncensored-model execution is provided by the local option. Qwen thinking
+output is disabled via the chat template so the UI displays the final reply.
+
+`node scripts/vendor-korean-model.mjs` reproduces the download, splitting and hash
+verification in a fresh model destination. It refuses to overwrite existing parts.
+No model weights or uploaded original archives were deleted or replaced.
+
 This patch keeps the existing API mode, adds a key-free Cloudflare Workers AI mode,
 and restores the missing standalone local GGUF runtime. Choose **AI 연결** on the
 homepage. The current API remains the initial mode; select **무료 API (공유 한도)**

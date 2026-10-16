@@ -1,5 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 const MODEL = '@cf/meta/llama-3.2-1b-instruct';
+const KOREAN_DEFAULT = '기본 응답 언어는 한국어입니다. 사용자가 다른 언어를 명시적으로 요청하지 않는 한 자연스럽고 간결한 한국어로 답변하세요. Answer in Korean by default; use another language only when the user explicitly requests it.';
 const ALLOWED = new Set(['https://luckysexyqueen.github.io']);
 export class FreeBudget extends DurableObject {
   async reserve() {
@@ -45,6 +46,10 @@ export default {
       if (!Array.isArray(body?.messages) || !body.messages.length || body.messages.length > 16 || body.messages.some(m => !m || !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string')) return json({ error: 'Invalid text messages' }, 400);
       if (body.messages.reduce((sum, m) => sum + m.content.length, 0) > 4000) return json({ error: 'Input exceeds 4000 characters' }, 413);
       const messages = body.messages.map(({ role, content }) => ({ role, content }));
+      if (!messages.some(m => m.role === 'system' && m.content.includes(KOREAN_DEFAULT))) {
+        if (messages[0].role === 'system') messages[0].content = KOREAN_DEFAULT + '\n\n' + messages[0].content;
+        else messages.unshift({ role: 'system', content: KOREAN_DEFAULT });
+      }
       if (!await env.BUDGET.getByName('daily-free-inference').reserve()) return json({ error: 'Free quota or cooldown reached. Use a local model.', retryAfter: 3 }, 429);
       // Fixed inexpensive model and strict output cap. No paid fallback or API credentials.
       const result = await env.AI.run(MODEL, { messages, max_tokens: 128, temperature: 0.7, stream: false });

@@ -45,7 +45,7 @@ export async function buildCatalog(directory = root) {
   await writeFile(path.join(directory, 'public/plugins/registry.json'), text);
   for (const file of ['runtime.mjs', 'boot.js']) await copyFile(path.join(directory, 'plugins', file), path.join(directory, 'public/plugins', file));
   // Vite's public directory receives the same trusted assets as branch-hosted Pages.
-  for (const [folder, files] of [['ai', ['boot.mjs', 'providers.mjs', 'local-gguf.mjs', 'config.json']], ['vendor/wllama', ['index.mjs', 'wllama.wasm', 'LICENCE', 'NOTICE.md']]]) {
+  for (const [folder, files] of [['ai', ['boot.mjs', 'providers.mjs', 'local-gguf.mjs', 'language.mjs', 'packed-model.mjs', 'config.json']], ['vendor/wllama', ['index.mjs', 'wllama.wasm', 'LICENCE', 'NOTICE.md']]]) {
     await mkdir(path.join(directory, 'public', folder), { recursive: true });
     for (const file of files) await copyFile(path.join(directory, folder, file), path.join(directory, 'public', folder, file));
   }

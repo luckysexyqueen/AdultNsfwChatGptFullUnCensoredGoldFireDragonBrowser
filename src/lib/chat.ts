@@ -72,7 +72,8 @@ export async function streamChat(
   if (mode === 'local') {
     if (chatAttachments?.some(a => a.type === 'image')) throw new Error('현재 로컬 텍스트 모델은 이미지 분석을 지원하지 않습니다.');
     const localMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = messages.map(m => ({ role: m.role, content: m.content }));
-    const context = [systemPrompt, window.GFDPlugins?.extendInstructions(instructions) || instructions].filter(Boolean).join('\n\n');
+    const pluginInstructions = window.GFDPlugins?.extendInstructions(instructions) || instructions;
+    const context = [systemPrompt, window.GFDAI?.extendInstructions(pluginInstructions) || pluginInstructions].filter(Boolean).join('\n\n');
     if (context) localMessages.unshift({ role: 'system', content: context });
     const files = [...(gptFiles || []).map(f => f.file_content || ''), ...(chatAttachments || []).map(a => a.textContent || '')].filter(Boolean).join('\n\n');
     if (files && localMessages.length) localMessages[localMessages.length - 1].content += '\n\n' + files;
@@ -85,7 +86,8 @@ export async function streamChat(
     throw new Error('인터넷 연결을 확인해주세요');
   }
 
-  const inferenceInstructions = window.GFDPlugins?.extendInstructions(instructions) || instructions;
+  const pluginInstructions = window.GFDPlugins?.extendInstructions(instructions) || instructions;
+  const inferenceInstructions = window.GFDAI?.extendInstructions(pluginInstructions) || pluginInstructions;
   if (mode === 'free' && window.GFDAI) {
     if (chatAttachments?.some(a => a.type === 'image')) throw new Error('무료 API는 텍스트 대화만 지원합니다.');
     const freeMessages = messages.map(m => ({ role: m.role, content: m.content }));

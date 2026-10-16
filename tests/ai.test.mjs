@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { prepareMessages, freeChat } from '../ai/providers.mjs';
 import { validateFiles, LocalGGUFEngine } from '../ai/local-gguf.mjs';
+import { KOREAN_DEFAULT, koreanInstructions, koreanMessages } from '../ai/language.mjs';
 
 // Exercise Worker logic in Node; deployed Durable Objects/AI are additionally covered
 // by the opt-in live smoke test. This shim supplies only the platform base class.
@@ -13,11 +14,19 @@ const endpoint = 'https://example.workers.dev/v1/chat/completions';
 const origin = 'https://luckysexyqueen.github.io';
 const request = (body, options = {}) => new Request(endpoint, { method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json', ...options.headers }, body: JSON.stringify(body) });
 const message = { role: 'user', content: 'What is 2+2?' };
+test('Korean defaults preserve caller instructions and avoid repeated injection', () => {
+  const original = [{ role: 'system', content: 'Original role' }, { role: 'user', content: '안녕하세요' }];
+  const result = koreanMessages(original);
+  assert.equal(original[0].content, 'Original role');
+  assert.equal(result[0].content, KOREAN_DEFAULT + '\n\nOriginal role');
+  assert.deepEqual(koreanMessages(result), result);
+  assert.equal(koreanInstructions(koreanInstructions('Original role')), koreanInstructions('Original role'));
+});
 
 test('free API includes instructions, preserves callers, rejects excess and invalid data', () => {
   const messages = [message];
   const result = prepareMessages(messages, 'Original system', 'Plugin instructions');
-  assert.equal(result[0].content, 'Original system\n\nPlugin instructions');
+  assert.equal(result[0].content, KOREAN_DEFAULT + '\n\nOriginal system\n\nPlugin instructions');
   assert.equal(messages.length, 1);
   assert.throws(() => prepareMessages([{ role: 'tool', content: 'execute' }]));
   assert.throws(() => prepareMessages([{ role: 'user', content: 'x'.repeat(4001) }]));
@@ -60,6 +69,7 @@ test('worker has no model override, paid fallback or quota bypass', async () => 
   assert.equal(response.headers.get('Access-Control-Allow-Origin'), origin);
   assert.equal(argumentsUsed[0], '@cf/meta/llama-3.2-1b-instruct');
   assert.equal(argumentsUsed[1].max_tokens, 128);
+  assert.match(argumentsUsed[1].messages[0].content, /한국어/);
   env.BUDGET.getByName = () => ({ reserve: async () => false });
   env.AI.run = () => { throw Error('must not call AI after quota'); };
   assert.equal((await worker.fetch(request({ messages: [message] }), env)).status, 429);

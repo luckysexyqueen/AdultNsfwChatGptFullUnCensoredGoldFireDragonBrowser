@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const { chromium } = await import(process.env.GFD_PLAYWRIGHT_MODULE || 'playwright');
 const root = path.resolve(process.env.GFD_STATIC_ROOT || fileURLToPath(new URL('../', import.meta.url)));
+const korean = process.env.GFD_TEST_KOREAN === '1';
 const prefix = '/AdultNsfwChatGptFullUnCensoredGoldFireDragonBrowser/';
 const types = { '.mjs': 'text/javascript', '.js': 'text/javascript', '.html': 'text/html', '.json': 'application/json', '.wasm': 'application/wasm', '.gguf': 'application/octet-stream' };
 const server = createServer(async (request, response) => {
@@ -46,35 +47,37 @@ try {
   await page.locator('#gfd-ai-mode select').selectOption('free');
   await page.locator('#gfd-ai-mode summary').click();
   console.log('Testing real Cloudflare inference through the chat send button…');
-  await page.locator('#msg-input').fill('What is 2 + 2? Reply with the number only.');
+  await page.locator('#msg-input').fill(korean ? '안녕하세요. 한국어로 짧게 인사해 주세요.' : 'What is 2 + 2? Reply with the number only.');
   await page.locator('#btn-send').click();
   await page.waitForFunction(() => !S.isStreaming && S.messages.some(m => m.role === 'assistant'), null, { timeout: 90000 });
   report.remote = await page.evaluate(() => ({ reply: S.messages.filter(m => m.role === 'assistant').at(-1).content, mode: window.GFDAI.getMode() }));
   assert.ok(report.remote.reply.trim());
+  if (korean) assert.match(report.remote.reply, /[가-힣]{2}/);
   console.log('Remote reply:', report.remote.reply);
   const remoteCount = externalRequests.length;
 
   console.log('Loading the actual bundled GGUF through the model-management UI…');
   await page.locator('#gfd-ai-mode summary').click();
   await page.locator('#gfd-ai-mode button').click();
-  await page.locator('#local-model-bundled').click();
+  await page.locator(korean ? '#local-model-korean' : '#local-model-bundled').click();
   await page.waitForFunction(() => window.LocalGGUF.getStatus().ready || !!window.LocalGGUF.getStatus().error, null, { timeout: 180000 });
   const status = await page.evaluate(() => window.LocalGGUF.getStatus());
   assert.equal(status.ready, true, JSON.stringify(status));
   console.log('Local model ready:', status.modelName);
   await page.waitForFunction(() => !document.getElementById('local-model-modal'));
-  await page.evaluate(() => {
-    localStorage.setItem('gfd-gguf-max-tokens', '24');
+  await page.evaluate(isKorean => {
+    localStorage.setItem('gfd-gguf-max-tokens', isKorean ? '96' : '24');
     localStorage.setItem('gfd-gguf-temperature', '0');
     S.currentConvId = null; S.messages = []; S.currentGPT = null; S.currentGPTFiles = [];
     setState({ messages: [], currentConvId: null });
-  });
+  }, korean);
   console.log('Testing actual local CPU/WASM inference through the chat send button…');
-  await page.locator('#msg-input').fill('Once upon a time, there was a little');
+  await page.locator('#msg-input').fill(korean ? '안녕하세요. 한국어로 한 문장만 인사해 주세요.' : 'Once upon a time, there was a little');
   await page.locator('#btn-send').click();
   await page.waitForFunction(() => !S.isStreaming && S.messages.some(m => m.role === 'assistant'), null, { timeout: 180000 });
   report.local = await page.evaluate(() => ({ reply: S.messages.filter(m => m.role === 'assistant').at(-1).content, mode: window.GFDAI.getMode(), status: window.LocalGGUF.getStatus(), crossOriginIsolated }));
   assert.ok(report.local.reply.trim());
+  if (korean) assert.match(report.local.reply, /[가-힣]{2}/);
   assert.equal(report.local.mode, 'local');
   assert.equal(report.local.crossOriginIsolated, false);
   assert.equal(externalRequests.length, remoteCount, 'Local chat must not call a remote inference API');

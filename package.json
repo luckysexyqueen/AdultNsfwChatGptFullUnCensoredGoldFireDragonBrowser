@@ -7,7 +7,7 @@
   "homepage": "https://luckysexyqueen.github.io/AdultNsfwChatGptFullUnCensoredGoldFireDragonBrowser/",
   "scripts": {
     "plugins:build": "node scripts/build-plugin-catalog.mjs",
-    "plugins:test": "node --test tests/plugins.test.mjs tests/ai.test.mjs",
+    "plugins:test": "node --test tests/plugins.test.mjs tests/ai.test.mjs tests/packed-model.test.mjs",
     "plugins:test:browser": "node tests/browser-plugins.mjs",
     "ai:test:live": "node tests/live-ai.mjs",
     "build:static": "node scripts/build-static-site.mjs",

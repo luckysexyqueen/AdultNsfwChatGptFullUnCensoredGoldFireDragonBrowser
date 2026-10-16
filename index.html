@@ -2930,7 +2930,8 @@
         }
 
         // Apply enabled data-only plugin context only to inference, never to stored settings.
-        const inferenceInstructions = window.GFDPlugins?.extendInstructions(instructions) || instructions;
+        const pluginInstructions = window.GFDPlugins?.extendInstructions(instructions) || instructions;
+        const inferenceInstructions = window.GFDAI?.extendInstructions(pluginInstructions) || pluginInstructions;
 
         // 오프라인/API 장애 대비: 현재 GPT에 연결된 GGUF → 앱 저장 GGUF 순으로 자동 폴백합니다.
         if (!S.isOnline && S.ggufAutoFallback && !S.localModel?.ready) {
@@ -4256,6 +4257,8 @@
               </div>
               <div class="form-group">
                 <label class="form-label">새 GGUF 파일 저장</label>
+                <button class="auth-btn primary" id="local-model-korean" style="margin-bottom:10px;">무검열 계열·한국어 모델 다운로드·실행 (약 378MiB)</button>
+                <div class="form-hint">사이트에 포함된 Qwen3-0.6B-abliterated GGUF입니다. 처음 한 번 이 사이트에서 내려받아 기기에 보관하며, 한국어로 응답하도록 설정했습니다. abliteration은 모델 제공자의 분류이며 모든 요청의 응답을 보장하지 않습니다.</div>
                 <button class="auth-btn outline" id="local-model-bundled" style="margin-bottom:10px;">내장 GPT-2 모델 불러오기 (약 102MB)</button>
                 <div class="form-hint">기존에 포함된 소형 GPT-2 모델입니다. 대화 품질은 제한적이며, 다른 GGUF 파일도 선택할 수 있습니다. 추론은 이 기기에서 실행됩니다.</div>
                 <input class="form-input" id="local-model-files" type="file" accept=".gguf,.GGUF" multiple />
@@ -4316,6 +4319,23 @@
             setState({ localModel: status });
             updateLocalModelHint();
             toast('내장 모델 준비 완료. 이제 로컬에서 답변합니다.', 'success');
+            close();
+          } catch (error) { statusEl.textContent = error.message; }
+          finally { button.disabled = false; }
+        });
+        overlay.querySelector('#local-model-korean').addEventListener('click', async event => {
+          const button = event.currentTarget;
+          button.disabled = true;
+          try {
+            statusEl.textContent = '무검열 계열·한국어 모델을 다운로드하는 중입니다…';
+            const status = await window.GFDAI.loadKoreanModel({
+              ...getLoadOptions(), contextLength: 2048,
+              onProgress: message => { statusEl.textContent = message; },
+            });
+            window.GFDAI.setMode('local');
+            setState({ localModel: status });
+            updateLocalModelHint();
+            toast('한국어 대화 모델 준비 완료.', 'success');
             close();
           } catch (error) { statusEl.textContent = error.message; }
           finally { button.disabled = false; }

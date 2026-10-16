@@ -1,5 +1,7 @@
 import './local-gguf.mjs';
 import { freeChat, prepareMessages } from './providers.mjs';
+import { koreanInstructions } from './language.mjs';
+import { loadPackedModel } from './packed-model.mjs';
 let mode = 'existing';
 try { mode = localStorage.getItem('gfd-ai-mode') || mode; } catch { /* private browsing */ }
 if (!['existing', 'free', 'local'].includes(mode)) mode = 'existing';
@@ -8,6 +10,13 @@ const configReady = fetch(new URL('./config.json', import.meta.url), { credentia
 // Keep a missing optional configuration from creating an unhandled rejection.
 configReady.catch(() => {});
 window.GFDAI = Object.freeze({
+  extendInstructions: koreanInstructions,
+  async loadKoreanModel(options = {}) {
+    const config = await configReady;
+    if (config.schemaVersion !== 1 || !config.koreanModel?.manifest) throw Error('한국어 모델 설정을 불러오지 못했습니다.');
+    const file = await loadPackedModel(new URL(config.koreanModel.manifest, import.meta.url).href, config.koreanModel.sha256, options);
+    return window.LocalGGUF.load([file], options);
+  },
   getMode: () => mode,
   setMode(value) {
     if (!['existing', 'free', 'local'].includes(value)) return false;

@@ -1,4 +1,5 @@
 // Self-hosted Wllama 3.8.1. No CDN, account, GPU or cross-origin isolation required.
+import { koreanMessages } from './language.mjs';
 const MAX_FILE = 2 * 1024 ** 3;
 const number = (value, fallback, min, max) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(Number(value), max)) : fallback;
 export function validateFiles(files) {
@@ -60,6 +61,7 @@ export class LocalGGUFEngine {
     if (!this.status.ready || !this.runtime) throw Error('먼저 로컬 GGUF 모델을 불러오세요.');
     if (this.status.generating || this.status.loading) throw Error('현재 로컬 모델 작업이 진행 중입니다.');
     if (!Array.isArray(messages) || !messages.length || messages.some(m => !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string')) throw Error('올바른 대화 메시지가 필요합니다.');
+    messages = koreanMessages(messages);
     this.update({ generating: true });
     let full = '';
     try {
@@ -70,7 +72,7 @@ export class LocalGGUFEngine {
       // Do not retry failed chat generation with an invented answer or another service.
       const stream = meta['general.architecture'] === 'gpt2'
         ? await this.runtime.createCompletion({ ...common, prompt: messages.map(m => `${m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : 'System'}: ${m.content}`).join('\n') + '\nAssistant:' })
-        : await this.runtime.createChatCompletion({ ...common, messages });
+        : await this.runtime.createChatCompletion({ ...common, messages, chat_template_kwargs: { enable_thinking: false } });
       for await (const chunk of stream) {
         const token = chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.text ?? '';
         if (token) { full += token; options.onToken?.(token); }

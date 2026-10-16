@@ -41,7 +41,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
   // Never cache external inference requests or multi-megabyte model files.
-  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin || /\.gguf(?:$|\?)/i.test(request.url)) return;
+  if (request.method !== 'GET' || new URL(request.url).origin !== self.location.origin || /\.gguf(?:\.part\d+)?(?:$|\?)/i.test(request.url)) return;
   // Registry updates, disabled plugins and failed loads must not be masked by old caches.
   if (new URL(request.url).pathname.startsWith(new URL('./plugins/', self.location.href).pathname)) return;
 

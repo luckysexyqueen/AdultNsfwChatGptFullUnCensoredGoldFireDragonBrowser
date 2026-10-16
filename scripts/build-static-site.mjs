@@ -20,7 +20,7 @@ async function copyAssets(source, target) {
     const from = path.join(source, entry.name);
     const to = path.join(target, entry.name);
     if (entry.isDirectory()) await copyAssets(from, to);
-    else if (entry.isFile() && (extensions.has(path.extname(entry.name).toLowerCase()) || entry.name === 'LICENCE' || entry.name === 'NOTICE.md')) await copyFile(from, to);
+    else if (entry.isFile() && (extensions.has(path.extname(entry.name).toLowerCase()) || /\.gguf\.part\d+$/i.test(entry.name) || entry.name === 'LICENCE' || entry.name === 'NOTICE.md')) await copyFile(from, to);
   }
 }
 export async function buildStatic(output = path.join(root, 'site-dist')) {

@@ -1,7 +1,8 @@
+import { koreanInstructions } from './language.mjs';
 export function prepareMessages(messages, systemPrompt, instructions) {
   if (!Array.isArray(messages) || !messages.length) throw Error('대화 메시지가 필요합니다.');
   const result = [];
-  const system = [systemPrompt, instructions].filter(Boolean).join('\n\n');
+  const system = koreanInstructions([systemPrompt, instructions].filter(Boolean).join('\n\n'));
   if (system) result.push({ role: 'system', content: system });
   for (const message of messages) {
     if (!['user', 'assistant', 'system'].includes(message.role) || typeof message.content !== 'string') throw Error('텍스트 대화만 사용할 수 있습니다.');
