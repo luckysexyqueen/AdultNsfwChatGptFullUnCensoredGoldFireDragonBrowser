@@ -91,7 +91,7 @@ test('static artifact preserves website entrypoints and excludes private source/
   const output = path.join(temp, 'site');
   try {
     await buildStatic(output);
-    for (const file of ['index.html', 'GoldFireDragonBrowser.html', 'plugins/boot.js', 'plugins/runtime.mjs', 'plugins/registry.json', 'webviews/gecko/adapter.js', 'webviews/chromium/adapter.js']) {
+    for (const file of ['index.html', 'GoldFireDragonBrowser.html', 'plugins/boot.js', 'plugins/runtime.mjs', 'plugins/registry.json', 'webviews/gecko/adapter.js', 'webviews/chromium/adapter.js', 'webviews/custom/adapter.js']) {
       assert.deepEqual(await readFile(path.join(output, file)), await readFile(new URL('../' + file, import.meta.url)));
     }
     for (const file of ['.env', '.git/config', 'server.js', 'ONLY-MY-AI-API-MCP-PLUGINS/plugin.json', 'Japan/Configs/FOV_Japan_219.100.37.170_tcp.ovpn']) {

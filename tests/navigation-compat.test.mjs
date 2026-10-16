@@ -9,7 +9,7 @@ function shell(href='https://app.test/sub/index.html', extras={}) {
   const window={location:{href,assign:url=>navigations.push(url)},document,
     open:(...args)=>popups.push(args),...extras};
   window.parent ??= window;
-  for (const name of ['gecko','chromium']) {
+  for (const name of ['gecko','chromium','custom']) {
     const adapter=fs.readFileSync(new URL('../webviews/'+name+'/adapter.js',import.meta.url),'utf8');
     vm.runInNewContext(adapter,{window});
   }
@@ -186,5 +186,45 @@ test('both entrypoints load separate engine adapters before the shared router',(
     const gecko=html.indexOf('src="./webviews/gecko/adapter.js"');
     const chromium=html.indexOf('src="./webviews/chromium/adapter.js"');
     assert.ok(gecko>=0 && chromium>gecko && html.indexOf('src="./inapp-browser.js"')>chromium);
+  }
+});
+
+test('custom facade receives engine/session options for both engines',async()=>{
+  const calls=[];
+  const s=shell(undefined,{GoldFireWebViews:{custom:{open:async options=>{calls.push(options);return {opened:true,engine:options.engine};}}}});
+  await Promise.all([
+    s.window.GFDInAppBrowser.open('https://example.org',{engine:'gecko',sessionId:'g1'}),
+    s.window.GFDInAppBrowser.open('https://example.com',{engine:'chromium',sessionId:'c1'})
+  ]);
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)),[
+    {url:'https://example.org/',engine:'gecko',sessionId:'g1'},
+    {url:'https://example.com/',engine:'chromium',sessionId:'c1'}
+  ]);
+  assert.equal(s.navigations.length,0);
+});
+test('custom wrong-engine result is rejected without shell navigation',async()=>{
+  const s=shell(undefined,{GoldFireWebViews:{custom:{open:async()=>({opened:true,engine:'chromium'})}}});
+  await assert.rejects(s.window.GFDInAppBrowser.open('https://example.org',{engine:'gecko'}),{code:'ENGINE_UNAVAILABLE'});
+  assert.equal(s.navigations.length,0);
+});
+test('custom rejection falls through only to requested native engine',async()=>{
+  const calls=[];
+  const s=shell(undefined,{GoldFireWebViews:{custom:{open:async()=>{throw Error('not implemented');}},gecko:{open:async()=>calls.push('gecko')},chromium:{open:async()=>assert.fail('wrong engine')}}});
+  await s.window.GFDInAppBrowser.open('https://example.org',{engine:'gecko'});
+  assert.deepEqual(calls,['gecko']);
+});
+test('custom bridge can be injected late on parent and handle auto mode',async()=>{
+  let received;
+  const s=shell();
+  s.window.parent={document:{},GoldFireWebViews:{custom:{open:async options=>received=options}}};
+  await s.window.GFDInAppBrowser.open('https://example.org');
+  assert.deepEqual(JSON.parse(JSON.stringify(received)),{url:'https://example.org/',engine:'auto'});
+  assert.equal(s.navigations.length,0);
+});
+test('entrypoints load custom adapter once before common router',()=>{
+  for(const file of ['index.html','GoldFireDragonBrowser.html']){
+    const html=fs.readFileSync(new URL('../'+file,import.meta.url),'utf8');
+    assert.equal(html.split('src="./webviews/custom/adapter.js"').length-1,1);
+    assert.ok(html.indexOf('src="./webviews/custom/adapter.js"')<html.indexOf('src="./inapp-browser.js"'));
   }
 });

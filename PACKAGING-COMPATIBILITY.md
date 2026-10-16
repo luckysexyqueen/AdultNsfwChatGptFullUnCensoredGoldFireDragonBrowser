@@ -8,12 +8,14 @@
 webviews/
   gecko/adapter.js      # GeckoView 및 커스텀 Gecko 호스트 연결
   chromium/adapter.js   # Chromium WebView 및 식별된 Electron 호스트 연결
+  custom/adapter.js     # 두 엔진을 묶는 커스텀 네이티브 호스트 연결
+  custom/README.md      # 커스텀 호스트 구현 계약·사용 예제
 inapp-browser.js        # 공통 엔진 선택·세션 전달·자동 탐색
 index.html
 GoldFireDragonBrowser.html
 ```
 
-두 HTML은 엔진 어댑터 두 개, 공통 라우터 순서로 classic script를 로드합니다. `npm run build:static`도 webviews 폴더를 포함합니다. ZIP→APK에는 HTML만 넣지 말고 전체 정적 산출물의 폴더 구조를 유지해야 합니다.
+두 HTML은 엔진 어댑터 두 개, 커스텀 어댑터, 공통 라우터 순서로 classic script를 로드합니다. `npm run build:static`도 webviews 폴더를 포함합니다. ZIP→APK에는 HTML만 넣지 말고 전체 정적 산출물의 폴더 구조를 유지해야 합니다.
 
 ## 공통 API
 
@@ -42,7 +44,7 @@ HTTP(S) URL만 네이티브 탐색에 전달합니다. 정상 처리 시 정규�
 
 명시한 엔진의 연결이 없거나 모두 실패하면 `code: 'ENGINE_UNAVAILABLE'` 오류를 반환합니다. 다른 엔진이나 현재 셸 화면으로 임의 전환하지 않습니다. sessionId를 지정했을 때도 일반 셸 이동이나 세션을 받지 않는 자동 대안으로 전환하지 않습니다.
 
-자동 모드: Gecko 어댑터 → Chromium 어댑터 → 기존 비지정 GoldFireNative/GoldFireInAppBrowser → 표준 Capacitor Browser → 접근 가능한 최상위 앱 문서 이동. 마지막 이동은 셸 화면을 대체할 수 있습니다.
+자동 모드: Gecko 어댑터 → Chromium 어댑터 → 커스텀 호스트 → 기존 비지정 GoldFireNative/GoldFireInAppBrowser → 표준 Capacitor Browser → 접근 가능한 최상위 앱 문서 이동. 마지막 이동은 셸 화면을 대체할 수 있습니다.
 
 ## 커스텀 인앱웹뷰 호스트 연결 계약
 
@@ -75,3 +77,7 @@ GoldFireWebViews.chromium.open({ url, sessionId? })
 `node --test tests/navigation-compat.test.mjs`는 엔진 선택·동시 요청·세션 전달·실패 시 엔진 보존·부모 설정 상속·기존 탐색을 검사합니다. 기존 정적 빌드 검사도 두 엔진 어댑터의 포함과 원본 바이트 일치를 확인합니다.
 
 브라우저 검사는 실제 Chrome에서 실행하되 네이티브 엔진 연결은 모의 객체입니다. Android의 두 엔진 동시 실행, Windows Gecko 호스트, 로그인·미디어·다운로드·VPN·DRM·모델 실행은 아직 기기에서 검증하지 않았습니다.
+
+## 커스텀 웹뷰 확장
+
+`webviews/custom/`에 통합 어댑터와 호스트 구현 안내를 제공합니다. `GoldFireWebViews.custom.open({url, engine, sessionId?})`를 구현하면 하나의 커스텀 호스트에서 두 엔진을 제어할 수 있습니다. 명시적 엔진 요청은 커스텀 호스트를 먼저 시도하고, 실패하면 요청한 엔진의 전용 어댑터를 시도합니다. 자동 모드에서는 기존 Gecko·Chromium 우선순위를 유지합니다. 자세한 계약과 예제는 `webviews/custom/README.md`를 참조하십시오.

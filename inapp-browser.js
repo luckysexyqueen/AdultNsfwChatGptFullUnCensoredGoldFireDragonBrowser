@@ -45,8 +45,12 @@
     const owners = hosts();
     const adapters = window.GFDEngineAdapters || {};
     const candidates = [];
+    // A custom native facade can dispatch an explicit engine request itself.
+    if (engine !== 'auto' && adapters.custom) candidates.push(...adapters.custom(owners, options, engine));
     if ((engine === 'auto' || engine === 'gecko') && adapters.gecko) candidates.push(...adapters.gecko(owners, options));
     if ((engine === 'auto' || engine === 'chromium') && adapters.chromium) candidates.push(...adapters.chromium(owners, options));
+    // Preserve Gecko-first auto behavior, then offer the unified custom host.
+    if (engine === 'auto' && adapters.custom) candidates.push(...adapters.custom(owners, options, engine));
     // Untyped legacy adapters and system Custom Tabs cannot guarantee an engine.
     // They are therefore used only for automatic, sessionless navigation.
     if (engine === 'auto' && config.sessionId === undefined) {
@@ -68,6 +72,7 @@
     for (const invoke of candidates) {
       try {
         const result = await invoke();
+        if (engine !== 'auto' && result && result.engine && result.engine !== engine) continue;
         if (result === false || (result && (result.opened === false || result.error))) continue;
         return url.href;
       } catch (error) {
