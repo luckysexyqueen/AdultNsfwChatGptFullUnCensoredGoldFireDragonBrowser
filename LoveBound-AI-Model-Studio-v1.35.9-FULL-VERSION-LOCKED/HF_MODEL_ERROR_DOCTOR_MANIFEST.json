@@ -1,0 +1,11 @@
+{
+  "version": "1.35.9",
+  "features": [
+    "offline log classification",
+    "safe JSON config normalization",
+    "non-destructive patch copies",
+    "SHA256 original tracking",
+    "no execution or installs"
+  ],
+  "original_source_zips_retained": 24
+}

@@ -4,7 +4,7 @@
     {
       "id": "lovebound-ai-model-studio",
       "name": "LoveBound AI Model Studio",
-      "version": "1.35.9",
+      "version": "1.35.11",
       "description": "Hugging Face Hub, Spaces and model ZIP audit support for upload-first AI browser and website workflows.",
       "context": "When helping with AI models, distinguish local GGUF inference from remote Hugging Face services. Preserve the user's existing browser, models and files. Verify model compatibility and resource requirements before suggesting an integration; do not claim that a model has been downloaded or executed without evidence.",
       "autoEnable": false,

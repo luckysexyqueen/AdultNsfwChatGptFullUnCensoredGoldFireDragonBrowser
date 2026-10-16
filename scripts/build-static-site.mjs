@@ -31,6 +31,10 @@ export async function buildStatic(output = path.join(root, 'site-dist')) {
   await mkdir(output, { recursive: true });
   for (const file of files) await copyFile(path.join(root, file), path.join(output, file));
   for (const directory of directories) await copyAssets(path.join(root, directory), path.join(output, directory));
+  // Publish only the reviewed plugin chat entry, never Python, archives or private uploads.
+  const studio = 'LoveBound-AI-Model-Studio-v1.35.9-FULL-VERSION-LOCKED';
+  await mkdir(path.join(output, studio), { recursive: true });
+  for (const file of ['index.html', 'web-chat.mjs']) await copyFile(path.join(root, studio, file), path.join(output, studio, file));
   // Environment is public client configuration only. Never copy .env or raw env-config.js.
   const sourceConfig = await readFile(path.join(root, 'env-config.js'), 'utf8');
   const publicConfig = {};

@@ -21,3 +21,6 @@ drift; do not delete existing files or 24 original archives.
 This is a project policy, not an immutable platform-level lock: plugin owners,
 platform administrators, or explicit later updates may still change metadata.
 Do not claim the platform itself prevents future version changes.
+
+## User-selected default system prompt and bounded repair
+User can set a default prompt in `training/system_prompt.txt`. Use runtime system-message injection for inference, or user-approved SHA256-pinned SFT dataset generation via `training/system_prompt_manager.py`. Never claim a prompt TXT changes model weights; LoRA/fine-tuning needs compatible source model and real training. Do not auto-inject unapproved prompt into unrelated projects. `training/auto_repair.py` diagnoses logs and, with explicit flag, produces only safe new config copies; never auto-install, run arbitrary commands, silently alter weights, or retry indefinitely. Keep plugin version 1.35.9.

@@ -1,0 +1,15 @@
+{
+  "version": "1.35.9",
+  "source": "FULL-REBUILT",
+  "new_training_files": [
+    "training/run_training.py",
+    "training/train_peft.py",
+    "training/requirements-training.txt",
+    "training/README.md",
+    "training/mergekit/example-config.yaml",
+    "training/datasets/example.jsonl"
+  ],
+  "training_executed": false,
+  "space_ui_training_execution": false,
+  "preserved_original_zip_count": 24
+}

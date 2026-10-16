@@ -11,7 +11,7 @@
     "defaultPrompt": "Inspect my uploaded Hugging Face model or Space ZIP and plan safe GGUF integration with my custom browser and website."
   },
   "name": "lovebound-ai-model-studio",
-  "version": "1.35.9",
+  "version": "1.35.11",
   "description": "Hugging Face Hub, Spaces and model ZIP audit support for upload-first AI browser and website workflows.",
   "author": {
     "name": "LoveBound"

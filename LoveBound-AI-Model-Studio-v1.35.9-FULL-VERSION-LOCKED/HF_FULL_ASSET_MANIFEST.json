@@ -1,0 +1,105 @@
+{
+  "package": "LoveBound AI Model Studio",
+  "version": "1.35.9",
+  "type": "Hugging Face Spaces FULL",
+  "original_archive_count": 24,
+  "source_zip_sha256": "6355a7c0582f95d2460a20388a733313cc065ed774fc58f391112781e9265dbe",
+  "assets": {
+    "assets/GGUF-conveter-main.zip": {
+      "sha256": "75b040deaf6f2cb69883f6f8b0f87d1ac5f4f46ee3cf0337c35793f5327fc6a2",
+      "bytes": 5651
+    },
+    "assets/GPT2-master.zip": {
+      "sha256": "f9e8457c3ddc455e5c728ff9e484f180b7e21c68a9054c449a1fa20a5b5cb758",
+      "bytes": 159128
+    },
+    "assets/KoGPT2-finetuning-master.zip": {
+      "sha256": "aabf54ba5b5c680bef0496f642d0112d6ab38e9ca9bf13c485857894f1c6072a",
+      "bytes": 49560
+    },
+    "assets/Korean-GPT2-master.zip": {
+      "sha256": "328dd507ff9a202a12727ac9ad3fe17d2d36ce16e80260fd35dfa96c27b3df1f",
+      "bytes": 30874548
+    },
+    "assets/USB-Uncensored-LLM-main(3).zip": {
+      "sha256": "44dd83025d3c50412718447436448ec0203e4da06f519d7bd3eb071cd0d8a703",
+      "bytes": 77867
+    },
+    "assets/YaGGUF-main.zip": {
+      "sha256": "5fe87609b9666c6f8eeb978ad83cb6302fe4fbe8bf7a1975648b1a4492c5ddec",
+      "bytes": 6727603
+    },
+    "assets/accelerate-main.zip": {
+      "sha256": "3afdb93e46beccd9e23dac8ed1b2bc26205bb0f4c6c97d03dd502d93a6c1d78b",
+      "bytes": 1701422
+    },
+    "assets/datasets-main.zip": {
+      "sha256": "27f1b905c5bd7124ba7980f218b8c1aeb6fe5c01813362085723927a629d2bc1",
+      "bytes": 28698145
+    },
+    "assets/gradio-main.zip": {
+      "sha256": "630dcf554ba905c2430c36bcc7f051c235acfa2b74d256764c6445373a5d0ada",
+      "bytes": 57382121
+    },
+    "assets/huggingface.js-main.zip": {
+      "sha256": "04d1915c420f909906d4ede143f2a87f3a7f06122364aef151f53a0496e99ee4",
+      "bytes": 6229530
+    },
+    "assets/huggingface_hub-main.zip": {
+      "sha256": "4829a272ff750c3e392944b1ab3568aca159c6edb2c4b7dd081eae8c373c6897",
+      "bytes": 1928196
+    },
+    "assets/llama-cpp-python-main.zip": {
+      "sha256": "1e13097c8201d12773a6879cbcf00657697193aa6a61a30850a1401476af9cb5",
+      "bytes": 483580
+    },
+    "assets/llama.py-main.zip": {
+      "sha256": "e080b0c8a03abeb45599bb11e4efec875d93f761a7cd7cef74d76218700d7f38",
+      "bytes": 2777
+    },
+    "assets/mergeui-0.1.0.zip": {
+      "sha256": "a5f7834b5f7fcf2826ecb0881ac21975cb22b5e86b7a416ee9538f14190bcb07",
+      "bytes": 273108
+    },
+    "assets/optimum-main.zip": {
+      "sha256": "074511065a47ddb97ec3dd74a66e90109b429e0af0432ef5e82c99472b8007bc",
+      "bytes": 254393
+    },
+    "assets/peft-main.zip": {
+      "sha256": "0f442c97270fb6c3913315fcb3abcfd1db131a263761e9ec0e74a237869c0453",
+      "bytes": 12360014
+    },
+    "assets/plug-n-play-ai-main.zip": {
+      "sha256": "b1f96b5c28a9b1b124d84b00a719892ba40207566a918c68fd7967c6cc9f2bce",
+      "bytes": 78467
+    },
+    "assets/screenenv-main.zip": {
+      "sha256": "1d4c7b9f8a2418daac78fee2fff0858cf61ef3df3e8eea45e7a95d615c56050c",
+      "bytes": 51676
+    },
+    "assets/tensor_tools_gguf-main.zip": {
+      "sha256": "ec49b45a1c250b6414e874eef9ccb3479a8834c5ec05bd3bf5aefdfb8659223c",
+      "bytes": 253212
+    },
+    "assets/text-generation-inference-main.zip": {
+      "sha256": "c04a0ec91497fee5cee7d94481893fe9e312f795c5aacf2ce1ead5fe4ef07622",
+      "bytes": 3720858
+    },
+    "assets/torch_to_ggml-main.zip": {
+      "sha256": "20a567f96d1e749b5cc5b8dd6e255c7f453af6b95eeca7b412efc45137bf7e76",
+      "bytes": 3414
+    },
+    "assets/torchtune-0.6.1.zip": {
+      "sha256": "2537f22a470abc0d21beec17a66d4c51d207b9f177bd58d364ca01d662135310",
+      "bytes": 6805393
+    },
+    "assets/transformers-main.zip": {
+      "sha256": "2784fb714cb606fa4be0daf5b8af1cc068546100852ccf321184f5adfcc4c277",
+      "bytes": 27737319
+    },
+    "assets/transformers.js-main.zip": {
+      "sha256": "e56f5535fa8a43fb6f27f4f7afb9b4e22a15a9d500c89deead96469ea593bfdc",
+      "bytes": 1277403
+    }
+  }
+}
