@@ -2,6 +2,7 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
+    <script src="./inapp-browser.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#10a37f" />
     <script defer src="./plugins/boot.js"></script>
@@ -39,7 +40,7 @@
     <script type="module" src="./vpn-index-control.js"></script>
     <script type="module" src="./boot-guard.js"></script>
     <!-- 로컬 GGUF 런타임은 번들 환경에서만 로드합니다. 원본 TypeScript를 standalone HTML에서 직접 요청하지 않습니다. -->
-    <script type="module" src="./inapp-browser.js"></script>
+
   </head>
   <body>
     <!-- LocalForage: CDN 제거, 네이티브 IndexedDB 기반 자체 구현으로 대체 (오프라인/WebView 안전) -->

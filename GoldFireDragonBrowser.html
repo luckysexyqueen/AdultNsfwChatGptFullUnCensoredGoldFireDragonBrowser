@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ko">
   <head>
+    <script src="./inapp-browser.js"></script>
     <script defer src="./plugins/boot.js"></script>
 <!-- All downloadable resource URLs were embedded as Base64 data URLs. -->
     <meta charset="UTF-8" />
@@ -548,7 +549,7 @@
         startVideoWatcher();
       })();
     </script>
-      <script src="./inapp-browser.js"></script>
+
   </head>
   <body>
     <script>
@@ -3011,30 +3012,8 @@
     let target = makeTarget(q);
     if (lucky && target && /google\.com\/search/i.test(target)) target += '&btnI=1';
     try {
-      if (window.GoldFireNative && window.GoldFireNative.isElectron && typeof window.GoldFireNative.inAppOpen === 'function') {
-        const r = await window.GoldFireNative.inAppOpen(target);
-        if (r && r.opened) return true;
-        throw new Error(r?.error || 'Windows 인앱 브라우저를 열 수 없습니다.');
-      }
-      const gfd = window.Capacitor?.Plugins?.GoldFireInAppBrowser;
-      if (gfd && typeof gfd.open === 'function') {
-        await gfd.open({ url: target });
-        return true;
-      }
-      const browser = window.Capacitor?.Plugins?.Browser;
-      if (browser && typeof browser.open === 'function') {
-        await browser.open({ url: target });
-        return true;
-      }
-      const gecko = window.Capacitor?.Plugins?.GeckoView;
-      if (gecko && typeof gecko.open === 'function') {
-        await gecko.open({ url: target });
-        return true;
-      }
-      // Native bridge가 아직 주입되지 않은 WebView/개발 모드에서도 검색을 막지 않습니다.
-      // 검색 사이트는 iframe을 거부할 수 있으므로 현재 WebView의 최상위 문서로 이동합니다.
-      if (window.top && window.top !== window) window.top.location.assign(target);
-      else window.location.assign(target);
+      const opened = await window.GFDInAppBrowser.open(target);
+      if (!opened) throw new Error("지원하지 않는 탐색 URL입니다.");
       return true;
     } catch (e) {
       console.error('[GFD HARD SEARCH ROUTER]', e);
