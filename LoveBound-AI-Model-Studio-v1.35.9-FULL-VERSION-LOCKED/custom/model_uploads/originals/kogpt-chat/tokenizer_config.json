@@ -1,0 +1,1 @@
+{"unk_token": "<unk>", "bos_token": "</s>", "eos_token": "</s>", "add_prefix_space": false, "pad_token": "<pad>", "mask_token": "<unused0>", "special_tokens_map_file": null, "name_or_path": "./drive/MyDrive/chat_model(12)/model(koGPT2)/", "tokenizer_class": "GPT2Tokenizer"}
