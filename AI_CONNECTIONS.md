@@ -2,6 +2,13 @@
 
 ## Korean default and bundled lightweight uncensored model
 
+The same model is also available as a single, unchanged GGUF release asset:
+[Download one GGUF file](https://github.com/luckysexyqueen/AdultNsfwChatGptFullUnCensoredGoldFireDragonBrowser/releases/download/model-qwen3-0.6b-abliterated-q4-k-m/qwen3-0.6b-abliterated-q4_k_m.gguf).
+The model-management dialog includes this direct download link. Download the file
+and select it with the existing GGUF file input to load it locally. The split static
+copy remains available for automatic in-site loading. The release includes checksum
+and Apache-2.0 license files.
+
 Responses default to Korean across the existing API, free API and local inference
 paths. Explicit requests for another language remain possible. User/GPT instructions
 are retained, and language instructions are added only for inference.

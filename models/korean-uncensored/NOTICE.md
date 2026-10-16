@@ -9,6 +9,7 @@
 - License: Apache-2.0, supplied in `LICENCE`.
 - Model card: https://huggingface.co/mlabonne/Qwen3-0.6B-abliterated-GGUF
 - Base model: https://huggingface.co/Qwen/Qwen3-0.6B
+- Single-file release: https://github.com/luckysexyqueen/AdultNsfwChatGptFullUnCensoredGoldFireDragonBrowser/releases/tag/model-qwen3-0.6b-abliterated-q4-k-m
 
 The weights are unchanged. These are byte parts of one GGUF, not independent GGUF
 shards. Each part is at most 20 MiB for ordinary GitHub and static-hosting uploads.
