@@ -10,7 +10,7 @@ const files = ['index.html', 'GoldFireDragonBrowser.html', 'boot-guard.js', 'ina
   'cordova_plugins.js', 'capacitor.plugins.json', 'aionspace-vip.js', 'hdr.js',
   'vr_360_enhanced patch script.js', 'icon.png', 'favicon.ico', 'placeholder.svg', 'robots.txt',
   'manifest.json', 'sw.js', 'full_licenses.html', 'PublicSuffixDatabase.list'];
-const directories = ['plugins', 'ai', 'vendor', 'fonts', 'icon', 'images', 'img', 'lib', 'offline', 'models'];
+const directories = ['webviews', 'plugins', 'ai', 'vendor', 'fonts', 'icon', 'images', 'img', 'lib', 'offline', 'models'];
 const extensions = new Set(['.js', '.mjs', '.css', '.html', '.json', '.png', '.jpg', '.jpeg', '.gif',
   '.webp', '.svg', '.ico', '.woff', '.woff2', '.ttf', '.wasm', '.bin', '.data', '.gguf', '.so']);
 async function copyAssets(source, target) {

@@ -9,6 +9,10 @@ function shell(href='https://app.test/sub/index.html', extras={}) {
   const window={location:{href,assign:url=>navigations.push(url)},document,
     open:(...args)=>popups.push(args),...extras};
   window.parent ??= window;
+  for (const name of ['gecko','chromium']) {
+    const adapter=fs.readFileSync(new URL('../webviews/'+name+'/adapter.js',import.meta.url),'utf8');
+    vm.runInNewContext(adapter,{window});
+  }
   vm.runInNewContext(source,{window,document,URL,console});
   return {window,navigations,events,popups};
 }
@@ -115,4 +119,72 @@ test('standard Browser can be injected late in the accessible parent',async()=>{
   s.window.parent={document:{},Capacitor:{Plugins:{Browser:{open:async()=>calls.push('parent-browser')}}}};
   await s.window.GFDInAppBrowser.open('https://example.org');
   assert.deepEqual(calls,['parent-browser']);
+});
+
+test('explicit engines coexist with independent session routing',async()=>{
+  const calls=[];
+  const s=shell(undefined,{GoldFireWebViews:{
+    gecko:{open:async options=>{await Promise.resolve();calls.push(['gecko',options]);}},
+    chromium:{open:async options=>calls.push(['chromium',options])}
+  }});
+  await Promise.all([
+    s.window.GFDInAppBrowser.open('https://gecko.example',{engine:'gecko',sessionId:'gecko-tab-1'}),
+    s.window.GFDInAppBrowser.open('https://chrome.example',{engine:'chromium',sessionId:'chrome-tab-1'})
+  ]);
+  const result=JSON.parse(JSON.stringify(calls)).sort((a,b)=>a[0].localeCompare(b[0]));
+  assert.deepEqual(result,[
+    ['chromium',{url:'https://chrome.example/',sessionId:'chrome-tab-1'}],
+    ['gecko',{url:'https://gecko.example/',sessionId:'gecko-tab-1'}]
+  ]);
+  assert.equal(s.window.GFDInAppBrowser.getEngine(),'auto');
+  assert.equal(s.navigations.length,0);
+});
+test('explicit engine failure does not silently swap engines or navigate shell',async()=>{
+  let otherCalls=0;
+  const s=shell(undefined,{GoldFireWebViews:{gecko:{open:async()=>({opened:false})},chromium:{open:async()=>otherCalls++}}});
+  await assert.rejects(s.window.GFDInAppBrowser.open('https://example.org',{engine:'gecko'}),{code:'ENGINE_UNAVAILABLE'});
+  assert.equal(otherCalls,0);assert.equal(s.navigations.length,0);
+});
+test('Chromium mode cannot be satisfied by system Custom Tabs or untyped bridges',async()=>{
+  const s=shell(undefined,{GoldFireNative:{isElectron:true,inAppOpen:async()=>assert.fail('untyped engine')},Capacitor:{Plugins:{Browser:{open:async()=>assert.fail('system browser')}}}});
+  await assert.rejects(s.window.GFDInAppBrowser.open('https://example.org',{engine:'chromium'}),{code:'ENGINE_UNAVAILABLE'});
+});
+test('explicit Chromium plugin and identified Electron receive session options',async()=>{
+  for(const type of ['plugin','electron']) {
+    let received;
+    const extras=type==='plugin'?{Capacitor:{Plugins:{ChromiumWebView:{open:async value=>received=value}}}}:
+      {GoldFireNative:{engine:'chromium',inAppOpen:async(url,options)=>{assert.equal(url,options.url);received=options;}}};
+    const s=shell(undefined,extras);
+    await s.window.GFDInAppBrowser.open('https://example.org',{engine:'chromium',sessionId:'c1'});
+    assert.deepEqual(JSON.parse(JSON.stringify(received)),{url:'https://example.org/',sessionId:'c1'});
+  }
+});
+test('default engine selection and per-request overrides stay independent',async()=>{
+  const calls=[];
+  const s=shell(undefined,{GoldFireWebViews:{gecko:{open:async()=>calls.push('g')},chromium:{open:async()=>calls.push('c')}}});
+  s.window.GFDInAppBrowser.setEngine('chromium');
+  await s.window.GFDInAppBrowser.open('https://example.org');
+  await s.window.GFDInAppBrowser.open('https://example.org',{engine:'gecko'});
+  assert.deepEqual(calls,['c','g']);assert.equal(s.window.GFDInAppBrowser.getEngine(),'chromium');
+});
+test('child browser inherits shell engine selection without requiring duplicate state',async()=>{
+  const calls=[];
+  const s=shell(undefined,{parent:{document:{},GFDInAppBrowser:{getEngine:()=> 'chromium'},GoldFireWebViews:{chromium:{open:async()=>calls.push('c')},gecko:{open:async()=>assert.fail('wrong engine')}}}});
+  await s.window.GFDInAppBrowser.open('https://example.org');
+  assert.deepEqual(calls,['c']);
+});
+test('invalid engine/session input fails before dispatch',async()=>{
+  const s=shell();
+  assert.throws(()=>s.window.GFDInAppBrowser.setEngine('other'),/Unknown browser engine/);
+  await assert.rejects(s.window.GFDInAppBrowser.open('https://example.org',{engine:'other'}),/Unknown browser engine/);
+  await assert.rejects(s.window.GFDInAppBrowser.open('https://example.org',{sessionId:'../../other'}),/Invalid browser sessionId/);
+  assert.equal(s.navigations.length,0);
+});
+test('both entrypoints load separate engine adapters before the shared router',()=>{
+  for(const file of ['index.html','GoldFireDragonBrowser.html']) {
+    const html=fs.readFileSync(new URL('../'+file,import.meta.url),'utf8');
+    const gecko=html.indexOf('src="./webviews/gecko/adapter.js"');
+    const chromium=html.indexOf('src="./webviews/chromium/adapter.js"');
+    assert.ok(gecko>=0 && chromium>gecko && html.indexOf('src="./inapp-browser.js"')>chromium);
+  }
 });
