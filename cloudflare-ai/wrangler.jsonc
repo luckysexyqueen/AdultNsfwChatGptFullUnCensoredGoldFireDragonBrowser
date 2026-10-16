@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "goldfire-free-ai",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-16",
+  "compatibility_flags": ["nodejs_compat"],
+  "ai": { "binding": "AI" },
+  "durable_objects": { "bindings": [{ "name": "BUDGET", "class_name": "FreeBudget" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["FreeBudget"] }],
+  "observability": { "enabled": true, "head_sampling_rate": 0.1 }
+}

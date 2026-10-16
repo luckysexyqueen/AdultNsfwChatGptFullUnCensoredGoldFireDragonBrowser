@@ -67,9 +67,31 @@ export async function streamChat(
     throw new Error('메시지를 입력해주세요');
   }
 
+  const mode = window.GFDAI?.getMode() || 'existing';
+  // Local GGUF runs without contacting the existing authentication/API backend.
+  if (mode === 'local') {
+    if (chatAttachments?.some(a => a.type === 'image')) throw new Error('현재 로컬 텍스트 모델은 이미지 분석을 지원하지 않습니다.');
+    const localMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = messages.map(m => ({ role: m.role, content: m.content }));
+    const context = [systemPrompt, window.GFDPlugins?.extendInstructions(instructions) || instructions].filter(Boolean).join('\n\n');
+    if (context) localMessages.unshift({ role: 'system', content: context });
+    const files = [...(gptFiles || []).map(f => f.file_content || ''), ...(chatAttachments || []).map(a => a.textContent || '')].filter(Boolean).join('\n\n');
+    if (files && localMessages.length) localMessages[localMessages.length - 1].content += '\n\n' + files;
+    const text = await window.LocalGGUF.generate(localMessages);
+    return completionStream(text);
+  }
+
   // 온라인 상태 확인
   if (!navigator.onLine) {
     throw new Error('인터넷 연결을 확인해주세요');
+  }
+
+  const inferenceInstructions = window.GFDPlugins?.extendInstructions(instructions) || instructions;
+  if (mode === 'free' && window.GFDAI) {
+    if (chatAttachments?.some(a => a.type === 'image')) throw new Error('무료 API는 텍스트 대화만 지원합니다.');
+    const freeMessages = messages.map(m => ({ role: m.role, content: m.content }));
+    const files = [...(gptFiles || []).map(f => f.file_content || ''), ...(chatAttachments || []).map(a => a.textContent || '')].filter(Boolean).join('\n\n');
+    if (files && freeMessages.length) freeMessages[freeMessages.length - 1].content += '\n\n' + files;
+    return completionStream(await window.GFDAI.generate({ messages: freeMessages, systemPrompt, instructions: inferenceInstructions }));
   }
 
   // 자동 재시도가 적용된 fetch 함수
@@ -88,7 +110,7 @@ export async function streamChat(
         body: JSON.stringify({
           messages: messages.map((m) => ({ role: m.role, content: m.content })),
           systemPrompt: systemPrompt || undefined,
-          instructions: instructions || undefined,
+          instructions: inferenceInstructions || undefined,
           gptFiles: gptFiles && gptFiles.length > 0 ? gptFiles : undefined,
           chatAttachments: chatAttachments && chatAttachments.length > 0 ? chatAttachments : undefined,
           lastUserContent: lastUserContent,
@@ -153,6 +175,11 @@ export async function streamChat(
     
     throw error;
   }
+}
+
+function completionStream(text: string): ReadableStream<Uint8Array> {
+  const payload = `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\ndata: [DONE]\n\n`;
+  return new ReadableStream({ start(controller) { controller.enqueue(new TextEncoder().encode(payload)); controller.close(); } });
 }
 
 // ========== 커스텀 GPT 관리 ==========

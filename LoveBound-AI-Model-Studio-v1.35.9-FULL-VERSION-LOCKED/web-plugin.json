@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "autoEnable": false,
+  "context": "When helping with AI models, distinguish local GGUF inference from remote Hugging Face services. Preserve the user's existing browser, models and files. Verify model compatibility and resource requirements before suggesting an integration; do not claim that a model has been downloaded or executed without evidence."
+}
