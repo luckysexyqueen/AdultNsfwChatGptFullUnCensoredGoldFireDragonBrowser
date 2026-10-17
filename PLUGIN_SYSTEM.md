@@ -104,3 +104,13 @@ not connect MCP tools or transmit chat data. See
 
 Disable context with the per-plugin checkbox, or remove `web-plugin.json` and rebuild
 to leave a catalog-only plugin. Revert the PR to remove the complete integration.
+
+## ZIP-to-APK / local asset plugin compatibility
+
+The generated plugins/boot.js is a classic script containing the reviewed runtime and a packaged data-only registry. file:, content:, capacitor: and other non-HTTP asset origins use the packaged registry without ESM imports or JSON fetches. HTTP(S), including localhost wrappers, continues fetching the current registry; a hosted load failure does not revive a stale snapshot.
+
+Edit plugins/boot-source.js for menu UI or plugins/runtime.mjs for runtime behavior, then run npm run plugins:build. The generated boot.js and public/plugins/boot.js must match. Rebuild/repackage the APK after plugin changes; an old installed APK retains its packaged catalog. LocalStorage saves preferences when supported; blocked storage uses memory for the current run.
+
+Run npm run plugins:test:apk with Playwright available; GFD_PLAYWRIGHT_MODULE and GFD_BROWSER_CHANNEL work like the existing browser checks. Tests open both entrypoints through file:// with networking disabled and exercise all three plugins, instruction application, persistence, and denied storage.
+
+Package the entire static build with index.html at the ZIP root. A lone index.html cannot replace referenced JS/model/font assets. The plugin menu and instruction integration are verified in a desktop Chrome file:// test, not an Android APK. APK wrapper policies, remote AI CORS/networking, file-based ES modules used elsewhere in the app, WASM, model resources, VPN credentials and native Gecko/Chromium bridges still need host support and device verification.

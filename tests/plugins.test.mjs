@@ -79,9 +79,13 @@ test('discovery finds nested packages, skips secrets and dot directories, reject
 test('repository catalog is deterministic and contains all three existing plugins', async () => {
   const plugins = await buildCatalog();
   const before = await readFile(new URL('../plugins/registry.json', import.meta.url), 'utf8');
+  const boot = await readFile(new URL('../plugins/boot.js', import.meta.url), 'utf8');
   await buildCatalog();
   assert.equal(await readFile(new URL('../plugins/registry.json', import.meta.url), 'utf8'), before);
   assert.equal(await readFile(new URL('../public/plugins/registry.json', import.meta.url), 'utf8'), before);
+  assert.equal(await readFile(new URL('../plugins/boot.js', import.meta.url), 'utf8'), boot);
+  assert.equal(await readFile(new URL('../public/plugins/boot.js', import.meta.url), 'utf8'), boot);
+  assert.ok(!/\bimport\s*\(/.test(boot));
   for (const id of ['lovebound-zeta-roleplay', 'lovebound-ai-model-studio', 'spec-direct-auto-inject']) {
     assert.ok(plugins.some(p => p.id === id && p.context && !p.autoEnable));
   }
