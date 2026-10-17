@@ -1,16 +1,26 @@
 const MODEL = '@cf/meta/llama-3.2-1b-instruct';
 const KOREAN_DEFAULT = '기본 응답 언어는 한국어입니다. 사용자가 다른 언어를 명시적으로 요청하지 않는 한 자연스럽고 간결한 한국어로 답변하세요.';
-const ALLOWED = new Set(['https://luckysexyqueen.github.io', 'https://luckysexyqueen.github.io/']);
+const DEFAULT_ALLOWED = new Set(['https://luckysexyqueen.github.io', 'https://luckysexyqueen.github.io/', 'http://localhost:8000', 'http://127.0.0.1:8000', 'http://localhost:3000', 'http://127.0.0.1:3000']);
 const MAX_INPUT_CHARS = 20000;
 const MAX_MESSAGES = 32;
 const MAX_OUTPUT_TOKENS = 4096;
 
+function normalizeAllowedOrigins() {
+  const extra = (typeof globalThis !== 'undefined' && globalThis.__GFD_ALLOWED_ORIGINS)
+    ? String(globalThis.__GFD_ALLOWED_ORIGINS).split(',')
+    : [];
+  return new Set([...DEFAULT_ALLOWED, ...extra.filter(Boolean).map(v => v.trim())]);
+}
+
 function validOrigin(origin) {
-  if (!origin) return false;
-  if (ALLOWED.has(origin)) return true;
+  const allowed = normalizeAllowedOrigins();
+  if (!origin) return true; // allow empty Origin in VPN/proxy or CLI probes
+  if (allowed.has(origin)) return true;
   try {
     const url = new URL(origin);
-    return url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname);
+    if (url.protocol === 'http:' && ['127.0.0.1', 'localhost', '0.0.0.0', '[::1]'].includes(url.hostname)) return true;
+    if (url.protocol === 'https:' && (url.hostname === 'github.io' || url.hostname.endsWith('.github.io') || url.hostname.endsWith('.workers.dev') || url.hostname.endsWith('.pages.dev'))) return true;
+    return false;
   } catch { return false; }
 }
 
@@ -24,8 +34,9 @@ export default {
     const origin = request.headers.get('Origin') || '';
     if (!validOrigin(origin)) return Response.json({ error: 'Origin not allowed' }, { status: 403 });
 
+    const allowOrigin = origin || '*';
     const headers = {
-      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Origin': allowOrigin,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
       'Cache-Control': 'no-store',
