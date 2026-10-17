@@ -3,8 +3,7 @@
 ## Korean default and bundled lightweight uncensored model
 
 The same model is also available as a single, unchanged GGUF release asset:
-[Download one GGUF file](https://github.com/luckysexyqueen/AdultNsfwChatGptFullUnCensoredGoldFireDragonBrowser/releases/download/model-qwen3-0.6b-abliterated-q4-k-m/qwen3-0.6b-abliterated-q4_k_m.gguf).
-The model-management dialog includes this direct download link. Download the file
+[Download one GGUF file](https://github.com/luckysexyqueen/AdultNsfwChatGptFullUnCensoredGoldFireDragonBrowser/releases/download/model-qwen3-0.6b-abliterated-q4-k-m/qwen3-0.6b-abliterated-q4_k_m.gguf). The model-management dialog includes this direct download link. Download the file
 and select it with the existing GGUF file input to load it locally. The split static
 copy remains available for automatic in-site loading. The release includes checksum
 and Apache-2.0 license files.
@@ -50,8 +49,8 @@ or **로컬 모델 (서버 전송 없음)**. The choice persists on this device.
 - Provider/model: Cloudflare Workers AI, `@cf/meta/llama-3.2-1b-instruct`.
 - No OpenAI key, private client key, Authorization header or new paid subscription.
 - This application has a durable, shared budget of **100 requests per UTC day**,
-  a three-second global cooldown, at most **4,000 input characters / 16 messages**,
-  and **128 output tokens** per request. Failed provider calls consume a reservation.
+  a three-second global cooldown, at most **20,000 input characters / 32 messages**,
+  and **up to 4,096 output tokens** per request. Failed provider calls consume a reservation.
 - Daily reset is 00:00 UTC / 09:00 Asia/Seoul. All visitors share the application
   budget; an allowed website origin does not authenticate a person.
 - The server fixes the model/output limit and ignores caller model/token overrides.
@@ -68,8 +67,6 @@ Cloudflare includes a free daily Workers AI allocation; the allocation is shared
 other AI use on the Cloudflare account. This application cap does not control those
 other applications or existing account billing settings. No billing plan was changed
 by this patch. See [current provider pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).
-The account subscription-list API was not authorized by the linked connection, so
-account-wide subscription/billing status was not verified.
 
 The Worker uses native AI and SQLite Durable Object bindings. Only the quota counters
 are stored in the budget object, never conversation text. It does not log prompts or
