@@ -11,17 +11,17 @@ const log = document.getElementById('log');
 document.getElementById('run').addEventListener('click', async () => {
   const file = document.getElementById('model').files?.[0];
   if (!file) { log.textContent = 'GGUF 파일을 선택하세요.'; return; }
-  log.textContent = '엔진 초기화 중...\\n';
+  log.textContent = '엔진 초기화 중...\n';
   const button = document.getElementById('run'); button.disabled = true;
   try {
-    const status = await engine.load([file], { contextLength: 2048, useGpu: false, onProgress: text => { log.textContent += text + '\\n'; } });
-    log.textContent += '모델 로드 성공: ' + status.modelName + '\\n추론 시작...\\n';
+    const status = await engine.load([file], { contextLength: 2048, useGpu: false, onProgress: text => { log.textContent += text + '\n'; } });
+    log.textContent += '모델 로드 성공: ' + status.modelName + '\n추론 시작...\n';
     const answer = await engine.generate([{ role: 'user', content: '안녕하세요. 한국어로 한 문장만 답하세요.' }], {
       maxTokens: 128, temperature: 0.2, onToken: token => { log.textContent += token; }
     });
-    log.textContent += '\\n\\n[PASS] 실제 토큰 생성 성공 (' + answer.length + '자)';
+    log.textContent += '\n\n[PASS] 실제 토큰 생성 성공 (' + answer.length + '자)';
   } catch (error) {
-    log.textContent += '\\n[FAIL] ' + (error?.stack || error);
+    log.textContent += '\n[FAIL] ' + (error?.stack || error);
   } finally {
     try { await engine.unload(); } catch {}
     button.disabled = false;
