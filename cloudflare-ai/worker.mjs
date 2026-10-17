@@ -1,27 +1,50 @@
 const MODEL = '@cf/meta/llama-3.2-1b-instruct';
 const KOREAN_DEFAULT = '기본 응답 언어는 한국어입니다. 사용자가 다른 언어를 명시적으로 요청하지 않는 한 자연스럽고 간결한 한국어로 답변하세요.';
-const DEFAULT_ALLOWED = new Set(['https://luckysexyqueen.github.io', 'https://luckysexyqueen.github.io/', 'http://localhost:8000', 'http://127.0.0.1:8000', 'http://localhost:3000', 'http://127.0.0.1:3000']);
+const DEFAULT_ALLOWED = new Set([
+  'https://luckysexyqueen.github.io',
+  'https://luckysexyqueen.github.io/',
+  'http://localhost:8000',
+  'http://127.0.0.1:8000',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+  'http://localhost',
+  'http://127.0.0.1',
+  'https://localhost',
+  'https://127.0.0.1'
+]);
 const MAX_INPUT_CHARS = 20000;
 const MAX_MESSAGES = 32;
 const MAX_OUTPUT_TOKENS = 4096;
 
-function normalizeAllowedOrigins() {
-  const extra = (typeof globalThis !== 'undefined' && globalThis.__GFD_ALLOWED_ORIGINS)
-    ? String(globalThis.__GFD_ALLOWED_ORIGINS).split(',')
-    : [];
-  return new Set([...DEFAULT_ALLOWED, ...extra.filter(Boolean).map(v => v.trim())]);
+function parseExtraAllowedOrigins(input) {
+  if (!input) return [];
+  return String(input)
+    .split(',')
+    .map(v => v.trim())
+    .filter(Boolean);
 }
 
-function validOrigin(origin) {
-  const allowed = normalizeAllowedOrigins();
-  if (!origin) return true; // allow empty Origin in VPN/proxy or CLI probes
+function validOrigin(origin, env) {
+  const extra = [...parseExtraAllowedOrigins(env?.ALLOWED_ORIGINS), ...parseExtraAllowedOrigins(globalThis.__GFD_ALLOWED_ORIGINS)];
+  const allowed = new Set([...DEFAULT_ALLOWED, ...extra]);
+
+  // Empty/absent origin is common under VPN/proxy or curl-based direct probes; allow it.
+  if (!origin) return true;
   if (allowed.has(origin)) return true;
+
   try {
     const url = new URL(origin);
-    if (url.protocol === 'http:' && ['127.0.0.1', 'localhost', '0.0.0.0', '[::1]'].includes(url.hostname)) return true;
-    if (url.protocol === 'https:' && (url.hostname === 'github.io' || url.hostname.endsWith('.github.io') || url.hostname.endsWith('.workers.dev') || url.hostname.endsWith('.pages.dev'))) return true;
+    const host = url.hostname.toLowerCase();
+    const isLocal = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]', '::1'].includes(host) || host.endsWith('.local') || host.endsWith('.internal');
+    const isPrivateIp = /^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(host) || host === 'localhost';
+    const isGithubPages = host.endsWith('.github.io') || host.endsWith('.pages.dev') || host.endsWith('.workers.dev');
+    const isVpnish = host.includes('vpn') || host.includes('proxy') || host.includes('corp') || host.includes('intranet');
+    const isHttpLocal = url.protocol === 'http:' && isLocal;
+    const isHttpsLocal = url.protocol === 'https:' && (isLocal || isGithubPages || isVpnish || isPrivateIp);
+    return url.protocol === 'https:' && (isHttpsLocal || isGithubPages || isPrivateIp || isVpnish) || isHttpLocal;
+  } catch {
     return false;
-  } catch { return false; }
+  }
 }
 
 export default {
@@ -32,13 +55,13 @@ export default {
     }
 
     const origin = request.headers.get('Origin') || '';
-    if (!validOrigin(origin)) return Response.json({ error: 'Origin not allowed' }, { status: 403 });
+    if (!validOrigin(origin, env)) return Response.json({ error: 'Origin not allowed' }, { status: 403 });
 
     const allowOrigin = origin || '*';
     const headers = {
       'Access-Control-Allow-Origin': allowOrigin,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
       'Cache-Control': 'no-store',
       'Vary': 'Origin',
       'X-Content-Type-Options': 'nosniff'
