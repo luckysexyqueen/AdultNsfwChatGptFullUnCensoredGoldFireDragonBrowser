@@ -37,7 +37,7 @@ export class LocalGGUFEngine {
         suppressNativeLog: true, allowOffline: true,
         logger: { debug() {}, log() {}, warn() {}, error() {} },
       });
-      const contextLength = number(options.contextLength, 16384, 512, 32768);
+      const contextLength = number(options.contextLength, 4096, 512, 32768);
       const params = { n_ctx: contextLength, n_threads: globalThis.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 2, 4) : 1,
         n_gpu_layers: options.useGpu === true ? 99999 : 0, jinja: true,
         progressCallback: ({ loaded, total }) => options.onProgress?.(total ? `모델 다운로드 ${Math.floor(100 * loaded / total)}%` : `모델 다운로드 ${Math.floor(loaded / 1048576)}MB`),
@@ -46,7 +46,7 @@ export class LocalGGUFEngine {
       else await runtime.loadModel(source, params);
       this.runtime = runtime;
       this.update({ ready: true, loading: false, generating: false, modelName: name, modelSize: size, modelFiles: typeof source === 'string' ? 1 : source.length,
-        contextLength, webGpuAvailable: runtime.isSupportWebGPU() });
+        contextLength, webGpuAvailable: typeof runtime.isSupportWebGPU === 'function' ? runtime.isSupportWebGPU() : false });
       options.onProgress?.('로컬 모델 준비 완료. 대화가 서버로 전송되지 않습니다.');
       return this.getStatus();
     } catch (error) {
@@ -65,7 +65,7 @@ export class LocalGGUFEngine {
     this.update({ generating: true });
     let full = '';
     try {
-      const meta = this.runtime.getModelMetadata().meta;
+      const meta = this.runtime.getModelMetadata()?.meta || {};
       const common = { stream: true, max_tokens: number(options.maxTokens, 4096, 1, 8192), temperature: number(options.temperature, 0.7, 0, 2),
         seed: options.seed, abortSignal: options.signal };
       const stream = meta['general.architecture'] === 'gpt2'
