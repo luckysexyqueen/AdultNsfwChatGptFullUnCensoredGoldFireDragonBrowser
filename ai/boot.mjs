@@ -27,21 +27,25 @@ window.GFDAI = Object.freeze({
   async generate({ messages, systemPrompt, instructions, onToken, signal, maxTokens = 4096 }) {
     const config = await configReady;
     if (config.schemaVersion !== 1) throw Error('지원하지 않는 AI 설정입니다.');
+    const local = window.LocalGGUF;
+    const localMessages = [
+      ...(systemPrompt || instructions ? [{ role: 'system', content: koreanInstructions([systemPrompt, instructions].filter(Boolean).join('\n\n')) }] : []),
+      ...messages,
+    ];
+    const runLocal = async () => {
+      if (!local?.getStatus?.().ready) throw Error('로컬 GGUF 모델이 준비되지 않았습니다. 먼저 로컬 모델 관리에서 모델을 불러오세요.');
+      return local.generate(localMessages, { maxTokens, onToken, signal, temperature: 0.7 });
+    };
+    if (mode === 'local') return runLocal();
+    if (mode === 'existing') throw Error('기존 API 모드에서는 기존 채팅 연결을 사용하세요.');
     try {
       const text = await freeChat(config.freeEndpoint, prepareMessages(messages, systemPrompt, instructions), { signal, maxTokens });
       onToken?.(text);
       return text;
     } catch (error) {
-      const local = window.LocalGGUF;
-      if (local && typeof local.generate === 'function') {
-        try {
-          const text = await local.generate(messages, { maxTokens, onToken, signal, temperature: 0.7, topP: 0.95 });
-          return text;
-        } catch (localError) {
-          console.warn('[GFDAI] 무료 API 실패와 로컬 모델 폴백 실패:', error, localError);
-        }
-      }
-      throw error;
+      if (signal?.aborted) throw error;
+      if (local?.getStatus?.().ready) return runLocal();
+      throw new Error('무료 API 요청에 실패했고 준비된 로컬 모델이 없습니다: ' + (error?.message || error));
     }
   },
 });
