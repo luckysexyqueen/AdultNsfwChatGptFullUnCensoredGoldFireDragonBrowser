@@ -37,6 +37,10 @@ window.GFDAI = Object.freeze({
       return local.generate(localMessages, { maxTokens, onToken, signal, temperature: 0.7 });
     };
     if (mode === 'local') return runLocal();
+    const inputChars = localMessages.reduce((sum, message) => sum + message.content.length, 0);
+    if (mode === 'free' && (inputChars > 4000 || localMessages.length > 16)) {
+      return runLocal();
+    }
     if (mode === 'existing') throw Error('기존 API 모드에서는 기존 채팅 연결을 사용하세요.');
     try {
       const text = await freeChat(config.freeEndpoint, prepareMessages(messages, systemPrompt, instructions), { signal, maxTokens });
