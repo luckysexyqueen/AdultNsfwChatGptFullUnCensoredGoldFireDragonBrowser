@@ -20,6 +20,26 @@
     const status = modal.querySelector('#gfd-vpn-status');
     const select = modal.querySelector('#gfd-vpn-select');
     modal.querySelector('#gfd-vpn-x').onclick = () => modal.remove();
+    if (!native) {
+      const info = document.createElement('div');
+      info.style.cssText = 'margin-top:12px;font-size:12px;line-height:1.5;color:#ddd';
+      info.textContent = '웹 연결: Node.js HTTPS 프록시 게이트웨이 상태를 확인합니다. 운영체제 VPN과는 별개입니다.';
+      modal.querySelector('small')?.replaceWith(info);
+      const check = document.createElement('button');
+      check.textContent = '웹 게이트웨이 연결 확인';
+      check.style.cssText = 'margin-top:10px;padding:9px;width:100%';
+      modal.querySelector('div > div')?.append();
+      info.after(check);
+      check.onclick = async () => {
+        try {
+          const response = await fetch('./api/gateway/status', {cache:'no-store',signal:AbortSignal.timeout(5000)});
+          if (!response.ok) throw Error('HTTP ' + response.status);
+          const data = await response.json();
+          status.textContent = data.configured ? 'Node.js 프록시 준비됨 (OS VPN 아님)' : 'Node.js 실행됨. GFD_PROXY_ALLOWED_ORIGINS 설정 필요';
+        } catch { status.textContent = '웹 게이트웨이 연결 안 됨. Node.js 서버를 실행하세요.'; }
+      };
+      check.click();
+    }
     try {
       const profiles = native ? await native.getOvpnList() : await fetch('./vpn-profiles.json').then((response) => response.ok ? response.json() : {});
       const names = Array.isArray(profiles) ? profiles.map(p => typeof p === 'string' ? p : p?.name).filter(Boolean) : Object.keys(profiles || {});
