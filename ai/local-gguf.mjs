@@ -37,7 +37,7 @@ export class LocalGGUFEngine {
         suppressNativeLog: true, allowOffline: true,
         logger: { debug() {}, log() {}, warn() {}, error() {} },
       });
-      const contextLength = number(options.contextLength, 4096, 512, 32768);
+      const contextLength = number(options.contextLength, 2048, 512, 32768);
       const params = { n_ctx: contextLength, n_threads: globalThis.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 2, 4) : 1,
         n_gpu_layers: options.useGpu === true ? 99999 : 0, jinja: true,
         progressCallback: ({ loaded, total }) => options.onProgress?.(total ? `모델 다운로드 ${Math.floor(100 * loaded / total)}%` : `모델 다운로드 ${Math.floor(loaded / 1048576)}MB`),
