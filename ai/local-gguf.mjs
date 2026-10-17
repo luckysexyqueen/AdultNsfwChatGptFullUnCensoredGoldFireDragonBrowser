@@ -1,4 +1,4 @@
-// Self-hosted GGUF helper: tolerate app/Android content URIs, URL strings, Blob/ArrayBuffer inputs and large model parts.
+// Local GGUF loader with network/connectivity checks and AndroidBridge network fallback
 const MAX_FILE = 2 * 1024 ** 3; // 2 GiB per part (safety)
 const number = (value, fallback, min, max) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(Number(value), max)) : fallback;
 
@@ -6,14 +6,15 @@ export function validateFiles(files) {
   const arr = Array.from(files || []);
   if (!arr.length) throw Error('유효한 GGUF 파일을 선택하세요.');
   const sorted = arr.sort((a, b) => (a.name || String(a)).localeCompare(b.name || String(b), undefined, { numeric: true }));
-  if (sorted.some(f => typeof f === 'string')) return sorted; // URLs are allowed here
+  // allow URL strings
+  if (sorted.some(f => typeof f === 'string')) return sorted;
   if (sorted.some(f => !(f instanceof Blob) || !f.size || f.size > MAX_FILE || !/\.gguf(?:\.part\d+)?$/i.test(f.name))) {
     throw Error('유효한 GGUF 파일을 선택하세요. 개별 파일은 2GB 이하이고 `.gguf` 또는 `.gguf.partN` 이어야 합니다.');
   }
   return sorted;
 }
 
-const initial = () => ({ ready: false, loading: false, generating: false, webGpuAvailable: false, modelFiles: 0 });
+const initial = () => ({ ready: false, loading: false, generating: false, webGpuAvailable: false, modelFiles: 0, error: '' });
 
 export class LocalGGUFEngine {
   constructor() {
@@ -61,10 +62,43 @@ export class LocalGGUFEngine {
     }
   }
 
+  // Try to have Android bridge perform network fetch when webview's network is blocked.
+  async _fetchUrlViaAndroidBridge(url) {
+    try {
+      if (typeof window !== 'undefined' && window.AndroidBridge && typeof window.AndroidBridge.fetchUrlBase64 === 'function') {
+        const b64 = window.AndroidBridge.fetchUrlBase64(url);
+        if (!b64) throw Error('Android bridge fetch returned empty');
+        const bin = atob(b64);
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        return arr.buffer;
+      }
+    } catch (e) {
+      console.warn('Android bridge fetch failed', e);
+    }
+    throw Error('Android bridge does not support fetchUrlBase64 or failed');
+  }
+
+  // Check network reachability by pinging a small URL with timeout.
+  async _isNetworkAvailable({ url = 'https://www.gstatic.com/generate_204', timeout = 3000 } = {}) {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+    try {
+      const ac = new AbortController();
+      const id = setTimeout(() => ac.abort(), timeout);
+      try {
+        await fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store', signal: ac.signal });
+        return true;
+      } finally {
+        clearTimeout(id);
+      }
+    } catch (e) {
+      return false;
+    }
+  }
+
   async _loadBytesFromPath(path, signal) {
     if (!path) throw Error('No model path provided');
 
-    // Accept Blob / File / ArrayBuffer / TypedArray directly
     if (typeof path === 'object' && (path instanceof Blob || path instanceof ArrayBuffer || ArrayBuffer.isView(path))) {
       if (path instanceof ArrayBuffer) return path;
       if (ArrayBuffer.isView(path)) return path.buffer;
@@ -74,26 +108,38 @@ export class LocalGGUFEngine {
     const str = String(path);
     const lower = str.toLowerCase();
 
-    // Remote HTTP(S)
     if (lower.startsWith('http://') || lower.startsWith('https://')) {
-      // Try to fetch as blob to avoid holding whole array buffer when possible
-      try {
-        const blob = await this._fetchBlob(str, signal);
-        return await blob.arrayBuffer();
-      } catch (e) {
-        // fallback to arrayBuffer fetch if blob fails
-        return await this._fetchArrayBuffer(str, signal);
+      const netOk = await this._isNetworkAvailable();
+      if (!netOk) {
+        try { return await this._fetchUrlViaAndroidBridge(str); } catch (e) { throw Error('네트워크에 연결되어 있지 않거나 Android 브릿지로도 가져올 수 없습니다. ' + e.message); }
       }
+
+      const maxAttempts = 2;
+      let lastErr;
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          const blob = await this._fetchBlob(str, signal);
+          return await blob.arrayBuffer();
+        } catch (e) {
+          lastErr = e;
+          if (attempt === maxAttempts) break;
+        }
+      }
+
+      try { return await this._fetchUrlViaAndroidBridge(str); } catch (e) { /* ignore */ }
+      throw lastErr || Error('원격 모델을 가져오지 못했습니다.');
     }
 
-    // Android content URI or file path the app provided
     if (lower.startsWith('content://') || lower.startsWith('file://')) {
       try { return await this._readBase64FromAndroidBridge(str); } catch (e) { throw e; }
     }
 
-    // Try to resolve as relative/absolute URL
     try {
       const resolved = new URL(str, typeof location !== 'undefined' ? location.href : 'https://example.com/').href;
+      const netOk = await this._isNetworkAvailable();
+      if (!netOk) {
+        try { return await this._fetchUrlViaAndroidBridge(resolved); } catch (e) { throw Error('네트워크에 연결되어 있지 않습니다. ' + e.message); }
+      }
       const blob = await this._fetchBlob(resolved, signal);
       return await blob.arrayBuffer();
     } catch (e) {
@@ -101,7 +147,6 @@ export class LocalGGUFEngine {
     }
   }
 
-  // Convenience: accept a single URL string
   async loadFromUrl(value, options = {}) {
     return this.load([value], options);
   }
@@ -111,21 +156,17 @@ export class LocalGGUFEngine {
 
     this.update({ ready: false, loading: true, error: '' });
     try {
-      // Validate files where possible (skip URL strings)
       const validated = validateFiles(files);
-
       const parts = [];
+
       for (const f of validated) {
         if (typeof f === 'string') {
-          // For remote URLs, prefer to hand a URL string to the runtime if supported; otherwise fetch blob
-          // If the runtime supports loadModelFromUrl, the global loader will use the string directly.
           parts.push(f);
         } else if (f instanceof Blob) {
           parts.push(f);
         } else if (ArrayBuffer.isView(f) || f instanceof ArrayBuffer) {
           parts.push(new Blob([f instanceof ArrayBuffer ? f : f.buffer]));
         } else {
-          // As a last resort, try to interpret as path/URL and fetch
           try {
             const ab = await this._loadBytesFromPath(f, options.signal);
             parts.push(new Blob([ab]));
@@ -135,23 +176,17 @@ export class LocalGGUFEngine {
         }
       }
 
-      // If available, perform a lightweight header check on the first blob to detect obvious non-GGUF files.
       try {
         const first = parts.find(p => p && typeof p !== 'string');
         if (first instanceof Blob) {
           const head = new TextDecoder().decode(await first.slice(0, 4).arrayBuffer());
           if (head !== 'GGUF') {
-            // Not fatal: warn via status but allow runtime to attempt loading (some split parts may not start with GGUF header)
             this.update({ error: '첫 번째 파일 헤더가 GGUF가 아닙니다. 계속 시도합니다.' });
           }
         }
-      } catch (e) {
-        // ignore header probe failures
-      }
+      } catch (e) { /* ignore */ }
 
-      // If a global LocalGGUF runtime exists and accepts URL strings/blobs, use it directly.
       if (typeof window !== 'undefined' && window.LocalGGUF && typeof window.LocalGGUF.load === 'function') {
-        // Prefer passing URLs directly when we have them; many runtimes can fetch them themselves.
         const runtimeArg = parts.length === 1 ? parts[0] : parts;
         await window.LocalGGUF.load(runtimeArg, options);
         this.status.modelFiles = parts.length;
@@ -159,7 +194,6 @@ export class LocalGGUFEngine {
         return this.getStatus();
       }
 
-      // Otherwise keep blobs for a later runtime loader
       this._loadedBlobs = parts.map(p => (typeof p === 'string' ? p : p));
       this.status.modelFiles = parts.length;
       this.update({ ready: true, loading: false, generating: false });
@@ -168,7 +202,6 @@ export class LocalGGUFEngine {
       this.update({ error: error.message });
       throw Error('로컬 모델 준비 실패: ' + (error && error.message ? error.message : String(error)));
     } finally {
-      // ensure loading flag cleared (update above already clears on success)
       if (this.status.loading) this.update({ loading: false });
     }
   }
@@ -180,7 +213,6 @@ export class LocalGGUFEngine {
     const safeTemperature = number(options.temperature, 0.7, 0, 2);
     const safeTopP = number(options.topP, 0.95, 0, 1);
 
-    // Prefer existing runtime API if present
     if (typeof window !== 'undefined' && window.LocalGGUF && typeof window.LocalGGUF.generate === 'function') {
       const text = await window.LocalGGUF.generate({
         messages: Array.isArray(messagesOrPrompt)
@@ -195,9 +227,7 @@ export class LocalGGUFEngine {
       return text;
     }
 
-    // Fallback: if we have blobs/URLs stored and a helper loader exists, try to use it
     if (this._loadedBlobs && typeof window !== 'undefined' && typeof window.loadPackedModel === 'function') {
-      // use first model file/URL
       const modelFile = this._loadedBlobs[0];
       const runtime = await window.loadPackedModel(modelFile, { onProgress: options.onProgress });
       if (runtime && typeof runtime.generate === 'function') {
@@ -215,9 +245,7 @@ export class LocalGGUFEngine {
   async unload() {
     try {
       if (typeof this.runtime?.exit === 'function') await this.runtime.exit();
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) { }
     this.runtime = null;
     this._loadedBlobs = null;
     this.status = initial();
