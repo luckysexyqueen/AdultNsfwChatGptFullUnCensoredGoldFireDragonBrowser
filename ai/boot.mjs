@@ -25,35 +25,48 @@ window.GFDAI = Object.freeze({
     window.dispatchEvent(new CustomEvent('gfd:ai-mode-changed', { detail: mode }));
     return true;
   },
-  async generate({ messages, systemPrompt, instructions, onToken, signal } = {}) {
+  async generate({ messages, systemPrompt, instructions, onToken, signal, maxTokens } = {}) {
     const config = await configReady;
     if (config.schemaVersion !== 1) throw Error('지원하지 않는 AI 설정입니다.');
 
     // Prepare and validate messages first
     const prepared = prepareMessages(messages, systemPrompt, instructions);
 
-    // Local model path
+    // Helper: try free/existing endpoint
+    const callRemote = async (endpoint) => {
+      const cap = Number.isFinite(Number(maxTokens)) ? Math.max(1, Math.min(4096, Math.floor(Number(maxTokens)))) : (config.defaultMaxTokens || 4096);
+      const text = await freeChat(endpoint, prepared, { signal, maxTokens: cap });
+      onToken?.(text);
+      return text;
+    };
+
+    // Local model path: prefer local when selected
     if (mode === 'local') {
-      // Prefer LocalGGUF runtime when available
       if (typeof window !== 'undefined' && window.LocalGGUF && typeof window.LocalGGUF.generate === 'function') {
         try {
-          const text = await window.LocalGGUF.generate(prepared, { signal, onToken, maxTokens: undefined });
+          // Allow caller to pass maxTokens, otherwise use a generous default
+          const localMax = Number.isFinite(Number(maxTokens)) ? Math.max(1, Math.min(8192, Math.floor(Number(maxTokens)))) : (config.localDefaultMaxTokens || 4096);
+          const text = await window.LocalGGUF.generate(prepared, { signal, onToken, maxTokens: localMax });
           return text;
         } catch (err) {
-          // Fall through to remote free API as a fallback if local fails
-          console.warn('Local model generation failed, falling back to free API:', err);
+          console.warn('Local model generation failed:', err);
+          // Fall through to remote endpoint if fallback is enabled (default true)
+          if (config?.allowLocalFallback === false) throw err;
+          // otherwise continue to call remote
         }
       } else {
         throw Error('로컬 모델 런타임을 찾을 수 없습니다. 로컬 모델을 먼저 불러오세요.');
       }
     }
 
-    // For 'free' or 'existing' modes, call the freeEndpoint by default.
-    // If the config later contains an explicit existingEndpoint, prefer it.
-    const endpoint = (config.existingEndpoint && mode === 'existing') ? config.existingEndpoint : config.freeEndpoint;
-    const text = await freeChat(endpoint, prepared, { signal });
-    onToken?.(text);
-    return text;
+    // For 'existing' mode prefer config.existingEndpoint if present, otherwise use freeEndpoint
+    if (mode === 'existing') {
+      if (config.existingEndpoint) return await callRemote(config.existingEndpoint);
+      return await callRemote(config.freeEndpoint);
+    }
+
+    // mode === 'free'
+    return await callRemote(config.freeEndpoint);
   },
 });
 function mount() {
@@ -71,7 +84,7 @@ function mount() {
   select.value = mode; select.addEventListener('change', () => window.GFDAI.setMode(select.value));
   window.addEventListener('gfd:ai-mode-changed', () => { select.value = mode; });
   const note = document.createElement('p');
-  note.textContent = '무료 API 선택 시 대화가 Cloudflare로 전송됩니다. 하루 공유 100회, 최대 4096토큰 응답이며 소진 후 유료 전환하지 않습니다. 로컬 모델은 서버로 전송되지 않습니다.';
+  note.textContent = '무료 API 선택 시 대화가 Cloudflare로 전송됩니다. 하루 공유 100회(동일 계정 전체), 3초 전역 쿨다운, 출력 토큰 한도 4096토큰. 로컬 모델은 서버로 전송되지 않습니다.';
   const button = document.createElement('button'); button.textContent = '로컬 모델 관리';
   button.addEventListener('click', () => { details.open = false; window.dispatchEvent(new CustomEvent('gfd:open-local-models')); });
   details.append(summary, select, note, button); shadow.append(style, details); document.documentElement.append(host);
