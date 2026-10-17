@@ -4,7 +4,7 @@ const MAX_FILE = 2 * 1024 ** 3;
 const number = (value, fallback, min, max) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(Number(value), max)) : fallback;
 export function validateFiles(files) {
   const sorted = Array.from(files || []).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  if (!sorted.length || sorted.some(f => !/\.gguf(?:\.part\d+)?$/i.test(f.name) || !f.size || f.size > MAX_FILE)) throw Error('유효한 GGUF 파일을 선택하세요. 개별 파일은 2GB 이하여야 합니다.');
+  if (!sorted.length || sorted.some(f => !/\.gguf(?:\.part\d+)?$/i.test(f.name) || !f.size || f.size > MAX_FILE)) throw Error('유효한 GGUF 파일을 선택하세요. 개별 파일은 2GB 이하이어야 합니다.');
   return sorted;
 }
 const initial = () => ({ ready: false, loading: false, generating: false, webGpuAvailable: false, modelFiles: 0 });
@@ -22,7 +22,7 @@ export class LocalGGUFEngine {
   }
   async loadFromUrl(value, options = {}) {
     const url = new URL(value, globalThis.location?.href);
-    if (url.username || url.password || url.hash || (url.protocol !== 'https:' && !(url.protocol === 'http:' && url.origin === globalThis.location?.origin))) throw Error('HTTPS 또는 같은 사이트의 모델 주소만 사용할 수 있습니다.');
+    if (url.username || url.password || url.hash || (url.protocol !== 'https:' && !(url.protocol === 'http:' && url.origin === globalThis.location?.origin))) throw Error('HTTPS 또는 같은 출처의 http URL만 허용됩니다.');
     return this.loadInternal(url.href, options, decodeURIComponent(url.pathname.split('/').pop()), 0);
   }
   async loadInternal(source, options, name, size) {
@@ -37,7 +37,7 @@ export class LocalGGUFEngine {
         suppressNativeLog: true, allowOffline: true,
         logger: { debug() {}, log() {}, warn() {}, error() {} },
       });
-      const contextLength = number(options.contextLength, 1024, 512, 8192);
+      const contextLength = number(options.contextLength, 16384, 512, 32768);
       const params = { n_ctx: contextLength, n_threads: globalThis.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 2, 4) : 1,
         n_gpu_layers: options.useGpu === true ? 99999 : 0, jinja: true,
         progressCallback: ({ loaded, total }) => options.onProgress?.(total ? `모델 다운로드 ${Math.floor(100 * loaded / total)}%` : `모델 다운로드 ${Math.floor(loaded / 1048576)}MB`),
@@ -60,16 +60,14 @@ export class LocalGGUFEngine {
   async generate(messages, options = {}) {
     if (!this.status.ready || !this.runtime) throw Error('먼저 로컬 GGUF 모델을 불러오세요.');
     if (this.status.generating || this.status.loading) throw Error('현재 로컬 모델 작업이 진행 중입니다.');
-    if (!Array.isArray(messages) || !messages.length || messages.some(m => !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string')) throw Error('올바른 대화 메시지가 필요합니다.');
+    if (!Array.isArray(messages) || !messages.length || messages.some(m => !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string')) throw Error('올바른 대화 메시지 배열이 필요합니다.');
     messages = koreanMessages(messages);
     this.update({ generating: true });
     let full = '';
     try {
       const meta = this.runtime.getModelMetadata().meta;
-      const common = { stream: true, max_tokens: number(options.maxTokens, 256, 1, 2048), temperature: number(options.temperature, 0.7, 0, 2),
+      const common = { stream: true, max_tokens: number(options.maxTokens, 4096, 1, 8192), temperature: number(options.temperature, 0.7, 0, 2),
         seed: options.seed, abortSignal: options.signal };
-      // The bundled GPT-2 model has no chat template; use native raw completion for it.
-      // Do not retry failed chat generation with an invented answer or another service.
       const stream = meta['general.architecture'] === 'gpt2'
         ? await this.runtime.createCompletion({ ...common, prompt: messages.map(m => `${m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : 'System'}: ${m.content}`).join('\n') + '\nAssistant:' })
         : await this.runtime.createChatCompletion({ ...common, messages, chat_template_kwargs: { enable_thinking: false } });
