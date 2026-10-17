@@ -34,7 +34,26 @@ window.GFDAI = Object.freeze({
     ];
     const runLocal = async () => {
       if (!local?.getStatus?.().ready) throw Error('로컬 GGUF 모델이 준비되지 않았습니다. 먼저 로컬 모델 관리에서 모델을 불러오세요.');
-      return local.generate(localMessages, { maxTokens, onToken, signal, temperature: 0.7 });
+      const total = localMessages.reduce((n, m) => n + m.content.length, 0);
+      if (total <= 6000) return local.generate(localMessages, { maxTokens, onToken, signal, temperature: 0.7 });
+      // Keep every source chunk under a conservative character budget; a model's
+      // actual token/context limits still apply independently of character count.
+      const source = localMessages.map(m => '[' + m.role + ']\\n' + m.content).join('\\n\\n');
+      const chunks = [];
+      for (let i = 0; i < source.length; i += 2500) chunks.push(source.slice(i, i + 2500));
+      let notes = '';
+      for (let i = 0; i < chunks.length; i++) {
+        if (signal?.aborted) throw new DOMException('취소되었습니다.', 'AbortError');
+        const summary = await local.generate([
+          { role: 'system', content: '다음 입력 조각의 사실, 지시, 핵심 문맥을 한국어로 압축하세요. 이전 메모와 충돌하면 충돌을 명시하세요. 추측하지 마세요.' },
+          { role: 'user', content: '이전 메모:\\n' + notes.slice(-2000) + '\\n\\n조각 ' + (i + 1) + '/' + chunks.length + ':\\n' + chunks[i] }
+        ], { maxTokens: 384, signal, temperature: 0.2 });
+        notes = (notes + '\\n' + summary).slice(-4000);
+      }
+      return local.generate([
+        { role: 'system', content: '긴 원문을 순차 분석한 요약 메모입니다. 메모에 없는 내용은 확인할 수 없다고 설명하고, 한국어로 최종 응답하세요.' },
+        { role: 'user', content: '요약 메모:\\n' + notes + '\\n\\n최종 요청:\\n' + localMessages.filter(m => m.role === 'user').at(-1)?.content.slice(-1200) }
+      ], { maxTokens, onToken, signal, temperature: 0.7 });
     };
     if (mode === 'local') return runLocal();
     const inputChars = localMessages.reduce((sum, message) => sum + message.content.length, 0);
