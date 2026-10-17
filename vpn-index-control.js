@@ -22,9 +22,11 @@
     modal.querySelector('#gfd-vpn-x').onclick = () => modal.remove();
     try {
       const profiles = native ? await native.getOvpnList() : await fetch('./vpn-profiles.json').then((response) => response.ok ? response.json() : {});
-      const names = Object.keys(profiles || {});
-      select.innerHTML = names.length ? names.map((name) => `<option value="${name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;')}">${name}</option>`).join('') : '<option value="">내장 VPN 프로필 없음</option>';
-      const state = native ? await native.getVpnStatus() : { status: '브라우저 미연결 모드' };
+      const names = Array.isArray(profiles) ? profiles.map(p => typeof p === 'string' ? p : p?.name).filter(Boolean) : Object.keys(profiles || {});
+      select.replaceChildren();
+      for (const name of names) { const option = document.createElement('option'); option.value = name; option.textContent = name; select.append(option); }
+      if (!names.length) { const option = document.createElement('option'); option.value = ''; option.textContent = 'VPN 프로필 없음'; select.append(option); }
+      const state = native ? await native.getVpnStatus() : { status: '웹에서는 OS VPN 터널을 직접 연결할 수 없습니다' };
       status.textContent = `상태: ${state?.status || 'DISCONNECTED'}`;
     } catch (error) { status.textContent = `VPN 프로필 오류: ${error.message}`; }
     modal.querySelector('#gfd-vpn-install').onclick = async () => { if (!native) { status.textContent = '브라우저에서는 VPN 연결을 사용할 수 없습니다.'; return; } const r = await native.installOpenVpn(); status.textContent = r.message || r.error || '설치 요청 완료'; };
