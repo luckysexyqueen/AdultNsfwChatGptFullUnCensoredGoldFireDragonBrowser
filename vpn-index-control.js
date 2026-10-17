@@ -84,16 +84,40 @@
     }
   }
 
-  function downloadProfile(profiles, select) {
+  async function downloadProfile(profiles, select) {
     const name = select.value;
     const obj = profiles && profiles[name];
     if (!obj) {
       alert('선택된 프로필이 없습니다.');
       return;
     }
-    // assume obj contains { filename, content } or URL
+
+    // If profile entry is a string (path/url), download it directly
+    if (typeof obj === 'string') {
+      try {
+        // Use fetch to get the file (relative path supported) and trigger download
+        const res = await fetch(obj, { cache: 'no-store' });
+        if (!res.ok) throw new Error('프로필 파일 다운로드 실패: ' + res.status);
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        // Derive filename from path
+        const parts = obj.split('/');
+        a.download = parts[parts.length - 1] || (name + '.ovpn');
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        return;
+      } catch (e) {
+        alert('프로필 다운로드 실패: ' + (e && e.message ? e.message : e));
+        return;
+      }
+    }
+
+    // If profile is an object, support url/content/filename keys
     if (obj.url) {
-      // download remote file
       const a = document.createElement('a');
       a.href = obj.url;
       a.download = obj.filename || (name + '.ovpn');
@@ -104,14 +128,14 @@
     }
     const content = obj.content || obj.ovpn || '';
     const blob = new Blob([content], { type: 'application/octet-stream' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = obj.filename || (name + '.ovpn');
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    const u = URL.createObjectURL(blob);
+    const a2 = document.createElement('a');
+    a2.href = u;
+    a2.download = obj.filename || (name + '.ovpn');
+    document.body.appendChild(a2);
+    a2.click();
+    a2.remove();
+    URL.revokeObjectURL(u);
   }
 
   async function startVpn(native, name, statusEl, timeout = 30000) {
