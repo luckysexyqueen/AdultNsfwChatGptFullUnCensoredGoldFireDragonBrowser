@@ -32,6 +32,62 @@ export function parseRegistry(value) {
   }
   return Object.freeze(plugins);
 }
+// Prefer durable browser storage; APK shells can deny localStorage separately
+// from IndexedDB. Keep the manager API synchronous after async initialization.
+export async function createPreferenceStorage({ storage, indexedDB, timeout = 1500 } = {}) {
+  try {
+    const probe = 'gfd-plugin:storage-probe';
+    if (storage) {
+      storage.setItem(probe, '1');
+      if (storage.getItem(probe) !== '1') throw Error('Storage did not retain probe');
+      storage.removeItem(probe);
+      return storage;
+    }
+  } catch { /* Try independent persistent storage. */ }
+  const values = new Map();
+  let database;
+  let pending = Promise.resolve();
+  try {
+    if (!indexedDB) throw Error('IndexedDB unavailable');
+    database = await new Promise((resolve, reject) => {
+      let finished = false;
+      const timer = setTimeout(() => { finished = true; reject(Error('Storage open timeout')); }, timeout);
+      const request = indexedDB.open('gfd-plugin-preferences', 1);
+      request.onupgradeneeded = () => {
+        if (!request.result.objectStoreNames.contains('preferences')) request.result.createObjectStore('preferences');
+      };
+      request.onsuccess = () => {
+        if (finished) { request.result.close(); return; }
+        finished = true; clearTimeout(timer); resolve(request.result);
+      };
+      request.onerror = () => { finished = true; clearTimeout(timer); reject(request.error); };
+    });
+    database.onversionchange = () => database.close();
+    await new Promise((resolve, reject) => {
+      const transaction = database.transaction('preferences', 'readonly');
+      const cursor = transaction.objectStore('preferences').openCursor();
+      cursor.onsuccess = () => {
+        const item = cursor.result;
+        if (item) { values.set(item.key, item.value); item.continue(); }
+      };
+      transaction.oncomplete = resolve;
+      transaction.onerror = transaction.onabort = () => reject(transaction.error || Error('Storage read failed'));
+    });
+  } catch { if (database) database.close(); database = null; }
+  return {
+    getItem: key => values.get(key) ?? null,
+    setItem(key, value) {
+      values.set(key, value);
+      if (database) pending = pending.then(() => new Promise((resolve, reject) => {
+        const transaction = database.transaction('preferences', 'readwrite');
+        transaction.objectStore('preferences').put(value, key);
+        transaction.oncomplete = resolve;
+        transaction.onerror = transaction.onabort = () => reject(transaction.error || Error('Storage write failed'));
+      })).catch(() => { /* Keep current choices usable if storage fails later. */ });
+    },
+    flush: () => pending
+  };
+}
 export function createManager(plugins, storage) {
   const preferences = new Map();
   for (const plugin of plugins) {
@@ -42,6 +98,7 @@ export function createManager(plugins, storage) {
   const list = () => plugins.map(p => ({ ...p, enabled: preferences.get(p.id) === true }));
   return Object.freeze({
     list,
+    flushPreferences: async () => { await storage?.flush?.(); },
     setEnabled(id, enabled) {
       const plugin = plugins.find(p => p.id === id);
       if (!plugin || !plugin.context || typeof enabled !== 'boolean') return false;

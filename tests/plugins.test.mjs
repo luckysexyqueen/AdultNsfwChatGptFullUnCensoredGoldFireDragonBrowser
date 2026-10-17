@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { parseRegistry, createManager, loadRegistry, LIMIT } from '../plugins/runtime.mjs';
+import { parseRegistry, createManager, loadRegistry, createPreferenceStorage, LIMIT } from '../plugins/runtime.mjs';
 import { discover, buildCatalog } from '../scripts/build-plugin-catalog.mjs';
 import { buildStatic } from '../scripts/build-static-site.mjs';
 
@@ -106,4 +106,15 @@ test('static artifact preserves website entrypoints and excludes private source/
     assert.ok(manifest.icons.every(icon => icon.src.startsWith('./')));
     await assert.rejects(buildStatic(output), /Output exists/);
   } finally { await rm(temp, { recursive: true, force: true }); }
+});
+
+test('preference storage probes persistence and falls back without losing current choices', async () => {
+  const memory = await createPreferenceStorage({storage:{setItem(){throw Error('denied');}}});
+  memory.setItem('gfd-plugin:sample:1','1');
+  await memory.flush();
+  assert.equal(memory.getItem('gfd-plugin:sample:1'),'1');
+  const values = new Map();
+  const persistent = {getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v),removeItem:k=>values.delete(k)};
+  assert.equal(await createPreferenceStorage({storage:persistent}),persistent);
+  assert.equal(values.size,0);
 });

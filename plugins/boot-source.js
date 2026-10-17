@@ -9,8 +9,10 @@
   // The packaged snapshot is used only on non-HTTP origins. Hosted Pages still
   // reads its authoritative registry and never revives stale offline contexts.
   window.GFDPluginsReady = Promise.resolve().then(async () => {
-    let storage;
-    try { storage = window.localStorage; } catch { /* unavailable */ }
+    let storage, database;
+    try { storage = window.localStorage; } catch { /* Try IndexedDB below. */ }
+    try { database = window.indexedDB; } catch { /* Memory fallback. */ }
+    storage = await runtime.createPreferenceStorage({ storage, indexedDB: database });
     if (!/^https?:$/.test(window.location.protocol)) {
       return runtime.createManager(runtime.parseRegistry(packagedRegistry), storage);
     }

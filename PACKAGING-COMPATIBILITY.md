@@ -81,3 +81,9 @@ GoldFireWebViews.chromium.open({ url, sessionId? })
 ## 커스텀 웹뷰 확장
 
 `webviews/custom/`에 통합 어댑터와 호스트 구현 안내를 제공합니다. `GoldFireWebViews.custom.open({url, engine, sessionId?})`를 구현하면 하나의 커스텀 호스트에서 두 엔진을 제어할 수 있습니다. 명시적 엔진 요청은 커스텀 호스트를 먼저 시도하고, 실패하면 요청한 엔진의 전용 어댑터를 시도합니다. 자동 모드에서는 기존 Gecko·Chromium 우선순위를 유지합니다. 자세한 계약과 예제는 `webviews/custom/README.md`를 참조하십시오.
+
+## Android native WebView and storage hardening
+
+The Chromium adapter now supports the declared Capacitor InAppBrowser plugin through openInWebView on Android. It supplies WebView navigation/close controls and hardware-back options, preserves cookies by avoiding cache-clearing on open, and keeps WebView isolation enabled. Because this standard plugin has no named-session contract, sessionId-bound requests still require a custom or engine-specific host. iOS is not treated as Chromium.
+
+Plugin preferences fall back from denied localStorage to IndexedDB; both storage mechanisms being denied still requires a native storage solution for restart persistence. No Android device is currently connected through adb, so native Android execution remains unverified.

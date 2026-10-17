@@ -114,3 +114,7 @@ Edit plugins/boot-source.js for menu UI or plugins/runtime.mjs for runtime behav
 Run npm run plugins:test:apk with Playwright available; GFD_PLAYWRIGHT_MODULE and GFD_BROWSER_CHANNEL work like the existing browser checks. Tests open both entrypoints through file:// with networking disabled and exercise all three plugins, instruction application, persistence, and denied storage.
 
 Package the entire static build with index.html at the ZIP root. A lone index.html cannot replace referenced JS/model/font assets. The plugin menu and instruction integration are verified in a desktop Chrome file:// test, not an Android APK. APK wrapper policies, remote AI CORS/networking, file-based ES modules used elsewhere in the app, WASM, model resources, VPN credentials and native Gecko/Chromium bridges still need host support and device verification.
+
+## Durable APK preference fallback
+
+Plugin initialization probes localStorage and falls back to IndexedDB when it is denied. The IndexedDB cache is loaded before GFDPluginsReady resolves. Call await GFDPlugins.flushPreferences() before a host-controlled shutdown to wait for queued preference writes. If both browser storage mechanisms are denied, only current-run memory is available; the host must provide persistent storage to survive a restart. Browser tests now include a complete browser-process restart using a persistent profile with localStorage denied.

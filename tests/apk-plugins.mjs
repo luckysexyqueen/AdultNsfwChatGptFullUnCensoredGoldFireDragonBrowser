@@ -28,7 +28,8 @@ try {
         assert.equal(await page.evaluate(i=>GFDPlugins.list()[i].enabled,index),true);
       }
       assert.equal(await page.evaluate(()=>(GFDPlugins.extendInstructions('Original').match(/\[Website plugin:/g)||[]).length),3);
-      if(!blockedStorage) {
+      await page.evaluate(() => GFDPlugins.flushPreferences());
+      {
         await page.reload({waitUntil:'domcontentloaded'});
         await page.waitForFunction(()=>window.GFDPluginsReady);
         await page.evaluate(()=>GFDPluginsReady);
@@ -37,8 +38,33 @@ try {
       }
       for(let index=0;index<3;index++) await controls.nth(index).uncheck();
       assert.equal(await page.evaluate(()=>GFDPlugins.extendInstructions('Original')),'Original');
+      await page.evaluate(() => GFDPlugins.flushPreferences());
     }
     await context.close();
   }
   console.log('PASS: offline file:// both entrypoints; 3 visible plugins; toggles, all contexts, persistence and blocked storage');
 } finally {await browser.close();}
+
+// Restart the browser process with localStorage denied; IndexedDB must retain choices.
+const { mkdtemp } = await import('node:fs/promises');
+const { tmpdir } = await import('node:os');
+const profile = await mkdtemp(path.join(tmpdir(), 'gfd-apk-plugin-profile-'));
+for (let run = 0; run < 2; run++) {
+  const context = await chromium.launchPersistentContext(profile, {
+    headless: true, offline: true,
+    ...(process.env.GFD_BROWSER_CHANNEL ? { channel: process.env.GFD_BROWSER_CHANNEL } : {})
+  });
+  try {
+    await context.addInitScript(() => Object.defineProperty(window, 'localStorage', { get() { throw Error('Storage disabled'); } }));
+    const page = await context.newPage();
+    await page.goto(pathToFileURL(path.join(root, 'index.html')).href, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => window.GFDPluginsReady);
+    await page.evaluate(() => GFDPluginsReady);
+    if (run === 0) {
+      await page.evaluate(async () => { GFDPlugins.setEnabled('spec-direct-auto-inject', true); await GFDPlugins.flushPreferences(); });
+    } else {
+      assert.equal(await page.evaluate(() => GFDPlugins.list().find(p => p.id === 'spec-direct-auto-inject').enabled), true);
+    }
+  } finally { await context.close(); }
+}
+console.log('PASS: browser process restart retains IndexedDB preferences with localStorage denied');

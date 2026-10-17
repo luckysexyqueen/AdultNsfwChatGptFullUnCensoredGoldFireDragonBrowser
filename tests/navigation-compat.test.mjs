@@ -228,3 +228,20 @@ test('entrypoints load custom adapter once before common router',()=>{
     assert.ok(html.indexOf('src="./webviews/custom/adapter.js"')<html.indexOf('src="./inapp-browser.js"'));
   }
 });
+
+test('declared Android InAppBrowser opens a real WebView route without clearing cookies',async()=>{
+  let received;
+  const s=shell(undefined,{Capacitor:{getPlatform:()=> 'android',Plugins:{InAppBrowser:{openInWebView:async options=>received=options}}}});
+  await s.window.GFDInAppBrowser.open('https://example.org',{engine:'chromium'});
+  assert.equal(received.url,'https://example.org/');
+  assert.equal(received.options.clearCache,false);
+  assert.equal(received.options.clearSessionCache,false);
+  assert.equal(received.options.android.hardwareBack,true);
+  assert.equal(s.navigations.length,0);
+});
+test('standard native WebView does not consume named sessions or claim iOS is Chromium',async()=>{
+  for(const settings of [{platform:'ios',options:{engine:'chromium'}},{platform:'android',options:{engine:'chromium',sessionId:'c1'}}]) {
+    const s=shell(undefined,{Capacitor:{getPlatform:()=> settings.platform,Plugins:{InAppBrowser:{openInWebView:async()=>assert.fail('unsupported session/engine')}}}});
+    await assert.rejects(s.window.GFDInAppBrowser.open('https://example.org',settings.options),{code:'ENGINE_UNAVAILABLE'});
+  }
+});
