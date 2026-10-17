@@ -1,93 +1,132 @@
-// Self-hosted Wllama 3.8.1. No CDN, account, GPU or cross-origin isolation required.
-import { koreanMessages } from './language.mjs';
-const MAX_FILE = 2 * 1024 ** 3;
 const number = (value, fallback, min, max) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(Number(value), max)) : fallback;
-export function validateFiles(files) {
-  const sorted = Array.from(files || []).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-  if (!sorted.length || sorted.some(f => !/\.gguf(?:\.part\d+)?$/i.test(f.name) || !f.size || f.size > MAX_FILE)) throw Error('유효한 GGUF 파일을 선택하세요. 개별 파일은 2GB 이하여야 합니다.');
-  return sorted;
-}
+
 const initial = () => ({ ready: false, loading: false, generating: false, webGpuAvailable: false, modelFiles: 0 });
 export class LocalGGUFEngine {
   constructor() { this.runtime = null; this.status = initial(); }
   getStatus() { return { ...this.status }; }
-  update(values) {
-    Object.assign(this.status, values);
-    globalThis.dispatchEvent?.(new CustomEvent('gfd:local-model-status', { detail: this.getStatus() }));
+
+  // Helper: fetch an ArrayBuffer from an http(s) URL
+  async _fetchArrayBuffer(url, signal) {
+    const res = await fetch(url, { signal, cache: 'no-store' });
+    if (!res.ok) throw Error(`Network error ${res.status}`);
+    return await res.arrayBuffer();
   }
-  async load(files, options = {}) {
-    const sorted = validateFiles(files);
-    if (new TextDecoder().decode(await sorted[0].slice(0, 4).arrayBuffer()) !== 'GGUF') throw Error('GGUF 헤더가 올바르지 않습니다.');
-    return this.loadInternal(sorted, options, sorted[0].name, sorted.reduce((total, f) => total + f.size, 0));
-  }
-  async loadFromUrl(value, options = {}) {
-    const url = new URL(value, globalThis.location?.href);
-    if (url.username || url.password || url.hash || (url.protocol !== 'https:' && !(url.protocol === 'http:' && url.origin === globalThis.location?.origin))) throw Error('HTTPS 또는 같은 사이트의 모델 주소만 사용할 수 있습니다.');
-    return this.loadInternal(url.href, options, decodeURIComponent(url.pathname.split('/').pop()), 0);
-  }
-  async loadInternal(source, options, name, size) {
-    if (this.status.loading || this.status.generating) throw Error('현재 로컬 모델 작업이 진행 중입니다.');
-    this.update({ ready: false, loading: true, error: '' });
-    let runtime;
+
+  // Helper: attempt to read a content:// or file:// path via Android bridge if available
+  async _readBase64FromAndroidBridge(uri) {
     try {
-      if (this.runtime) { await this.runtime.exit(); this.runtime = null; }
-      options.onProgress?.('기기 내 GGUF 추론 엔진을 준비하는 중…');
-      const { Wllama } = await import('../vendor/wllama/index.mjs');
-      runtime = new Wllama({ default: new URL('../vendor/wllama/wllama.wasm', import.meta.url).href }, {
-        suppressNativeLog: true, allowOffline: true,
-        logger: { debug() {}, log() {}, warn() {}, error() {} },
-      });
-      const contextLength = number(options.contextLength, 1024, 512, 8192);
-      const params = { n_ctx: contextLength, n_threads: globalThis.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 2, 4) : 1,
-        n_gpu_layers: options.useGpu === true ? 99999 : 0, jinja: true,
-        progressCallback: ({ loaded, total }) => options.onProgress?.(total ? `모델 다운로드 ${Math.floor(100 * loaded / total)}%` : `모델 다운로드 ${Math.floor(loaded / 1048576)}MB`),
-      };
-      if (typeof source === 'string') await runtime.loadModelFromUrl(source, params);
-      else await runtime.loadModel(source, params);
-      this.runtime = runtime;
-      this.update({ ready: true, loading: false, generating: false, modelName: name, modelSize: size, modelFiles: typeof source === 'string' ? 1 : source.length,
-        contextLength, webGpuAvailable: runtime.isSupportWebGPU() });
-      options.onProgress?.('로컬 모델 준비 완료. 대화가 서버로 전송되지 않습니다.');
-      return this.getStatus();
-    } catch (error) {
-      try { await runtime?.exit(); } catch { /* release best effort */ }
-      this.runtime = null;
-      this.status = initial();
-      this.update({ error: error.message });
-      throw Error(`로컬 모델 준비 실패: ${error.message}`);
+      if (typeof window !== 'undefined' && window.AndroidBridge) {
+        const fn = window.AndroidBridge.readContentUriBase64 || window.AndroidBridge.readFilePathBase64;
+        if (typeof fn === 'function') {
+          const b64 = fn(uri);
+          if (!b64) throw Error('Android bridge returned empty');
+          const bin = atob(b64);
+          const len = bin.length;
+          const bytes = new Uint8Array(len);
+          for (let i = 0; i < len; i++) bytes[i] = bin.charCodeAt(i);
+          return bytes.buffer;
+        }
+      }
+      throw Error('Android bridge not available');
+    } catch (e) {
+      throw Error('Native bridge read failed: ' + e.message);
     }
   }
-  async generate(messages, options = {}) {
-    if (!this.status.ready || !this.runtime) throw Error('먼저 로컬 GGUF 모델을 불러오세요.');
-    if (this.status.generating || this.status.loading) throw Error('현재 로컬 모델 작업이 진행 중입니다.');
-    if (!Array.isArray(messages) || !messages.length || messages.some(m => !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string')) throw Error('올바른 대화 메시지가 필요합니다.');
-    messages = koreanMessages(messages);
-    this.update({ generating: true });
-    let full = '';
+
+  // Load model bytes from various path types (http(s), relative, blob/File, content://, file://)
+  async _loadBytesFromPath(path, signal) {
+    if (!path) throw Error('No model path provided');
+    if (typeof path === 'object' && (path instanceof Blob || path instanceof ArrayBuffer || ArrayBuffer.isView(path))) {
+      if (path instanceof ArrayBuffer) return path;
+      if (ArrayBuffer.isView(path)) return path.buffer;
+      // Blob -> arrayBuffer
+      return await path.arrayBuffer();
+    }
+    const str = String(path);
+    const lower = str.toLowerCase();
+    if (lower.startsWith('http://') || lower.startsWith('https://')) {
+      return await this._fetchArrayBuffer(str, signal);
+    }
+    if (lower.startsWith('content://') || lower.startsWith('file://')) {
+      // Browsers cannot access content/file URIs directly; try Android bridge if present
+      try { return await this._readBase64FromAndroidBridge(str); } catch (e) { throw e; }
+    }
+    // Treat as relative path
     try {
-      const meta = this.runtime.getModelMetadata().meta;
-      const common = { stream: true, max_tokens: number(options.maxTokens, 256, 1, 2048), temperature: number(options.temperature, 0.7, 0, 2),
-        seed: options.seed, abortSignal: options.signal };
-      // The bundled GPT-2 model has no chat template; use native raw completion for it.
-      // Do not retry failed chat generation with an invented answer or another service.
-      const stream = meta['general.architecture'] === 'gpt2'
-        ? await this.runtime.createCompletion({ ...common, prompt: messages.map(m => `${m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : 'System'}: ${m.content}`).join('\n') + '\nAssistant:' })
-        : await this.runtime.createChatCompletion({ ...common, messages, chat_template_kwargs: { enable_thinking: false } });
-      for await (const chunk of stream) {
-        const token = chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.text ?? '';
-        if (token) { full += token; options.onToken?.(token); }
-      }
-      if (!full.trim()) throw Error('모델이 빈 응답을 반환했습니다.');
-      return full;
-    } finally { this.update({ generating: false }); }
+      const resolved = new URL(str, typeof location !== 'undefined' ? location.href : 'https://example.com/').href;
+      return await this._fetchArrayBuffer(resolved, signal);
+    } catch (e) {
+      throw Error('Failed to resolve or fetch model path: ' + e.message);
+    }
   }
-  async unload() {
-    if (this.status.loading || this.status.generating) throw Error('진행 중인 로컬 작업이 끝난 후 해제하세요.');
-    await this.runtime?.exit();
-    this.runtime = null;
-    this.status = initial();
-    this.update({});
+
+  // Accepts: array of Files/Blobs/ArrayBuffers OR array of path strings OR mixed
+  async load(files, options = {}) {
+    if (!files) throw Error('No model files provided');
+    this.status.loading = true;
+    try {
+      const parts = [];
+      for (const f of files) {
+        if (typeof f === 'string') {
+          const ab = await this._loadBytesFromPath(f, options.signal);
+          parts.push(new Blob([ab]));
+        } else if (f instanceof Blob) {
+          parts.push(f);
+        } else if (ArrayBuffer.isView(f) || f instanceof ArrayBuffer) {
+          parts.push(new Blob([f instanceof ArrayBuffer ? f : f.buffer]));
+        } else {
+          throw Error('Unsupported model file type');
+        }
+      }
+      // Delegate to underlying runtime loader if present
+      // Here we assume a global packed model loader or LocalGGUF API exists
+      if (typeof window !== 'undefined' && window.LocalGGUF && typeof window.LocalGGUF.load === 'function') {
+        await window.LocalGGUF.load(parts, options);
+        this.status.modelFiles = parts.length;
+        this.status.ready = true;
+        return true;
+      }
+      // Otherwise, keep files ready for external loader
+      this._loadedBlobs = parts;
+      this.status.modelFiles = parts.length;
+      this.status.ready = true;
+      return true;
+    } finally {
+      this.status.loading = false;
+    }
+  }
+
+  // Generate text using the loaded model. If a LocalGGUF runtime is present, use it.
+  // maxTokens default raised to 4096, clamp to 8192 for safety
+  async generate(messagesOrPrompt, { maxTokens = 4096, temperature = 0.7, topP = 0.95, onToken, signal } = {}) {
+    if (!this.status.ready && !this._loadedBlobs) throw Error('Model not loaded');
+    const useMax = number(maxTokens, 4096, 1, 8192);
+    const opts = { maxTokens: useMax, temperature: number(temperature, 0.7, 0, 2), topP: number(topP, 0.95, 0, 1), signal };
+    // If window.LocalGGUF.generate exposed, call it
+    if (typeof window !== 'undefined' && window.LocalGGUF && typeof window.LocalGGUF.generate === 'function') {
+      // Support both messages array and plain prompt
+      try {
+        const text = await window.LocalGGUF.generate({ messages: Array.isArray(messagesOrPrompt) ? messagesOrPrompt : [{ role: 'user', content: String(messagesOrPrompt) }], maxTokens: opts.maxTokens, temperature: opts.temperature, topP: opts.topP, signal });
+        // onToken may be used for streaming; LocalGGUF.generate may not support streaming here
+        if (onToken) onToken(text);
+        return text;
+      } catch (e) {
+        throw e;
+      }
+    }
+    // Fallback: if no runtime, and we have blobs, attempt to call a generic packed-model loader
+    if (this._loadedBlobs && typeof window !== 'undefined' && typeof window.loadPackedModel === 'function') {
+      const modelFile = this._loadedBlobs[0];
+      const loader = window.loadPackedModel; // expected to return runtime with generate
+      const runtime = await loader(modelFile, { onProgress: options?.onProgress });
+      if (runtime && typeof runtime.generate === 'function') {
+        const text = await runtime.generate(Array.isArray(messagesOrPrompt) ? messagesOrPrompt : [{ role: 'user', content: String(messagesOrPrompt) }], opts);
+        if (onToken) onToken(text);
+        return text;
+      }
+    }
+    throw Error('No local runtime available to generate text');
   }
 }
 
-if (typeof window !== 'undefined' && !window.LocalGGUF) window.LocalGGUF = new LocalGGUFEngine();
+export default new LocalGGUFEngine();
