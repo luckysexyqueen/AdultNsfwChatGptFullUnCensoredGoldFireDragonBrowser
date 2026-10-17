@@ -66,11 +66,18 @@ export class LocalGGUFEngine {
     let full = '';
     try {
       const meta = this.runtime.getModelMetadata()?.meta || {};
-      const common = { stream: true, max_tokens: number(options.maxTokens, 4096, 1, 8192), temperature: number(options.temperature, 0.7, 0, 2),
+      const common = { stream: true, max_tokens: number(options.maxTokens, 512, 1, Math.max(1, Math.min(2048, (this.status.contextLength || 4096) - 512))), temperature: number(options.temperature, 0.7, 0, 2),
         seed: options.seed, abortSignal: options.signal };
       const stream = meta['general.architecture'] === 'gpt2'
         ? await this.runtime.createCompletion({ ...common, prompt: messages.map(m => `${m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : 'System'}: ${m.content}`).join('\n') + '\nAssistant:' })
         : await this.runtime.createChatCompletion({ ...common, messages, chat_template_kwargs: { enable_thinking: false } });
+      // Some Wllama builds return a complete response instead of an async stream.
+      if (typeof stream?.[Symbol.asyncIterator] !== 'function') {
+        const text = stream?.choices?.[0]?.message?.content ?? stream?.choices?.[0]?.text ?? '';
+        if (typeof text !== 'string' || !text.trim()) throw Error('모델이 빈 응답을 반환했습니다.');
+        options.onToken?.(text);
+        return text;
+      }
       for await (const chunk of stream) {
         const token = chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.text ?? '';
         if (token) { full += token; options.onToken?.(token); }
