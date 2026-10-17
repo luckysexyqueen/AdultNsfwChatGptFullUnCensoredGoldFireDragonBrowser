@@ -3,15 +3,19 @@ const MAX_FILE = 2 * 1024 ** 3; // 2 GiB per part (safety)
 const number = (value, fallback, min, max) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(Number(value), max)) : fallback;
 
 export function validateFiles(files) {
-  const arr = Array.from(files || []);
+  // Accept FileList, array of Blobs, single Blob, string URLs
+  if (!files) throw Error('No files provided');
+  const arr = Array.isArray(files) ? Array.from(files) : (files instanceof FileList ? Array.from(files) : [files]);
   if (!arr.length) throw Error('유효한 GGUF 파일을 선택하세요.');
-  const sorted = arr.sort((a, b) => (a.name || String(a)).localeCompare(b.name || String(b), undefined, { numeric: true }));
-  // allow URL strings
-  if (sorted.some(f => typeof f === 'string')) return sorted;
-  if (sorted.some(f => !(f instanceof Blob) || !f.size || f.size > MAX_FILE || !/\.gguf(?:\.part\d+)?$/i.test(f.name))) {
-    throw Error('유효한 GGUF 파일을 선택하세요. 개별 파일은 2GB 이하이고 `.gguf` 또는 `.gguf.partN` 이어야 합니다.');
-  }
-  return sorted;
+
+  // If any are strings (URLs), allow them immediately
+  if (arr.some(f => typeof f === 'string')) return arr;
+
+  // Accept blobs even without .gguf extension; prefer .gguf but be permissive
+  const invalid = arr.filter(f => !(f instanceof Blob) || !f.size || f.size > MAX_FILE);
+  if (invalid.length) throw Error('유효한 GGUF 파일을 선택하세요. 파일이 Blob/File인지, 2GB 이하인지 확인하세요.');
+
+  return arr;
 }
 
 const initial = () => ({ ready: false, loading: false, generating: false, webGpuAvailable: false, modelFiles: 0, error: '' });
@@ -62,24 +66,38 @@ export class LocalGGUFEngine {
     }
   }
 
-  // Try to have Android bridge perform network fetch when webview's network is blocked.
   async _fetchUrlViaAndroidBridge(url) {
     try {
-      if (typeof window !== 'undefined' && window.AndroidBridge && typeof window.AndroidBridge.fetchUrlBase64 === 'function') {
-        const b64 = window.AndroidBridge.fetchUrlBase64(url);
-        if (!b64) throw Error('Android bridge fetch returned empty');
-        const bin = atob(b64);
-        const arr = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-        return arr.buffer;
+      if (typeof window !== 'undefined' && window.AndroidBridge) {
+        // Prefer fetchUrlToFile if available (prevents huge base64 in memory)
+        if (typeof window.AndroidBridge.fetchUrlToFile === 'function') {
+          const path = window.AndroidBridge.fetchUrlToFile(url);
+          if (path) {
+            const b64 = typeof window.AndroidBridge.readFilePathBase64 === 'function'
+              ? window.AndroidBridge.readFilePathBase64(path)
+              : (typeof window.AndroidBridge.readContentUriBase64 === 'function' ? window.AndroidBridge.readContentUriBase64(path) : null);
+            if (!b64) throw Error('Android bridge returned empty file content');
+            const bin = atob(b64);
+            const arr = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+            return arr.buffer;
+          }
+        }
+        if (typeof window.AndroidBridge.fetchUrlBase64 === 'function') {
+          const b64 = window.AndroidBridge.fetchUrlBase64(url);
+          if (!b64) throw Error('Android bridge fetch returned empty');
+          const bin = atob(b64);
+          const arr = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          return arr.buffer;
+        }
       }
     } catch (e) {
       console.warn('Android bridge fetch failed', e);
     }
-    throw Error('Android bridge does not support fetchUrlBase64 or failed');
+    throw Error('Android bridge does not support fetchUrlToFile/fetchUrlBase64 or it failed');
   }
 
-  // Check network reachability by pinging a small URL with timeout.
   async _isNetworkAvailable({ url = 'https://www.gstatic.com/generate_204', timeout = 3000 } = {}) {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
     try {
@@ -88,12 +106,8 @@ export class LocalGGUFEngine {
       try {
         await fetch(url, { method: 'GET', mode: 'no-cors', cache: 'no-store', signal: ac.signal });
         return true;
-      } finally {
-        clearTimeout(id);
-      }
-    } catch (e) {
-      return false;
-    }
+      } finally { clearTimeout(id); }
+    } catch (e) { return false; }
   }
 
   async _loadBytesFromPath(path, signal) {
@@ -147,9 +161,7 @@ export class LocalGGUFEngine {
     }
   }
 
-  async loadFromUrl(value, options = {}) {
-    return this.load([value], options);
-  }
+  async loadFromUrl(value, options = {}) { return this.load([value], options); }
 
   async load(files, options = {}) {
     if (!files) throw Error('No model files provided');
@@ -160,18 +172,16 @@ export class LocalGGUFEngine {
       const parts = [];
 
       for (const f of validated) {
-        if (typeof f === 'string') {
-          parts.push(f);
-        } else if (f instanceof Blob) {
-          parts.push(f);
-        } else if (ArrayBuffer.isView(f) || f instanceof ArrayBuffer) {
-          parts.push(new Blob([f instanceof ArrayBuffer ? f : f.buffer]));
-        } else {
+        if (typeof f === 'string') { parts.push(f); }
+        else if (f instanceof Blob) { parts.push(f); }
+        else if (ArrayBuffer.isView(f) || f instanceof ArrayBuffer) { parts.push(new Blob([f instanceof ArrayBuffer ? f : f.buffer])); }
+        else {
           try {
             const ab = await this._loadBytesFromPath(f, options.signal);
             parts.push(new Blob([ab]));
           } catch (err) {
-            throw Error('Unsupported model file type or could not fetch: ' + (err && err.message ? err.message : String(err)));
+            const msg = err && err.message ? err.message : String(err);
+            throw Error('Unsupported model file type or could not fetch: ' + msg);
           }
         }
       }
@@ -180,9 +190,7 @@ export class LocalGGUFEngine {
         const first = parts.find(p => p && typeof p !== 'string');
         if (first instanceof Blob) {
           const head = new TextDecoder().decode(await first.slice(0, 4).arrayBuffer());
-          if (head !== 'GGUF') {
-            this.update({ error: '첫 번째 파일 헤더가 GGUF가 아닙니다. 계속 시도합니다.' });
-          }
+          if (head !== 'GGUF') { this.update({ error: '첫 번째 파일 헤더가 GGUF가 아닙니다. 계속 시도합니다.' }); }
         }
       } catch (e) { /* ignore */ }
 
@@ -199,8 +207,11 @@ export class LocalGGUFEngine {
       this.update({ ready: true, loading: false, generating: false });
       return this.getStatus();
     } catch (error) {
-      this.update({ error: error.message });
-      throw Error('로컬 모델 준비 실패: ' + (error && error.message ? error.message : String(error)));
+      // Avoid double-wrapping messages that already indicate failure
+      const raw = error && error.message ? String(error.message) : String(error);
+      if (raw.startsWith('로컬 모델 준비 실패')) throw error; // already wrapped
+      this.update({ error: raw });
+      throw Error('로컬 모델 준비 실패: ' + raw);
     } finally {
       if (this.status.loading) this.update({ loading: false });
     }
@@ -214,16 +225,8 @@ export class LocalGGUFEngine {
     const safeTopP = number(options.topP, 0.95, 0, 1);
 
     if (typeof window !== 'undefined' && window.LocalGGUF && typeof window.LocalGGUF.generate === 'function') {
-      const text = await window.LocalGGUF.generate({
-        messages: Array.isArray(messagesOrPrompt)
-          ? messagesOrPrompt
-          : [{ role: 'user', content: String(messagesOrPrompt) }],
-        maxTokens: safeMaxTokens,
-        temperature: safeTemperature,
-        topP: safeTopP,
-        signal: options.signal,
-        onToken: options.onToken
-      });
+      const messages = Array.isArray(messagesOrPrompt) ? messagesOrPrompt : typeof messagesOrPrompt === 'string' ? [{ role: 'user', content: messagesOrPrompt }] : (messagesOrPrompt && messagesOrPrompt.messages) || [{ role: 'user', content: String(messagesOrPrompt || '') }];
+      const text = await window.LocalGGUF.generate({ messages, maxTokens: safeMaxTokens, temperature: safeTemperature, topP: safeTopP, signal: options.signal, onToken: options.onToken });
       return text;
     }
 
@@ -231,10 +234,8 @@ export class LocalGGUFEngine {
       const modelFile = this._loadedBlobs[0];
       const runtime = await window.loadPackedModel(modelFile, { onProgress: options.onProgress });
       if (runtime && typeof runtime.generate === 'function') {
-        const text = await runtime.generate(
-          Array.isArray(messagesOrPrompt) ? messagesOrPrompt : [{ role: 'user', content: String(messagesOrPrompt) }],
-          { maxTokens: safeMaxTokens, temperature: safeTemperature, topP: safeTopP, signal: options.signal, onToken: options.onToken }
-        );
+        const messages = Array.isArray(messagesOrPrompt) ? messagesOrPrompt : typeof messagesOrPrompt === 'string' ? [{ role: 'user', content: messagesOrPrompt }] : (messagesOrPrompt && messagesOrPrompt.messages) || [{ role: 'user', content: String(messagesOrPrompt || '') }];
+        const text = await runtime.generate(messages, { maxTokens: safeMaxTokens, temperature: safeTemperature, topP: safeTopP, signal: options.signal, onToken: options.onToken });
         return text;
       }
     }
@@ -243,13 +244,8 @@ export class LocalGGUFEngine {
   }
 
   async unload() {
-    try {
-      if (typeof this.runtime?.exit === 'function') await this.runtime.exit();
-    } catch (e) { }
-    this.runtime = null;
-    this._loadedBlobs = null;
-    this.status = initial();
-    this.update({});
+    try { if (typeof this.runtime?.exit === 'function') await this.runtime.exit(); } catch (e) { }
+    this.runtime = null; this._loadedBlobs = null; this.status = initial(); this.update({});
   }
 }
 
