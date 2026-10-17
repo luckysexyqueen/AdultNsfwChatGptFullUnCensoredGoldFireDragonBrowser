@@ -1609,7 +1609,7 @@
             <i class="fa-solid fa-lock" style="color: #4ade80; margin-right: 4px"></i>
             골드파이어드래곤브라우저
           </div>
-          <button id="vpn-settings-btn" class="input-box-btn" style="height:32px;color:#fff" title="VPN 설정" onclick="window.__gfdOpenVpn && window.__gfdOpenVpn()">VPN 설정</button>
+          <button id="vpn-settings-btn" class="input-box-btn" style="height:32px;color:#fff" title="VPN 설정" >VPN 설정</button>
           <button
             id="brow-reload"
             class="input-box-btn"
@@ -5002,6 +5002,7 @@
 
       async function openVpnSettings() {
         document.getElementById("vpn-settings-modal")?.remove();
+        if (typeof window.__gfdOpenVpn === "function") return window.__gfdOpenVpn();
         const native = window.GoldFireNative;
         const modal = document.createElement("div");
         modal.id = "vpn-settings-modal";
