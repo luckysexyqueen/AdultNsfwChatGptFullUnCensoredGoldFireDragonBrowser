@@ -1,10 +1,10 @@
 import { DurableObject } from 'cloudflare:workers';
 const MODEL = '@cf/meta/llama-3.2-1b-instruct';
-const KOREAN_DEFAULT = '기본 응답 언어는 한국어입니다. 사용자가 다른 언어를 명시적으로 요청하지 않는 한 자연스럽고 간결한 한국어로 답변하세요. 사용자의 메시지와 문맥을 유지하며, 사실 확인이 어려운 내용은 추측 대신 불확실성을 드러내세요.';
-const MAX_OUTPUT_TOKENS = 4096;
+const KOREAN_DEFAULT = '기본 응답 언어는 한국어입니다. 사용자가 다른 언어를 명시적으로 요청하지 않는 한 자연스럽고 간결한 한국어로 답변하세요.';
+const ALLOWED = new Set(['https://luckysexyqueen.github.io']);
 const MAX_INPUT_CHARS = 20000;
 const MAX_MESSAGES = 32;
-const ALLOWED = new Set(['https://luckysexyqueen.github.io']);
+const MAX_OUTPUT_TOKENS = 4096;
 export class FreeBudget extends DurableObject {
   async reserve() {
     const now = Date.now();
@@ -22,11 +22,6 @@ function validOrigin(origin) {
   if (ALLOWED.has(origin)) return true;
   try { const url = new URL(origin); return url.protocol === 'http:' && ['127.0.0.1', 'localhost'].includes(url.hostname); } catch { return false; }
 }
-function normalizeMaxTokens(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return MAX_OUTPUT_TOKENS;
-  return Math.min(Math.max(Math.round(n), 64), MAX_OUTPUT_TOKENS);
-}
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -41,34 +36,34 @@ export default {
     if (request.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
     if (!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type') || '')) return json({ error: 'JSON required' }, 415);
     try {
+      // Read a bounded body; Content-Length is not trusted.
       const reader = request.body?.getReader();
       if (!reader) return json({ error: 'Empty request' }, 400);
       let size = 0; const chunks = [];
       for (;;) { const { done, value } = await reader.read(); if (done) break; size += value.byteLength;
-        if (size > 20000) { await reader.cancel(); return json({ error: 'Request too large' }, 413); } chunks.push(value); }
+        if (size > MAX_INPUT_CHARS) { await reader.cancel(); return json({ error: 'Request too large' }, 413); } chunks.push(value); }
       const bytes = new Uint8Array(size); let offset = 0;
       for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
       let body;
       try { body = JSON.parse(new TextDecoder().decode(bytes)); } catch { return json({ error: 'Invalid JSON' }, 400); }
-      if (!Array.isArray(body?.messages) || !body.messages.length || body.messages.length > MAX_MESSAGES || body.messages.some(m => !m || !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string')) return json({ error: 'Invalid text messages' }, 400);
-      const totalInputChars = body.messages.reduce((sum, m) => sum + String(m.content || '').length, 0);
-      if (totalInputChars > MAX_INPUT_CHARS) return json({ error: 'Input exceeds 20000 characters', fallback: true }, 413);
-      const requestedMaxTokens = normalizeMaxTokens(body.max_tokens ?? MAX_OUTPUT_TOKENS);
+      if (!Array.isArray(body?.messages) || !body.messages.length || body.messages.length > MAX_MESSAGES || body.messages.some(m => !m || !['system', 'user', 'assistant'].includes(m.role) || typeof m.content !== 'string')) return json({ error: 'Invalid messages' }, 400);
+      const totalChars = body.messages.reduce((sum, m) => sum + (m.content?.length || 0), 0);
+      if (totalChars > MAX_INPUT_CHARS) return json({ error: 'Input exceeds allowed characters' }, 413);
       const messages = body.messages.map(({ role, content }) => ({ role, content }));
       if (!messages.some(m => m.role === 'system' && m.content.includes(KOREAN_DEFAULT))) {
         if (messages[0].role === 'system') messages[0].content = KOREAN_DEFAULT + '\n\n' + messages[0].content;
         else messages.unshift({ role: 'system', content: KOREAN_DEFAULT });
       }
-      const budget = env.BUDGET?.getByName?.('daily-free-inference');
-      if (!budget || typeof budget.reserve !== 'function') {
-        return json({ error: 'Free inference unavailable. Use a local model.', fallback: true, code: 'provider_unavailable' }, 503);
-      }
-      if (!(await budget.reserve())) return json({ error: 'Free quota or cooldown reached. Use a local model.', retryAfter: 3, fallback: true, code: 'quota_exhausted' }, 429);
-      const result = await env.AI.run(MODEL, { messages, max_tokens: requestedMaxTokens, temperature: 0.7, stream: false });
-      if (typeof result?.response !== 'string' || !result.response.trim()) return json({ error: 'Empty model response', fallback: true, code: 'empty_response' }, 502);
-      return json({ model: MODEL, choices: [{ index: 0, message: { role: 'assistant', content: result.response } }], usage: result.usage, fallback: false, maxOutputTokens: requestedMaxTokens });
-    } catch {
-      return json({ error: 'Free inference unavailable. Use a local model.', fallback: true, code: 'provider_error' }, 503);
+      if (!await env.BUDGET.getByName('daily-free-inference').reserve()) return json({ error: 'Free quota or cooldown reached. Use a local model.', retryAfter: 3 }, 429);
+      // Determine requested max tokens (clamp to provider cap)
+      const requested = Number.isFinite(Number(body.max_tokens)) ? Math.max(1, Math.min(MAX_OUTPUT_TOKENS, Math.floor(Number(body.max_tokens)))) : MAX_OUTPUT_TOKENS;
+      // Fixed inexpensive model and increased output cap. No paid fallback or API credentials.
+      const result = await env.AI.run(MODEL, { messages, max_tokens: requested, temperature: body.temperature ?? 0.7, stream: false });
+      if (typeof result?.response !== 'string' || !result.response.trim()) return json({ error: 'Empty model response' }, 502);
+      return json({ model: MODEL, choices: [{ index: 0, message: { role: 'assistant', content: result.response } }], usage: result.usage });
+    } catch (err) {
+      // Do not expose provider diagnostics, request text or account information. Suggest local fallback.
+      return json({ error: 'Free inference unavailable. Use a local model.' }, 503);
     }
   },
 };
