@@ -37,7 +37,9 @@ export class LocalGGUFEngine {
         suppressNativeLog: true, allowOffline: true,
         logger: { debug() {}, log() {}, warn() {}, error() {} },
       });
-      const contextLength = number(options.contextLength, 2048, 512, 32768);
+      const deviceMemory = Number(globalThis.navigator?.deviceMemory) || 0;
+      const recommendedContext = deviceMemory >= 8 ? 8192 : deviceMemory >= 4 ? 4096 : 2048;
+      const contextLength = number(options.contextLength, recommendedContext, 512, 32768);
       const params = { n_ctx: contextLength, n_threads: globalThis.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 2, 4) : 1,
         n_gpu_layers: options.useGpu === true ? 99999 : 0, jinja: true,
         progressCallback: ({ loaded, total }) => options.onProgress?.(total ? `모델 다운로드 ${Math.floor(100 * loaded / total)}%` : `모델 다운로드 ${Math.floor(loaded / 1048576)}MB`),
