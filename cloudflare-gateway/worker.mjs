@@ -6,7 +6,29 @@ export default {
   const u = new URL(request.url);
   const headers = {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':env.ALLOWED_WEB_ORIGIN || 'https://luckysexyqueen.github.io','Vary':'Origin'};
   if (request.method === 'OPTIONS') return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'GET,OPTIONS','Access-Control-Allow-Headers':'Authorization'}});
-  if (u.pathname === '/api/gateway/status') return Response.json({available:true,mode:'cloudflare-edge-proxy',regionTarget:'JP',japanEgressVerified:false,tunnel:false,configured:true},{headers});
+  // Japan server is opt-in: set JP_SERVER_ORIGIN to a verified HTTPS origin hosted in Japan.
+  // Merely setting this variable does not prove the server's egress location.
+  let jpOrigin = null;
+  try {
+   const configured = new URL(env.JP_SERVER_ORIGIN || '');
+   if (configured.protocol === 'https:' && !configured.username && !configured.password && configured.pathname === '/' && !configured.search && !configured.hash && configured.hostname !== u.hostname) jpOrigin = configured.origin;
+  } catch {}
+  if (u.pathname === '/api/gateway/status') return Response.json({available:true,mode:'cloudflare-edge-proxy',regionTarget:'JP',japanEgressVerified:false,japanServerConfigured:!!jpOrigin,tunnel:false,configured:true},{headers});
+  if (u.pathname === '/api/jp/status') return Response.json({configured:!!jpOrigin,region:'JP',egressVerified:false,mode:jpOrigin?'https-upstream':'not-configured'},{headers});
+  if (u.pathname === '/api/jp/proxy') {
+   if (!jpOrigin) return Response.json({error:'Japan server not configured',required:'JP_SERVER_ORIGIN'},{status:503,headers});
+   if (request.method !== 'GET') return new Response('Method not allowed',{status:405});
+   if (!env.GATEWAY_TOKEN || request.headers.get('Authorization') !== 'Bearer '+env.GATEWAY_TOKEN) return new Response('Unauthorized',{status:401});
+   const route = u.searchParams.get('path') || '/';
+   if (!route.startsWith('/') || route.startsWith('//') || route.includes('\\\\')) return new Response('Invalid path',{status:400});
+   const upstream = new URL(route,jpOrigin);
+   if (upstream.origin !== jpOrigin) return new Response('Forbidden',{status:403});
+   try {
+    const result = await fetch(upstream.toString(),{redirect:'manual',signal:AbortSignal.timeout(12000)});
+    if (result.status >= 300 && result.status < 400) return new Response('Redirect blocked',{status:502});
+    return new Response(result.body,{status:result.status,headers:{'Content-Type':result.headers.get('Content-Type') || 'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
+   } catch {return new Response('Japan server unavailable',{status:502});}
+  }
   // The gateway's public URL also opens the original browser web frontend.
   // Keep gateway API routes intact and forward only document/static requests.
   if (u.pathname !== '/api/gateway/fetch') {
