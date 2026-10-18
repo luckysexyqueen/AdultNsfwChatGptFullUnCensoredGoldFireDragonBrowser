@@ -5,7 +5,11 @@ const json = (value, status = 200) => Response.json(value, {status, headers:{'Ca
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname === '/api/ai/chat') {
+    if (url.pathname === '/api/ai/status') {
+      if (request.method !== 'GET') return new Response('Method not allowed', {status:405});
+      return json({available:Boolean(env.AI || env.AI_API_URL || env.AI_API_BASE_URL),provider:env.AI ? 'cloudflare-workers-ai' : env.AI_API_URL || env.AI_API_BASE_URL ? 'configured-upstream' : 'legacy-fallback',endpoint:'/api/ai/chat',localInference:'browser-only'});
+    }
+    if (url.pathname === '/api/ai/chat' || url.pathname === '/v1/chat/completions') {
       if (request.method !== 'POST') return new Response('Method not allowed', {status:405});
       const contentLength = Number(request.headers.get('content-length') || 0);
       if (contentLength > 16000) return json({error:'Request too large'},413);
@@ -22,8 +26,13 @@ export default {
           const aiResult = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {messages,max_tokens:Math.min(512,Math.max(1,Number(payload.max_tokens)||256))});
           result = aiResult?.response;
         } else {
-          const upstream = await fetch('https://goldfire-free-ai.huiwon0621-mcp.workers.dev/v1/chat/completions',{
-            method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages,max_tokens:Math.min(256,Math.max(1,Number(payload.max_tokens)||128))}),signal:AbortSignal.timeout(25000)
+          const upstreamUrl = env.AI_API_URL || (env.AI_API_BASE_URL ? String(env.AI_API_BASE_URL).replace(/\/$/, '') + '/chat/completions' : 'https://goldfire-free-ai.huiwon0621-mcp.workers.dev/v1/chat/completions');
+          const parsedUpstream = new URL(upstreamUrl);
+          if (parsedUpstream.protocol !== 'https:' || parsedUpstream.origin === url.origin || parsedUpstream.username || parsedUpstream.password) return json({error:'Invalid AI upstream configuration'},503);
+          const headers = {'Content-Type':'application/json'};
+          if (env.AI_API_KEY) headers.Authorization = 'Bearer ' + env.AI_API_KEY;
+          const upstream = await fetch(parsedUpstream.href,{
+            method:'POST',headers,body:JSON.stringify({model:env.AI_MODEL || payload.model || 'default',messages,max_tokens:Math.min(512,Math.max(1,Number(payload.max_tokens)||128))}),signal:AbortSignal.timeout(25000)
           });
           if (!upstream.ok) return json({error:'Free AI provider unavailable',status:upstream.status},502);
           const data = await upstream.json();
