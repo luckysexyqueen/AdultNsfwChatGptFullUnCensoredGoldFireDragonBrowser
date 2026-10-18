@@ -29,12 +29,21 @@ export async function buildStatic(output = path.join(root, 'site-dist')) {
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   await buildCatalog();
   await mkdir(output, { recursive: true });
-  for (const file of files) await copyFile(path.join(root, file), path.join(output, file));
-  for (const directory of directories) await copyAssets(path.join(root, directory), path.join(output, directory));
+  for (const file of files) {
+    try { await copyFile(path.join(root, file), path.join(output, file)); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; if (file === 'index.html') throw new Error('Website entry index.html is missing'); console.warn('Optional static asset missing:', file); }
+  }
+  for (const directory of directories) {
+    try { await copyAssets(path.join(root, directory), path.join(output, directory)); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; console.warn('Optional asset directory missing:', directory); }
+  }
   // Publish only the reviewed plugin chat entry, never Python, archives or private uploads.
   const studio = 'LoveBound-AI-Model-Studio-v1.35.9-FULL-VERSION-LOCKED';
   await mkdir(path.join(output, studio), { recursive: true });
-  for (const file of ['index.html', 'web-chat.mjs']) await copyFile(path.join(root, studio, file), path.join(output, studio, file));
+  for (const file of ['index.html', 'web-chat.mjs']) {
+    try { await copyFile(path.join(root, studio, file), path.join(output, studio, file)); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; console.warn('Optional studio asset missing:', file); }
+  }
   // Environment is public client configuration only. Never copy .env or raw env-config.js.
   const sourceConfig = await readFile(path.join(root, 'env-config.js'), 'utf8');
   const publicConfig = {};
