@@ -1,0 +1,7 @@
+name = "goldfiredragon-jp-web-gateway"
+main = "worker.mjs"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+ALLOWED_WEB_ORIGIN = "https://luckysexyqueen.github.io"
