@@ -1918,7 +1918,7 @@
             (lucky ? "&btnI=1" : "");
           // Use the deployed same-origin search gateway rather than bypassing it.
           // This is a Japan-targeted search redirect, not a verified Japanese egress IP.
-          const gatewaySearch = new URL("./api/jp/search", window.location.href);
+          const gatewaySearch = new URL("./api/jp/search-html", window.location.href);
           gatewaySearch.searchParams.set("q", keyword);
           if (lucky) gatewaySearch.searchParams.set("btnI", "1");
           window.open(gatewaySearch.toString(), "_blank", "noopener,noreferrer");
