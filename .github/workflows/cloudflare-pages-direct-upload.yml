@@ -45,10 +45,10 @@ jobs:
       - name: Deploy to existing goldfiredragon-browser Pages project
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: 2ab77068b2ceb185d13f5c2f07c42264
         run: |
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::Set CLOUDFLARE_API_TOKEN secret with Cloudflare Pages Edit permission"; exit 1; }
-          test -n "$CLOUDFLARE_ACCOUNT_ID" || { echo "::error::Set CLOUDFLARE_ACCOUNT_ID secret"; exit 1; }
-          npx --yes wrangler@4 pages deploy site-dist --project-name goldfiredragon-browser --branch fix/free-api-local-gguf-engine-20261018
+          echo "Targeting verified Cloudflare Pages account and existing project"
+          npx --yes wrangler@4 pages project list\n          npx --yes wrangler@4 pages deploy site-dist --project-name goldfiredragon-browser --branch fix/free-api-local-gguf-engine-20261018
       - name: Print production URL
         run: echo "https://goldfiredragon-browser.pages.dev"
