@@ -14,16 +14,16 @@ jobs:
       - name: Verify Cloudflare credentials
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || '2ab77068b2ceb185d13f5c2f07c42264' }}
         run: |
-          test -n "$CF_TOKEN" || { echo 'Missing CLOUDFLARE_API_TOKEN'; exit 1; }
+          test -n "$CF_TOKEN" || { echo 'Missing repository Actions secret CLOUDFLARE_API_TOKEN. Set it in Settings > Secrets and variables > Actions (repository secrets).'; exit 1; }
           test -n "$CF_ACCOUNT" || { echo 'Missing CLOUDFLARE_ACCOUNT_ID'; exit 1; }
       - name: Build site
         run: npm run build:static
       - name: Upload to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID || '2ab77068b2ceb185d13f5c2f07c42264' }}
         run: |
           test -n "$CLOUDFLARE_API_TOKEN" && test -n "$CLOUDFLARE_ACCOUNT_ID" || exit 1
           npx --yes wrangler@4 pages deploy site-dist --project-name=goldfiredragon-browser --branch=fix/free-api-local-gguf-engine-20261018
