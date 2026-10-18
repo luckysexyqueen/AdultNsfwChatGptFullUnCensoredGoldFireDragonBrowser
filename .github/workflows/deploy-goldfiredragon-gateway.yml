@@ -31,7 +31,7 @@ jobs:
                   print('Excluding >25MiB asset from Worker deployment:', p)
                   p.unlink()
           assert (root / 'index.html').is_file(), 'index.html missing'
-          assert (root / 'GoldFireDragonBrowser.html').is_file(), 'GoldFireDragonBrowser.html missing'
+          assert (root / 'GoldFireDragonBrowser.html').is_file() and (root / 'GoldFireDragonBrowser.html').stat().st_size > 100, 'GoldFireDragonBrowser.html empty or missing: restore original browser UI before deployment'
           assert (root / 'plugins').is_dir(), 'plugins missing'
           assert (root / 'ai').is_dir(), 'AI assets missing'
           PY
