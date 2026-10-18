@@ -38,6 +38,18 @@ export default {
    target.searchParams.set('q',q);
    for(const [k,v] of Object.entries({gl:'jp',hl:'ko',safe:'off',nfpr:'1',filter:'0',pws:'0'})) target.searchParams.set(k,v);
    if(u.searchParams.get('btnI')==='1') target.searchParams.set('btnI','1');
+   // A separately deployed Japan-hosted HTTPS server can provide Japan egress.
+   // Never forward requests to arbitrary hosts; only configured JP_SERVER_ORIGIN.
+   if (jpOrigin && env.JP_PROXY_TOKEN) {
+    try {
+     const upstream=new URL('/search',jpOrigin);
+     upstream.searchParams.set('q',q);
+     const reply=await fetch(upstream,{headers:{Authorization:'Bearer '+env.JP_PROXY_TOKEN},signal:AbortSignal.timeout(15000),redirect:'error'});
+     if(reply.ok && (reply.headers.get('content-type')||'').includes('text/html')) {
+      return new Response(reply.body,{status:200,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'; sandbox",'X-Content-Type-Options':'nosniff'}});
+     }
+    } catch {}
+   }
    return Response.redirect(target.toString(),302);
   }
   if (u.pathname === '/api/jp/proxy') {
