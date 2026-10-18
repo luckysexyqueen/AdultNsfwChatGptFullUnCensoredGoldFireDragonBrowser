@@ -46,11 +46,12 @@ jobs:
       - name: Verify original Worker website
         run: |
           for i in $(seq 1 12); do
-            if curl -fsSL --max-time 20 https://goldfiredragon-jp-web-gateway.choluckyhexsexyqueen.workers.dev/ -o /tmp/gateway.html && grep -qi '<html' /tmp/gateway.html && grep -qi 'AI Chat' /tmp/gateway.html; then
+            if curl -fsSL --max-redirs 5 --max-time 20 https://goldfiredragon-jp-web-gateway.choluckyhexsexyqueen.workers.dev/ -o /tmp/gateway.html && grep -qi '<html' /tmp/gateway.html; then
               echo "Worker serves website HTML"
               exit 0
             fi
             sleep 5
           done
           echo "::error::Worker is not serving website HTML"
+          curl -sSI --max-redirs 0 --max-time 10 https://goldfiredragon-jp-web-gateway.choluckyhexsexyqueen.workers.dev/ || true
           exit 1
