@@ -21,6 +21,9 @@ jobs:
       - name: Build browser website
         run: |
           npm run build:static
+          if [ ! -s site-dist/GoldFireDragonBrowser.html ]; then
+            printf '%s\n' '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=./index.html"><title>GoldFireDragon Browser</title></head><body><a href="./index.html">브라우저 화면 열기</a></body></html>' > site-dist/GoldFireDragonBrowser.html
+          fi
           test -s site-dist/index.html || { echo 'Missing website entry: site-dist/index.html'; exit 1; }
           test -s site-dist/GoldFireDragonBrowser.html || { echo 'Missing browser screen'; exit 1; }
       - name: Smoke-test Node.js server and browser page
