@@ -15,6 +15,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Build original index.html and browser assets
+        run: |
+          npm run build:static
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('site-dist')
+          for p in root.rglob('*'):
+              if not p.is_file():
+                  continue
+              if p.stat().st_size < 1024 and p.read_bytes().startswith(b'version https://git-lfs.github.com/spec/v1\\n'):
+                  print('Excluding unresolved LFS pointer:', p)
+                  p.unlink()
+              elif p.stat().st_size > 25 * 1024 * 1024:
+                  print('Excluding >25MiB asset from Worker deployment:', p)
+                  p.unlink()
+          assert (root / 'index.html').is_file(), 'index.html missing'
+          PY
       - name: Deploy existing Worker without changing its name
         working-directory: cloudflare-gateway
         env:
@@ -26,7 +43,7 @@ jobs:
       - name: Verify original Worker website
         run: |
           for i in $(seq 1 12); do
-            if curl -fsSL --max-time 20 https://goldfiredragon-jp-web-gateway.choluckyhexsexyqueen.workers.dev/ -o /tmp/gateway.html && grep -qi '<html' /tmp/gateway.html; then
+            if curl -fsSL --max-time 20 https://goldfiredragon-jp-web-gateway.choluckyhexsexyqueen.workers.dev/ -o /tmp/gateway.html && grep -qi '<html' /tmp/gateway.html && grep -qi 'AI Chat' /tmp/gateway.html; then
               echo "Worker serves website HTML"
               exit 0
             fi
