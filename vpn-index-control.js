@@ -20,25 +20,37 @@
     const status = modal.querySelector('#gfd-vpn-status');
     const select = modal.querySelector('#gfd-vpn-select');
     modal.querySelector('#gfd-vpn-x').onclick = () => modal.remove();
+    let localProfile = null;
     if (!native) {
       const info = document.createElement('div');
       info.style.cssText = 'margin-top:12px;font-size:12px;line-height:1.5;color:#ddd';
-      info.textContent = '웹 연결: Node.js HTTPS 프록시 게이트웨이 상태를 확인합니다. 운영체제 VPN과는 별개입니다.';
+      info.textContent = '웹에서는 OpenVPN 터널을 직접 시작할 수 없습니다. 기존 일본 OVPN 프로필을 선택하거나 로컬 파일을 가져온 뒤 VPN 앱에서 연결하세요. 웹 게이트웨이 상태는 실제 일본 IP 연결을 의미하지 않습니다.';
       modal.querySelector('small')?.replaceWith(info);
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.ovpn';
+      input.style.cssText = 'display:block;margin-top:12px;max-width:100%';
+      input.setAttribute('aria-label','로컬 OpenVPN 설정 파일 가져오기');
+      info.after(input);
+      input.addEventListener('change', () => {
+        localProfile = input.files?.[0] || null;
+        if (localProfile) status.textContent = '선택된 로컬 프로필: ' + localProfile.name + ' (VPN 앱에서 연결 필요)';
+      });
       const check = document.createElement('button');
-      check.textContent = '웹 게이트웨이 연결 확인';
+      check.textContent = '웹 게이트웨이 상태 확인';
       check.style.cssText = 'margin-top:10px;padding:9px;width:100%';
-      modal.querySelector('div > div')?.append();
-      info.after(check);
+      input.after(check);
       check.onclick = async () => {
         try {
           const response = await fetch('./api/gateway/status', {cache:'no-store',signal:AbortSignal.timeout(5000)});
           if (!response.ok) throw Error('HTTP ' + response.status);
           const data = await response.json();
-          status.textContent = data.configured ? 'Node.js 프록시 준비됨 (OS VPN 아님)' : 'Node.js 실행됨. GFD_PROXY_ALLOWED_ORIGINS 설정 필요';
-        } catch { status.textContent = '웹 게이트웨이 연결 안 됨. Node.js 서버를 실행하세요.'; }
+          status.textContent = data.available ? '웹 게이트웨이 응답 정상 · 일본 VPN IP 연결은 별도 확인 필요' : '웹 게이트웨이 사용 불가';
+        } catch { status.textContent = '웹 게이트웨이 연결 안 됨'; }
       };
-      check.click();
+      modal.querySelector('#gfd-vpn-install').textContent = 'OpenVPN 앱 안내';
+      modal.querySelector('#gfd-vpn-start').textContent = 'OVPN 파일 받기';
+      modal.querySelector('#gfd-vpn-stop').textContent = 'VPN 연결 안내';
     }
     try {
       const profiles = native ? await native.getOvpnList() : await fetch('./vpn-profiles.json').then((response) => response.ok ? response.json() : {});
@@ -49,9 +61,30 @@
       const state = native ? await native.getVpnStatus() : { status: '웹에서는 OS VPN 터널을 직접 연결할 수 없습니다' };
       status.textContent = `상태: ${state?.status || 'DISCONNECTED'}`;
     } catch (error) { status.textContent = `VPN 프로필 오류: ${error.message}`; }
-    modal.querySelector('#gfd-vpn-install').onclick = async () => { if (!native) { status.textContent = '브라우저에서는 VPN 연결을 사용할 수 없습니다.'; return; } const r = await native.installOpenVpn(); status.textContent = r.message || r.error || '설치 요청 완료'; };
-    modal.querySelector('#gfd-vpn-start').onclick = async () => { if (!select.value) { status.textContent = 'VPN 프로필을 먼저 선택하세요.'; return; } if (!native) { status.textContent = '프로필은 선택되었지만 실제 연결은 Android 앱에서 사용할 수 있습니다.'; return; } const r = await native.startVpn(select.value); status.textContent = r.status || r.error || '연결 요청 완료'; };
-    modal.querySelector('#gfd-vpn-stop').onclick = async () => { if (!native) { status.textContent = '브라우저에서는 VPN 연결을 사용할 수 없습니다.'; return; } const r = await native.stopVpn(); status.textContent = r.status || r.error || '해제 요청 완료'; };
+    modal.querySelector('#gfd-vpn-install').onclick = async () => {
+      if (!native) { window.open('https://openvpn.net/client/', '_blank', 'noopener,noreferrer'); status.textContent = 'OpenVPN 공식 클라이언트 안내를 열었습니다.'; return; }
+      const r = await native.installOpenVpn(); status.textContent = r.message || r.error || '설치 요청 완료';
+    };
+    modal.querySelector('#gfd-vpn-start').onclick = async () => {
+      if (!native) {
+        if (localProfile) {
+          const link = document.createElement('a');
+          const blobUrl = URL.createObjectURL(localProfile);
+          link.href = blobUrl; link.download = localProfile.name; link.click();
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+          status.textContent = 'OVPN 파일을 준비했습니다. VPN 앱에 가져와 연결하세요.';
+        } else {
+          status.textContent = '기존 목록의 파일은 서버에 공개하지 않습니다. 로컬 .ovpn 파일을 선택해 주세요.';
+        }
+        return;
+      }
+      if (!select.value) { status.textContent = 'VPN 프로필을 먼저 선택하세요.'; return; }
+      const r = await native.startVpn(select.value); status.textContent = r.status || r.error || '연결 요청 완료';
+    };
+    modal.querySelector('#gfd-vpn-stop').onclick = async () => {
+      if (!native) { status.textContent = '웹에서는 VPN 연결을 해제할 수 없습니다. OpenVPN 앱에서 해제하세요.'; return; }
+      const r = await native.stopVpn(); status.textContent = r.status || r.error || '해제 요청 완료';
+    };
   }
   window.__gfdOpenVpn = openVpn;
   function bind() { document.getElementById('vpn-settings-btn')?.addEventListener('click', openVpn); }
