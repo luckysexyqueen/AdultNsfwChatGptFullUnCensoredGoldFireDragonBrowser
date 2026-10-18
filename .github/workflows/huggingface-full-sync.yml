@@ -21,6 +21,20 @@ jobs:
         run: |
           test -n "$HF_TOKEN" || { echo "Missing HF_TOKEN secret"; exit 1; }
           test -n "$HF_SPACE_REPO" || { echo "Missing HF_SPACE_REPO variable (username/space-name)"; exit 1; }
+      - name: Create private Hugging Face Docker Space if missing
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_REPO: ${{ vars.HF_SPACE_REPO }}
+        run: |
+          python3 -m pip -q install huggingface_hub
+          python3 - <<'PY'
+          import os
+          from huggingface_hub import HfApi
+          repo = os.environ['HF_SPACE_REPO']
+          api = HfApi(token=os.environ['HF_TOKEN'])
+          api.create_repo(repo_id=repo, repo_type='space', space_sdk='docker', private=True, exist_ok=True)
+          print('Private Hugging Face Docker Space ready:', repo)
+          PY
       - name: Prepare complete repository snapshot
         run: |
           git lfs install
@@ -28,6 +42,7 @@ jobs:
           mkdir -p /tmp/gfd-hf
           git ls-files -z | tar --null -T - -cf - | (cd /tmp/gfd-hf && tar -xf -)
           cp Dockerfile.huggingface /tmp/gfd-hf/Dockerfile
+          if [ -f /tmp/gfd-hf/README.md ]; then mv /tmp/gfd-hf/README.md /tmp/gfd-hf/README.original.md; fi
           cat > /tmp/gfd-hf/README.md <<'EOF'
           ---
           title: GoldFireDragon Browser FULL
@@ -49,6 +64,9 @@ jobs:
           git config user.name "GoldFireDragon Sync"
           git config user.email "actions@users.noreply.github.com"
           git lfs install
+          # Large binaries use Git LFS; do not commit token files or local credentials.
+          git lfs track '*.gguf' '*.safetensors' '*.pt' '*.pth' '*.apk' '*.exe' '*.zip' '*.wasm' || true
+          find . -type f \( -name '.env' -o -name '.env.*' -o -name '*credentials*.json' -o -name '*secret*.json' -o -name '*.pem' -o -name '*.key' \) -delete
           git add -A
           git commit -m "Sync complete GoldFireDragon repository snapshot"
           git branch -M main
