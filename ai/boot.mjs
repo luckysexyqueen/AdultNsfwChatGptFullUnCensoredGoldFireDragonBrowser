@@ -2,7 +2,7 @@ import './local-gguf.mjs';
 import { freeChat, prepareMessages } from './providers.mjs';
 import { koreanInstructions } from './language.mjs';
 import { loadPackedModel } from './packed-model.mjs';
-let mode = 'existing';
+let mode = location.hostname.endsWith('.pages.dev') ? 'free' : 'existing';
 try { mode = localStorage.getItem('gfd-ai-mode') || mode; } catch { /* private browsing */ }
 if (!['existing', 'free', 'local'].includes(mode)) mode = 'existing';
 const configReady = fetch(new URL('./config.json', import.meta.url), { credentials: 'omit', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(4000) })
