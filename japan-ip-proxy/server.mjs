@@ -23,11 +23,14 @@ const server=http.createServer(async(req,res)=>{
   if(!selected)return json(503,{error:'No Japan proxy candidates configured'});
   const agent=new ProxyAgent(selected);
   let upstream;
-  try {upstream=await proxyFetch(target,{dispatcher:agent,redirect:'follow',signal:AbortSignal.timeout(12000),headers:{'Accept':'text/html','Accept-Language':'ko-KR,ko;q=0.9,ja-JP;q=0.8'}});} finally {await agent.close();}
+  try {upstream=await proxyFetch(target,{dispatcher:agent,redirect:'follow',signal:AbortSignal.timeout(12000),headers:{'Accept':'text/html','Accept-Language':'ko-KR,ko;q=0.9,ja-JP;q=0.8'}});} catch(e) {await agent.close(); throw e;}
   const final=new URL(upstream.url);
-  if(!['www.google.co.jp','www.google.com'].includes(final.hostname)||final.pathname.startsWith('/sorry')||upstream.status!==200)
+  if(!['www.google.co.jp','www.google.com'].includes(final.hostname)||final.pathname.startsWith('/sorry')||upstream.status!==200) {
+   await upstream.body?.cancel(); await agent.close();
    return json(502,{error:'Google rejected server-side request',upstreamStatus:upstream.status});
+  }
   const body=await upstream.text();
+  await agent.close();
   if(body.length>1500000||/unusual traffic|detected unusual|captcha|sorry\\/index/i.test(body)) return json(502,{error:'Google challenge'});
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'; sandbox",'X-Content-Type-Options':'nosniff'});
   res.end(body);
