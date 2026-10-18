@@ -37,6 +37,16 @@ jobs:
                   p.unlink()
           if missing:
               print('::warning::Unresolved LFS pointers excluded from website: ' + ', '.join(missing[:20]))
+          # Cloudflare Pages rejects individual assets larger than 25 MiB.
+          # Keep originals in GitHub; exclude oversize assets from deploy output only.
+          limit = 25 * 1024 * 1024
+          oversized = []
+          for p in root.rglob('*'):
+              if p.is_file() and p.stat().st_size > limit:
+                  oversized.append((str(p.relative_to(root)), p.stat().st_size))
+                  p.unlink()
+          if oversized:
+              print('::warning::Oversized assets excluded from Cloudflare Pages (originals remain in GitHub): ' + ', '.join(f'{name} ({size // 1048576} MiB)' for name, size in oversized[:30]))
           if not (root / 'index.html').is_file():
               raise SystemExit('Missing site-dist/index.html')
           if not (root / '_worker.js').is_file():
