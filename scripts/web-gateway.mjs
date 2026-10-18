@@ -9,20 +9,24 @@ const port = Number(process.env.GFD_WEB_GATEWAY_PORT || 8787);
 const host = process.env.GFD_WEB_GATEWAY_HOST || '127.0.0.1';
 const allowed = new Set((process.env.GFD_PROXY_ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean));
 const token = process.env.GFD_GATEWAY_TOKEN || '';
+const region = 'JP';
+const language = 'ko-KR';
+const expectedEgressCountry = 'JP';
+const deploymentRegion = process.env.GFD_DEPLOYMENT_REGION || 'unverified';
 const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.wasm':'application/wasm','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon'};
 const server = http.createServer(async (req,res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
     if (url.pathname === '/api/gateway/status') {
       res.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store'});
-      return res.end(JSON.stringify({available:true, mode:'web-proxy', tunnel:false, configured:allowed.size>0}));
+      return res.end(JSON.stringify({available:true, mode:'web-proxy', tunnel:false, configured:allowed.size>0, region, language, expectedEgressCountry, deploymentRegion, japanEgressVerified:false}));
     }
     if (url.pathname === '/api/gateway/fetch') {
       if (req.method !== 'GET') {res.writeHead(405);return res.end();}
       if (token && req.headers['x-gfd-gateway-token'] !== token) {res.writeHead(401);return res.end('Unauthorized');}
       const destination = new URL(url.searchParams.get('url') || 'about:blank');
       if (destination.protocol !== 'https:' || !allowed.has(destination.origin) || destination.username || destination.password) {res.writeHead(403);return res.end('Destination not allowed');}
-      const response = await fetch(destination, {redirect:'manual',signal:AbortSignal.timeout(15000),headers:{'Accept':req.headers.accept || '*/*'}});
+      const response = await fetch(destination, {redirect:'manual',signal:AbortSignal.timeout(15000),headers:{'Accept':req.headers.accept || '*/*', 'Accept-Language':'ko-KR,ko;q=0.9,ja-JP;q=0.8'}});
       const contentType = response.headers.get('content-type') || 'application/octet-stream';
       if (response.status >= 300 && response.status < 400) {res.writeHead(502);return res.end('Redirect blocked');}
       const body = Buffer.from(await response.arrayBuffer());
