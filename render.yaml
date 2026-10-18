@@ -14,3 +14,20 @@ services:
         value: unverified
       - key: GFD_PROXY_ALLOWED_ORIGINS
         sync: false
+
+  - type: web
+    name: goldfiredragon-jp-https-relay
+    runtime: node
+    plan: free
+    rootDir: japan-ip-proxy
+    buildCommand: npm ci --omit=dev || npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: JP_PROXY_TOKEN
+        generateValue: true
+      - key: MAX_PROXY_ATTEMPTS
+        value: 4
