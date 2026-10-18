@@ -3,7 +3,7 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {ProxyAgent, fetch as proxyFetch} from 'undici';
 const listed=JSON.parse(await readFile(new URL('./proxies.json',import.meta.url),'utf8')).proxies;
-const proxyUrls=listed.filter(p=>p.country_code==='JP' && ['http','https'].includes(p.protocol)).flatMap(p=>{
+const proxyUrls=listed.filter(p=>p.country_code==='JP' && p.verified===true && ['http','https'].includes(p.protocol)).flatMap(p=>{
  const host=p.ip+':'+p.port;
  return p.verifiedProtocol ? [p.protocol+'://'+host] : ['https://'+host,'http://'+host];
 });
@@ -13,7 +13,7 @@ if(!token || token.length<24) throw Error('Set a strong JP_PROXY_TOKEN (24+ char
 const server=http.createServer(async(req,res)=>{
  const u=new URL(req.url||'/', 'http://localhost');
  const json=(status,obj)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(obj));};
- if(u.pathname==='/health') return json(200,{ok:true,service:'google-japan-egress',proxyCandidates:proxyUrls.length,japanIpVerified:false});
+ if(u.pathname==='/health') return json(200,{ok:true,service:'google-japan-egress',proxyCandidates:proxyUrls.length,japanIpVerified:proxyUrls.length>0,verificationSource:'explicitly verified proxy records'});
  if(u.pathname!=='/search' || req.method!=='GET') return json(404,{error:'Not found'});
  if(req.headers.authorization!==`Bearer ${token}`) return json(401,{error:'Unauthorized'});
  const q=(u.searchParams.get('q')||'').trim();
@@ -22,12 +22,12 @@ const server=http.createServer(async(req,res)=>{
  target.searchParams.set('q',q);
  for(const [k,v] of Object.entries({gl:'jp',hl:'ko',safe:'off',nfpr:'1',filter:'0',pws:'0'})) target.searchParams.set(k,v);
  try{
-  if(!proxyUrls.length)return json(503,{error:'No Japan proxy candidates configured'});
+  if(!proxyUrls.length)return json(503,{error:'No verified Japan proxies configured; verify egress IP before marking a proxy verified'});
   let failures=[];
-  for(const selected of proxyUrls){
+  for(const selected of proxyUrls.slice(0,Math.max(1,Math.min(6,Number(process.env.MAX_PROXY_ATTEMPTS||4))))){
   const agent=new ProxyAgent(selected);
   let upstream;
-  try {upstream=await proxyFetch(target,{dispatcher:agent,redirect:'follow',signal:AbortSignal.timeout(12000),headers:{'Accept':'text/html','Accept-Language':'ko-KR,ko;q=0.9,ja-JP;q=0.8'}});} catch(e) {await agent.close(); failures.push({proxy:selected,error:'Connection failed'}); continue;}
+  try {upstream=await proxyFetch(target,{dispatcher:agent,redirect:'follow',signal:AbortSignal.timeout(3500),headers:{'Accept':'text/html','Accept-Language':'ko-KR,ko;q=0.9,ja-JP;q=0.8'}});} catch(e) {await agent.close(); failures.push({proxy:selected,error:'Connection failed'}); continue;}
   const final=new URL(upstream.url);
   if(!['www.google.co.jp','www.google.com'].includes(final.hostname)||final.pathname.startsWith('/sorry')||upstream.status!==200) {
    await upstream.body?.cancel(); await agent.close();
