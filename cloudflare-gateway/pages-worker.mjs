@@ -7,7 +7,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === '/api/ai/status') {
       if (request.method !== 'GET') return new Response('Method not allowed', {status:405});
-      return json({available:Boolean(env.AI || env.AI_API_URL || env.AI_API_BASE_URL),provider:env.AI ? 'cloudflare-workers-ai' : env.AI_API_URL || env.AI_API_BASE_URL ? 'configured-upstream' : 'legacy-fallback',endpoint:'/api/ai/chat',localInference:'browser-only'});
+      return json({available:Boolean(env.AI || env.AI_API_URL || env.AI_API_BASE_URL),provider:env.AI ? 'cloudflare-workers-ai' : env.AI_API_URL || env.AI_API_BASE_URL ? 'configured-upstream' : 'not-configured',endpoint:'/api/ai/chat',localInference:'browser-only'});
     }
     if (url.pathname === '/api/ai/chat' || url.pathname === '/v1/chat/completions') {
       if (request.method !== 'POST') return new Response('Method not allowed', {status:405});
@@ -26,7 +26,8 @@ export default {
           const aiResult = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {messages,max_tokens:Math.min(512,Math.max(1,Number(payload.max_tokens)||256))});
           result = aiResult?.response;
         } else {
-          const upstreamUrl = env.AI_API_URL || (env.AI_API_BASE_URL ? String(env.AI_API_BASE_URL).replace(/\/$/, '') + '/chat/completions' : 'https://goldfire-free-ai.huiwon0621-mcp.workers.dev/v1/chat/completions');
+          if (!env.AI_API_URL && !env.AI_API_BASE_URL) return json({error:'Free server AI is not configured. Load a local GGUF model or bind Cloudflare Workers AI.'},503);
+          const upstreamUrl = env.AI_API_URL || String(env.AI_API_BASE_URL).replace(/\/$/, '') + '/chat/completions';
           const parsedUpstream = new URL(upstreamUrl);
           if (parsedUpstream.protocol !== 'https:' || parsedUpstream.origin === url.origin || parsedUpstream.username || parsedUpstream.password) return json({error:'Invalid AI upstream configuration'},503);
           const headers = {'Content-Type':'application/json'};
