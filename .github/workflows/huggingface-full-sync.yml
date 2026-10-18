@@ -17,14 +17,14 @@ jobs:
       - name: Check Hugging Face configuration
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_SPACE_REPO: LoveBoundLuckySexySuccubusQueen135Age/GoldFireDragon-Browser-FULL
+          HF_SPACE_REPO: ChoLuckyHexSexySuccubusQueen135Age/GoldFireDragon-Browser-FULL
         run: |
           test -n "$HF_TOKEN" || { echo "Missing HF_TOKEN secret"; exit 1; }
           test -n "$HF_SPACE_REPO" || { echo "Missing HF_SPACE_REPO variable (username/space-name)"; exit 1; }
       - name: Validate Hugging Face token owner and Space permissions
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_SPACE_REPO: LoveBoundLuckySexySuccubusQueen135Age/GoldFireDragon-Browser-FULL
+          HF_SPACE_REPO: ChoLuckyHexSexySuccubusQueen135Age/GoldFireDragon-Browser-FULL
         run: |
           python3 -m pip -q install huggingface_hub
           python3 - <<'PY'
@@ -89,7 +89,7 @@ jobs:
       - name: Publish complete snapshot to Hugging Face
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-          HF_SPACE_REPO: LoveBoundLuckySexySuccubusQueen135Age/GoldFireDragon-Browser-FULL
+          HF_SPACE_REPO: ChoLuckyHexSexySuccubusQueen135Age/GoldFireDragon-Browser-FULL
         run: |
           cd /tmp/gfd-hf
           git init
