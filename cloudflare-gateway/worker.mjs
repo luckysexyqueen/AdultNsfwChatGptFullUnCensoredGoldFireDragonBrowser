@@ -15,6 +15,18 @@ export default {
   } catch {}
   if (u.pathname === '/api/gateway/status') return Response.json({available:true,mode:'cloudflare-edge-proxy',regionTarget:'JP',japanEgressVerified:false,japanServerConfigured:!!jpOrigin,tunnel:false,configured:true},{headers});
   if (u.pathname === '/api/jp/status') return Response.json({configured:!!jpOrigin,region:'JP',egressVerified:false,mode:jpOrigin?'https-upstream':'not-configured'},{headers});
+  // Public Japanese Google search launcher; no API token or Japan VPS needed.
+  // gl=jp targets Japan results, hl=ko preserves Korean UI, safe=off is a preference.
+  if (u.pathname === '/api/jp/search' || u.pathname === '/api/jp/search-url') {
+   if (request.method !== 'GET') return new Response('Method not allowed',{status:405});
+   const query = (u.searchParams.get('q') || '').trim();
+   if (!query || query.length > 500) return Response.json({error:'q must be 1-500 characters'},{status:400,headers});
+   const target = new URL('https://www.google.co.jp/search');
+   target.searchParams.set('q',query);
+   for (const [key,value] of Object.entries({gl:'jp',hl:'ko',safe:'off',nfpr:'1',filter:'0',pws:'0'})) target.searchParams.set(key,value);
+   if (u.pathname === '/api/jp/search-url') return Response.json({engine:'Google Japan',url:target.toString(),region:'JP',language:'ko',japanEgressVerified:false},{headers});
+   return Response.redirect(target.toString(),302);
+  }
   if (u.pathname === '/api/jp/proxy') {
    if (!jpOrigin) return Response.json({error:'Japan server not configured',required:'JP_SERVER_ORIGIN'},{status:503,headers});
    if (request.method !== 'GET') return new Response('Method not allowed',{status:405});
