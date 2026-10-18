@@ -49,6 +49,7 @@ jobs:
         run: |
           test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::Set CLOUDFLARE_API_TOKEN secret with Cloudflare Pages Edit permission"; exit 1; }
           echo "Targeting verified Cloudflare Pages account and existing project"
+          echo "Cloudflare token must be authorized for account 2ab77068b2ceb185d13f5c2f07c42264 (Pages Edit)."
           npx --yes wrangler@4 pages project list
           npx --yes wrangler@4 pages deploy site-dist --project-name goldfiredragon-browser --branch fix/free-api-local-gguf-engine-20261018
       - name: Print production URL
