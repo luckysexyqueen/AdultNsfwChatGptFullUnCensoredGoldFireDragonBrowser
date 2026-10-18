@@ -4,10 +4,6 @@ on:
   push:
     branches:
       - fix/free-api-local-gguf-engine-20261018
-    paths:
-      - 'cloudflare-gateway/worker.mjs'
-      - 'cloudflare-gateway/wrangler.toml'
-      - '.github/workflows/deploy-goldfiredragon-gateway.yml'
 permissions:
   contents: read
 jobs:
@@ -15,6 +11,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Restore Git LFS website assets
+        run: |
+          git lfs install
+          git lfs pull || echo '::warning::Some LFS assets are unavailable'
       - name: Build original index.html and browser assets
         run: |
           npm run build:static
@@ -24,13 +24,16 @@ jobs:
           for p in root.rglob('*'):
               if not p.is_file():
                   continue
-              if p.stat().st_size < 1024 and p.read_bytes().startswith(b'version https://git-lfs.github.com/spec/v1\\n'):
+              if p.stat().st_size < 1024 and p.read_bytes().startswith(b'version https://git-lfs.github.com/spec/v1'):
                   print('Excluding unresolved LFS pointer:', p)
                   p.unlink()
               elif p.stat().st_size > 25 * 1024 * 1024:
                   print('Excluding >25MiB asset from Worker deployment:', p)
                   p.unlink()
           assert (root / 'index.html').is_file(), 'index.html missing'
+          assert (root / 'GoldFireDragonBrowser.html').is_file(), 'GoldFireDragonBrowser.html missing'
+          assert (root / 'plugins').is_dir(), 'plugins missing'
+          assert (root / 'ai').is_dir(), 'AI assets missing'
           PY
       - name: Deploy existing Worker without changing its name
         working-directory: cloudflare-gateway
