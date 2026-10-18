@@ -1,4 +1,4 @@
-name: Deploy GoldFireDragon static website to Hugging Face via Git
+name: Backup full source to Hugging Face and deploy Node server
 on:
   workflow_dispatch:
   push:
@@ -7,101 +7,122 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: huggingface-static-deploy
+  group: gfd-full-backup-and-server
   cancel-in-progress: false
 jobs:
-  deploy:
+  backup:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
-      HF_SPACE_REPO: ChoLuckyHexSexySuccubusQueen135Age/GoldFireDragon-Browser-FULL
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_REPO: ChoLuckyHexSexySuccubusQueen135Age/GoldFireDragon-Browser-FULL
     steps:
-      - name: Checkout GitHub source
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 1
           lfs: false
-      - name: Authenticate and create free static Space if needed
-        shell: bash
+      - name: Recover available Git LFS data
         run: |
-          test -n "$HF_TOKEN" || { echo "::error::Set HF_TOKEN GitHub Actions secret"; exit 1; }
+          git lfs install
+          git lfs pull || echo "::warning::Unavailable Git LFS objects will be recorded, not silently recovered"
+      - name: Snapshot tracked source and models without credentials
+        run: |
+          mkdir -p /tmp/gfd-backup
+          git ls-files -z | tar --null -T - -cf - | tar -xf - -C /tmp/gfd-backup
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          root = Path('/tmp/gfd-backup')
+          missing = []
+          excluded = []
+          for f in root.rglob('*'):
+              if not f.is_file(): continue
+              rel = f.relative_to(root).as_posix()
+              name = f.name.lower()
+              if (name == '.env' or name.startswith('.env.') or
+                  re.search(r'(credential|secret|private.key|id_rsa|id_ed25519)', rel, re.I) or
+                  f.suffix.lower() in ('.pem', '.key', '.p12', '.pfx', '.ovpn')):
+                  f.unlink()
+                  excluded.append(rel)
+                  continue
+              if f.stat().st_size <= 1024 and f.read_bytes().startswith(b'version https://git-lfs.github.com/spec/v1\n'):
+                  missing.append(rel)
+          (root / 'BACKUP_LFS_STATUS.txt').write_text('Unresolved Git LFS pointers (original bytes unavailable):\n' + '\n'.join(missing) + '\n')
+          (root / 'BACKUP_EXCLUSIONS.txt').write_text('Credential-like files excluded:\n' + '\n'.join(excluded) + '\n')
+          print('Unresolved LFS:', len(missing), 'Excluded sensitive-looking files:', len(excluded))
+          PY
+      - name: Create private Hugging Face model repository and upload full snapshot
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          test -n "$HF_TOKEN" || { echo "::error::Set HF_TOKEN secret"; exit 1; }
           python3 -m pip -q install huggingface_hub
           python3 - <<'PY'
           import os, sys
           from huggingface_hub import HfApi
           from huggingface_hub.utils import HfHubHTTPError
-          repo = os.environ['HF_SPACE_REPO']
           api = HfApi(token=os.environ['HF_TOKEN'])
+          repo = os.environ['HF_REPO']
+          owner = api.whoami()['name']
+          if owner.casefold() != repo.split('/')[0].casefold():
+              sys.exit(f'::error::HF_TOKEN account {owner} differs from destination {repo}')
           try:
-              user = api.whoami().get('name', '')
-              print('Authenticated Hugging Face user:', user)
-              if user.casefold() != repo.split('/')[0].casefold():
-                  sys.exit('::error::HF_TOKEN account does not match Space namespace')
-              try:
-                  info = api.repo_info(repo_id=repo, repo_type='space')
-                  sdk = getattr(getattr(info, 'card_data', None), 'sdk', None)
-                  print('Existing Space:', repo, 'SDK:', sdk)
-                  if sdk and sdk != 'static':
-                      sys.exit('::error::Existing Space is not static. Create a separate Static Space or change its SDK before deploying.')
-              except HfHubHTTPError as exc:
-                  if exc.response.status_code not in (401, 404):
-                      raise
-                  api.create_repo(repo_id=repo, repo_type='space', space_sdk='static', private=True, exist_ok=True)
-                  print('Created private static Space:', repo)
+              api.create_repo(repo_id=repo, repo_type='model', private=True, exist_ok=True)
+              api.upload_folder(folder_path='/tmp/gfd-backup', repo_id=repo, repo_type='model', commit_message='Back up full GoldFireDragon source and available models')
           except HfHubHTTPError as exc:
-              status = getattr(exc.response, 'status_code', 'unknown')
-              sys.exit(f'::error::Hugging Face refused Space access/creation (HTTP {status}). Static Spaces may also require account eligibility or billing; inspect HF account settings. Git clone cannot bypass Space creation.')
+              status = getattr(exc.response, 'status_code', '?')
+              sys.exit(f'::error::Hugging Face model repository backup failed (HTTP {status}). Check account repository/storage quotas and token write access.')
+          print('Backup completed:', 'https://huggingface.co/' + repo)
           PY
-      - name: Build static browser assets
-        shell: bash
+  deploy:
+    needs: backup
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check optional external Linux server deployment configuration
+        id: config
+        env:
+          SSH_HOST: ${{ secrets.GFD_SSH_HOST }}
+          SSH_USER: ${{ secrets.GFD_SSH_USER }}
+          SSH_KEY: ${{ secrets.GFD_SSH_KEY }}
         run: |
-          node --version
-          git lfs install
-          git lfs pull || echo "::warning::Some GitHub LFS objects are missing; pointers will be excluded."
-          npm run build:static
-          python3 - <<'PY'
-          from pathlib import Path
-          root = Path('site-dist')
-          missing = []
-          for file in root.rglob('*'):
-              if not file.is_file() or file.stat().st_size > 1024:
-                  continue
-              data = file.read_bytes()
-              if data.startswith(b'version https://git-lfs.github.com/spec/v1\n'):
-                  missing.append(str(file.relative_to(root)))
-                  file.unlink()
-          (root / 'MISSING_LFS_OBJECTS.txt').write_text('\n'.join(missing) + '\n' if missing else 'No unresolved Git LFS pointers.\n')
-          print('Skipped unresolved Git LFS objects:', len(missing))
-          PY
-      - name: Git clone Hugging Face Space and push site
-        shell: bash
+          if [ -n "$SSH_HOST" ] && [ -n "$SSH_USER" ] && [ -n "$SSH_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Server not provisioned. Add GFD_SSH_HOST, GFD_SSH_USER, GFD_SSH_KEY to deploy Node/GGUF to an existing Linux VM."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Deploy full application on external Linux VM over SSH
+        if: steps.config.outputs.ready == 'true'
+        env:
+          SSH_HOST: ${{ secrets.GFD_SSH_HOST }}
+          SSH_USER: ${{ secrets.GFD_SSH_USER }}
+          SSH_KEY: ${{ secrets.GFD_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.GFD_SSH_KNOWN_HOSTS }}
         run: |
           set -euo pipefail
-          AUTH_HEADER="Authorization: Basic $(printf 'oauth2:%s' "$HF_TOKEN" | base64 -w0)"
-          git -c http.extraheader="$AUTH_HEADER" clone "https://huggingface.co/spaces/$HF_SPACE_REPO" /tmp/gfd-space
-          cd /tmp/gfd-space
-          git config user.name "GoldFireDragon Sync"
-          git config user.email "actions@users.noreply.github.com"
-          git lfs install
-          git lfs track '*.gguf' '*.wasm' '*.bin' '*.data' || true
-          git ls-files -z | xargs -0 -r git rm -q --ignore-unmatch --
-          cp -a "$GITHUB_WORKSPACE/site-dist/." .
-          cat > README.md <<'EOF'
-          ---
-          title: GoldFireDragon Browser FULL
-          emoji: 🐉
-          colorFrom: red
-          colorTo: yellow
-          sdk: static
-          ---
-          GoldFireDragon Browser static website. The full application source remains in GitHub.
-          EOF
-          git add -A
-          if git diff --cached --quiet; then
-            echo "No changes to publish"
-          else
-            git commit -m "Deploy GoldFireDragon static website from GitHub"
-            git -c http.extraheader="$AUTH_HEADER" push origin HEAD:main
+          test -n "$SSH_KNOWN_HOSTS" || { echo "::error::Set GFD_SSH_KNOWN_HOSTS to a verified SSH host key"; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          ssh -o StrictHostKeyChecking=yes "$SSH_USER@$SSH_HOST" 'bash -se' <<'REMOTE'
+          set -euo pipefail
+          command -v git >/dev/null
+          command -v docker >/dev/null
+          mkdir -p "$HOME/goldfiredragon"
+          cd "$HOME/goldfiredragon"
+          if [ ! -d source/.git ]; then
+            git clone --branch fix/free-api-local-gguf-engine-20261018 https://github.com/luckysexyqueen/AdultNsfwChatGptFullUnCensoredGoldFireDragonBrowser.git source
           fi
-          echo "Deployed: https://huggingface.co/spaces/$HF_SPACE_REPO"
+          cd source
+          git fetch origin fix/free-api-local-gguf-engine-20261018
+          git checkout -B fix/free-api-local-gguf-engine-20261018 origin/fix/free-api-local-gguf-engine-20261018
+          git lfs install
+          git lfs pull || echo "Some Git LFS originals unavailable"
+          docker build -f Dockerfile.huggingface -t goldfiredragon:latest .
+          docker rm -f goldfiredragon || true
+          docker run -d --restart unless-stopped --name goldfiredragon -p 7860:7860 goldfiredragon:latest
+          REMOTE
