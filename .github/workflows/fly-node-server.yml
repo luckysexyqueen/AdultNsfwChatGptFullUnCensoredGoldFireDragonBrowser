@@ -1,0 +1,43 @@
+name: Deploy persistent Node.js server to Fly.io
+on:
+  push:
+    branches:
+      - fix/free-api-local-gguf-engine-20261018
+    paths:
+      - server.js
+      - scripts/web-gateway.mjs
+      - scripts/build-static-site.mjs
+      - scripts/build-plugin-catalog.mjs
+      - index.html
+      - GoldFireDragonBrowser.html
+      - Dockerfile.node-server
+      - fly.toml
+      - .github/workflows/fly-node-server.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Check Fly.io deployment token
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: |
+          if [ -z "$FLY_API_TOKEN" ]; then
+            echo 'Missing FLY_API_TOKEN. Create a Fly.io deploy token and add it as a repository Actions secret.'
+            exit 1
+          fi
+      - name: Install flyctl
+        run: |
+          curl -fsSL https://fly.io/install.sh | sh
+          echo "$HOME/.fly/bin" >> "$GITHUB_PATH"
+      - name: Deploy Node.js server
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --config fly.toml --remote-only --yes
+      - name: Verify live Node.js API and website
+        run: |
+          curl --fail --retry 8 --retry-delay 5 --retry-connrefused --silent --show-error https://goldfiredragon-node-server.fly.dev/api/gateway/status | grep -q '"available":true'
+          curl --fail --silent --show-error https://goldfiredragon-node-server.fly.dev/ | grep -qi '<html'
