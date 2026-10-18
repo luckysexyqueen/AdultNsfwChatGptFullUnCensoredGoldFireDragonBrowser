@@ -62,9 +62,11 @@ export default {
         return new Response(bytes,{status:upstream.status,headers:{'Content-Type':upstream.headers.get('Content-Type') || 'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
       } catch { return new Response('Upstream unavailable',{status:502}); }
     }
-    if (url.pathname === '/' || url.pathname === '/GoldFireDragonBrowser.html') {
-      return env.ASSETS.fetch(new Request(new URL('/index.html', url.origin), request));
+    if (url.pathname === '/') {
+      // Show the original GoldFireDragon Browser interface on the website homepage.
+      return env.ASSETS.fetch(new Request(new URL('/GoldFireDragonBrowser.html', url.origin), request));
     }
+    // Keep /GoldFireDragonBrowser.html as the real browser page and /index.html as AI chat.
     return env.ASSETS.fetch(request);
   }
 };
