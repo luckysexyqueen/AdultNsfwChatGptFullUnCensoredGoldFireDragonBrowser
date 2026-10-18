@@ -1,0 +1,36 @@
+name: Deploy original GoldFireDragon gateway Worker
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/free-api-local-gguf-engine-20261018
+    paths:
+      - 'cloudflare-gateway/worker.mjs'
+      - 'cloudflare-gateway/wrangler.toml'
+      - '.github/workflows/deploy-goldfiredragon-gateway.yml'
+permissions:
+  contents: read
+jobs:
+  deploy-gateway:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Deploy existing Worker without changing its name
+        working-directory: cloudflare-gateway
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ba9f503376f9f52c15ea9ee2ee7a39af
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::CLOUDFLARE_API_TOKEN is missing"; exit 1; }
+          npx --yes wrangler@4 deploy --config wrangler.toml
+      - name: Verify original Worker website
+        run: |
+          for i in $(seq 1 12); do
+            if curl -fsSL --max-time 20 https://goldfiredragon-jp-web-gateway.choluckyhexsexyqueen.workers.dev/ -o /tmp/gateway.html && grep -qi '<html' /tmp/gateway.html; then
+              echo "Worker serves website HTML"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Worker is not serving website HTML"
+          exit 1
