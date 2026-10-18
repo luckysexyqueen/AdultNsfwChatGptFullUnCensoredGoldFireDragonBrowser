@@ -65,13 +65,13 @@ jobs:
       - name: Verify the live website renders HTML
         run: |
           for attempt in $(seq 1 12); do
-            if curl -fsSL --max-time 15 https://goldfiredragon-browser-web.pages.dev/ -o /tmp/goldfiredragon-live.html && grep -qi "<html" /tmp/goldfiredragon-live.html; then
-              echo "Website HTML is live at https://goldfiredragon-browser-web.pages.dev/"
+            if curl -fsSL --max-time 15 https://goldfiredragon-browser-web.pages.dev/ -o /tmp/goldfiredragon-live.html && grep -qi "<html" /tmp/goldfiredragon-live.html && grep -qiE "GoldFireDragon|FireDragon" /tmp/goldfiredragon-live.html; then
+              echo "Original GoldFireDragon Browser HTML is live at https://goldfiredragon-browser-web.pages.dev/"
               exit 0
             fi
             sleep 5
           done
-          echo "::error::Cloudflare deployment did not serve HTML at the production URL"
+          echo "::error::Cloudflare deployment did not serve original GoldFireDragon Browser HTML at the production URL"
           exit 1
       - name: Print production URL
         run: echo "https://goldfiredragon-browser-web.pages.dev"
