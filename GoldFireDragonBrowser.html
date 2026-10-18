@@ -1916,7 +1916,12 @@
           const searchUrl =
             `https://www.google.co.jp/search?q=${encodeURIComponent(keyword)}&gl=jp&hl=ko&safe=off&nfpr=1&filter=0&pws=0&desktop=true&adult=true&age=19&is_adult=Y&adult_auth=true&has_login=true` +
             (lucky ? "&btnI=1" : "");
-          window.open(searchUrl, "_blank");
+          // Use the deployed same-origin search gateway rather than bypassing it.
+          // This is a Japan-targeted search redirect, not a verified Japanese egress IP.
+          const gatewaySearch = new URL("./api/jp/search", window.location.href);
+          gatewaySearch.searchParams.set("q", keyword);
+          if (lucky) gatewaySearch.searchParams.set("btnI", "1");
+          window.open(gatewaySearch.toString(), "_blank", "noopener,noreferrer");
         }
 
         searchBtn.addEventListener("click", function () {
