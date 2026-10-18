@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: goldfiredragon-web-gateway
+    runtime: node
+    plan: free
+    buildCommand: echo "Using Node.js built-in modules"
+    startCommand: node server.js
+    healthCheckPath: /api/gateway/status
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: GFD_DEPLOYMENT_REGION
+        value: unverified
+      - key: GFD_PROXY_ALLOWED_ORIGINS
+        sync: false
