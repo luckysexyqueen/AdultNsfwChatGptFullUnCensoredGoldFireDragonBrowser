@@ -2825,7 +2825,7 @@
         const trimmed = content.trim();
         if (!trimmed && filesToSend.length === 0) return false;
         if (S.isStreaming) return false;
-        if (window.GFDAI?.getMode() === 'local' && !window.LocalGGUF?.getStatus().ready) {
+        if (window.GFDAI?.getMode() === 'local' && !window.LocalGGUF?.getStatus?.().ready) {
           toast('로컬 모델 관리에서 GGUF 모델을 먼저 불러오세요.', 'info');
           void renderLocalModelModal();
           return false;
@@ -2948,7 +2948,7 @@
         }
 
         // 선택된 로컬 GGUF 모델은 네트워크 요청 없이 현재 브라우저에서 실행합니다.
-        if (S.localModel?.ready && window.LocalGGUF && window.GFDAI?.getMode() !== 'free') {
+        if (window.LocalGGUF?.getStatus?.().ready && window.GFDAI?.getMode() !== 'free') {
           try {
             const localMessages = [];
             if (sysPrompt) localMessages.push({ role: "system", content: sysPrompt });
@@ -4360,6 +4360,7 @@
               onProgress: (message) => { statusEl.textContent = message; },
             });
             setState({ localModel: { ...modelStatus, savedModelId: savedModel?.id || "" } });
+            window.GFDAI?.setMode('local');
             updateLocalModelHint();
             toast(`로컬 모델을 준비했습니다: ${modelStatus.modelName}`, "success");
             close();
