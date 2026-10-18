@@ -1,10 +1,11 @@
 // Node.js same-origin web gateway. Not an OS-level VPN.
 // Restrict destinations to configured HTTPS origins to prevent an open proxy.
 import http from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
+const projectRoot = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
+const root = path.resolve(process.env.GFD_STATIC_ROOT || projectRoot);
 const port = Number(process.env.PORT || process.env.GFD_WEB_GATEWAY_PORT || 8787);
 const host = process.env.GFD_WEB_GATEWAY_HOST || (process.env.PORT ? '0.0.0.0' : '127.0.0.1');
 const allowed = new Set((process.env.GFD_PROXY_ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean));
@@ -13,7 +14,7 @@ const region = 'JP';
 const language = 'ko-KR';
 const expectedEgressCountry = 'JP';
 const deploymentRegion = process.env.GFD_DEPLOYMENT_REGION || 'unverified';
-const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.wasm':'application/wasm','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon'};
+const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.wasm':'application/wasm','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.woff':'font/woff','.woff2':'font/woff2','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8'};
 const server = http.createServer(async (req,res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
@@ -37,6 +38,7 @@ const server = http.createServer(async (req,res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') {res.writeHead(405);return res.end();}
     const file = path.resolve(root, '.' + decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));
     if (!file.startsWith(root + path.sep)) {res.writeHead(403);return res.end();}
+    if (!(await stat(file)).isFile()) {res.writeHead(404);return res.end('Not found');}
     const data = await readFile(file);
     res.writeHead(200, {'Content-Type':mime[path.extname(file)] || 'application/octet-stream','X-Content-Type-Options':'nosniff'});
     res.end(req.method === 'HEAD' ? undefined : data);
