@@ -12,9 +12,8 @@ export default {
   if (u.pathname !== '/api/gateway/fetch') {
    if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed',{status:405});
    if (!env.ASSETS) return new Response('Static website assets not deployed',{status:503});
-   const assetUrl = new URL(request.url);
-   if (assetUrl.pathname === '/') assetUrl.pathname = '/index.html';
-   return env.ASSETS.fetch(new Request(assetUrl.toString(), request));
+   // Cloudflare assets canonicalizes /index.html to /. Do not rewrite / back to /index.html.
+   return env.ASSETS.fetch(request);
   }
   if (request.method !== 'GET') return new Response('Method not allowed',{status:405});
   if (!env.GATEWAY_TOKEN || request.headers.get('Authorization') !== 'Bearer '+env.GATEWAY_TOKEN) return new Response('Unauthorized',{status:401});
