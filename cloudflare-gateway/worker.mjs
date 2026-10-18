@@ -14,7 +14,7 @@ export default {
    if (configured.protocol === 'https:' && !configured.username && !configured.password && configured.pathname === '/' && !configured.search && !configured.hash && configured.hostname !== u.hostname) jpOrigin = configured.origin;
   } catch {}
   if (u.pathname === '/api/gateway/status') return Response.json({available:true,mode:'cloudflare-edge-proxy',regionTarget:'JP',japanEgressVerified:false,japanServerConfigured:!!jpOrigin,tunnel:false,configured:true},{headers});
-  if (u.pathname === '/api/jp/status') return Response.json({configured:!!jpOrigin,region:'JP',egressVerified:false,mode:jpOrigin?'https-upstream':'not-configured'},{headers});
+  if (u.pathname === '/api/jp/status') return Response.json({configured:!!(jpOrigin && env.JP_PROXY_TOKEN),region:'JP',egressVerified:false,mode:(jpOrigin && env.JP_PROXY_TOKEN)?'https-upstream':'google-japan-direct',missing:[...(!jpOrigin?['JP_SERVER_ORIGIN']:[]),...(!env.JP_PROXY_TOKEN?['JP_PROXY_TOKEN']:[])],searchEngine:'Google Japan'},{headers});
   // Public Japanese Google search launcher; no API token or Japan VPS needed.
   // gl=jp targets Japan results, hl=ko preserves Korean UI, safe=off is a preference.
   if (u.pathname === '/api/jp/search' || u.pathname === '/api/jp/search-url') {
