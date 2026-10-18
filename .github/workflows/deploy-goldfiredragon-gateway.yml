@@ -69,11 +69,20 @@ jobs:
           assert 'configured' in data, 'Japan gateway API missing'
           print('Japan gateway API reachable:', data)
           PY
-          HTTP_CODE=$(curl -sSL --max-time 25 -o /tmp/gfd-search-result -w '%{http_code}' "$BASE/api/jp/search-html?q=Tokyo")
-          if [ "$HTTP_CODE" != 200 ]; then
-            echo "::error::Google Japan search proxy returned HTTP $HTTP_CODE"
-            head -c 600 /tmp/gfd-search-result || true
-            exit 1
-          fi
-          grep -qi '<html' /tmp/gfd-search-result || { echo "::error::Search proxy returned non-HTML response"; exit 1; }
-          echo "Original browser and Google Japan search proxy verified"
+          # Validate our Worker response without sending automated requests to Google.
+          curl -sS --max-time 20 -D /tmp/gfd-search-headers -o /tmp/gfd-search-result "$BASE/api/jp/search-html?q=Tokyo"
+          python3 - <<'PY'
+          from pathlib import Path
+          from urllib.parse import urlparse, parse_qs
+          text=Path('/tmp/gfd-search-headers').read_text()
+          lines=text.splitlines()
+          assert any(line.startswith('HTTP/') and ' 302 ' in line for line in lines), text
+          location=next((line.split(':',1)[1].strip() for line in lines if line.lower().startswith('location:')),None)
+          assert location, 'Google redirect Location header missing'
+          parsed=urlparse(location)
+          assert parsed.scheme=='https' and parsed.hostname=='www.google.co.jp' and parsed.path=='/search',location
+          qs=parse_qs(parsed.query)
+          assert qs.get('q')==['Tokyo'] and qs.get('gl')==['jp'] and qs.get('hl')==['ko'],location
+          print('Google Japan search redirect verified:',location)
+          PY
+          echo "Original browser and Google-only Japan search routing verified"
