@@ -12,7 +12,7 @@ export default {
   if (u.pathname !== '/api/gateway/fetch') {
    if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed',{status:405});
    const site = new URL('https://goldfiredragon-browser-web.pages.dev');
-   site.pathname = u.pathname === '/' ? '/GoldFireDragonBrowser.html' : u.pathname;
+   site.pathname = u.pathname === '/' ? '/index.html' : u.pathname;
    site.search = u.search;
    try {
     const response = await fetch(site.toString(), {method:request.method,redirect:'follow',signal:AbortSignal.timeout(15000)});
