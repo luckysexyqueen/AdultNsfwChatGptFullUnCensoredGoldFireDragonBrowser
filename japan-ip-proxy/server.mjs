@@ -19,21 +19,24 @@ const server=http.createServer(async(req,res)=>{
  target.searchParams.set('q',q);
  for(const [k,v] of Object.entries({gl:'jp',hl:'ko',safe:'off',nfpr:'1',filter:'0',pws:'0'})) target.searchParams.set(k,v);
  try{
-  const selected=proxyUrls[0];
-  if(!selected)return json(503,{error:'No Japan proxy candidates configured'});
+  if(!proxyUrls.length)return json(503,{error:'No Japan proxy candidates configured'});
+  let failures=[];
+  for(const selected of proxyUrls){
   const agent=new ProxyAgent(selected);
   let upstream;
-  try {upstream=await proxyFetch(target,{dispatcher:agent,redirect:'follow',signal:AbortSignal.timeout(12000),headers:{'Accept':'text/html','Accept-Language':'ko-KR,ko;q=0.9,ja-JP;q=0.8'}});} catch(e) {await agent.close(); throw e;}
+  try {upstream=await proxyFetch(target,{dispatcher:agent,redirect:'follow',signal:AbortSignal.timeout(12000),headers:{'Accept':'text/html','Accept-Language':'ko-KR,ko;q=0.9,ja-JP;q=0.8'}});} catch(e) {await agent.close(); failures.push({proxy:selected,error:'Connection failed'}); continue;}
   const final=new URL(upstream.url);
   if(!['www.google.co.jp','www.google.com'].includes(final.hostname)||final.pathname.startsWith('/sorry')||upstream.status!==200) {
    await upstream.body?.cancel(); await agent.close();
-   return json(502,{error:'Google rejected server-side request',upstreamStatus:upstream.status});
+   failures.push({proxy:selected,error:'Google rejected request',upstreamStatus:upstream.status}); continue;
   }
   const body=await upstream.text();
   await agent.close();
-  if(body.length>1500000||/unusual traffic|detected unusual|captcha|sorry\\/index/i.test(body)) return json(502,{error:'Google challenge'});
+  if(body.length>1500000||/unusual traffic|detected unusual|captcha|sorry\\/index/i.test(body)){failures.push({proxy:selected,error:'Google challenge'});continue;}
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'; sandbox",'X-Content-Type-Options':'nosniff'});
-  res.end(body);
+  res.end(body);return;
+  }
+  return json(502,{error:'All Japanese proxy candidates failed',failures});
  }catch{json(502,{error:'Google upstream request failed'});}
 });
 server.listen(port,'0.0.0.0',()=>console.log('Google Japan egress proxy listening on',port));
