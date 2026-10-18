@@ -12,8 +12,8 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          fetch-depth: 0
-          lfs: true
+          fetch-depth: 1
+          lfs: false
       - name: Check Hugging Face configuration
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
@@ -38,9 +38,25 @@ jobs:
       - name: Prepare complete repository snapshot
         run: |
           git lfs install
-          git lfs pull
+          # Missing LFS objects cannot be recovered from Git pointers. Continue with an explicit manifest.
+          git lfs pull || echo 'WARNING: Some LFS objects are unavailable; their pointer files will be preserved.'
           mkdir -p /tmp/gfd-hf
           git ls-files -z | tar --null -T - -cf - | (cd /tmp/gfd-hf && tar -xf -)
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('/tmp/gfd-hf')
+          missing = []
+          for file in root.rglob('*'):
+              if not file.is_file(): continue
+              try:
+                  if file.stat().st_size > 1024: continue
+                  data = file.read_bytes()
+                  if data.startswith(b'version https://git-lfs.github.com/spec/v1\\n'):
+                      missing.append(f'{file.relative_to(root)}: {data.decode(errors="replace").strip()}')
+              except OSError: pass
+          (root / 'MISSING_LFS_OBJECTS.txt').write_text('\\n\\n'.join(missing) + '\\n' if missing else 'All checked LFS pointers resolved.\\n')
+          print('Unresolved LFS pointer count:', len(missing))
+          PY
           cp Dockerfile.huggingface /tmp/gfd-hf/Dockerfile
           if [ -f /tmp/gfd-hf/README.md ]; then mv /tmp/gfd-hf/README.md /tmp/gfd-hf/README.original.md; fi
           cat > /tmp/gfd-hf/README.md <<'EOF'
