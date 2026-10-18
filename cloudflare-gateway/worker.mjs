@@ -37,8 +37,8 @@ export default {
    target.searchParams.set('q',q);
    for(const [k,v] of Object.entries({gl:'jp',hl:'ko',safe:'off',nfpr:'1',filter:'0',pws:'0'})) target.searchParams.set(k,v);
    try {
-    const result=await fetch(target.toString(),{redirect:'manual',headers:{'Accept':'text/html','Accept-Language':'ko-KR,ko;q=0.9,ja-JP;q=0.8','User-Agent':'Mozilla/5.0 (compatible; GoldFireDragonSearch/1.0)'},signal:AbortSignal.timeout(10000)});
-    if (result.status!==200) return Response.json({error:'Search provider unavailable',providerStatus:result.status,fallbackUrl:target.toString()},{status:502,headers});
+    const result=await fetch(target.toString(),{redirect:'follow',headers:{'Accept':'text/html','Accept-Language':'ko-KR,ko;q=0.9,ja-JP;q=0.8','User-Agent':'Mozilla/5.0 (compatible; GoldFireDragonSearch/1.0)'},signal:AbortSignal.timeout(10000)});
+    if (result.status!==200 || !['www.google.co.jp','www.google.com'].includes(new URL(result.url).hostname)) return Response.json({error:'Search provider unavailable',providerStatus:result.status,finalUrl:result.url,fallbackUrl:target.toString()},{status:502,headers});
     const body=await result.text();
     if(body.length>1500000) return Response.json({error:'Search response too large'},{status:502,headers});
     if(/unusual traffic|detected unusual|captcha|sorry\/index/i.test(body)) return Response.json({error:'Search provider challenged request',fallbackUrl:target.toString()},{status:502,headers});
