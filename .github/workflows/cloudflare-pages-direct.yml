@@ -10,15 +10,13 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Build site
         run: npm run build:static
       - name: Upload to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy site-dist --project-name=goldfiredragon-browser --branch=fix/free-api-local-gguf-engine-20261018
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" && test -n "$CLOUDFLARE_ACCOUNT_ID" || exit 1
+          npx --yes wrangler@4 pages deploy site-dist --project-name=goldfiredragon-browser --branch=fix/free-api-local-gguf-engine-20261018
