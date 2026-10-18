@@ -2961,10 +2961,11 @@
               toast("현재 로컬 텍스트 모델은 이미지 입력을 분석하지 않습니다. 이미지 없이 텍스트로 응답합니다.", "info", 4500);
             }
 
+            let visibleLocalResponse = '';
             const full = await window.LocalGGUF.generate(localMessages, {
               maxTokens: Number(localStorage.getItem("gfd-gguf-max-tokens") || 768),
               temperature: Number(localStorage.getItem("gfd-gguf-temperature") || 0.7),
-              onToken: (token) => setState({ streamingMsg: `${S.streamingMsg}${token}` }),
+              onToken: (token) => { visibleLocalResponse += token; setState({ streamingMsg: visibleLocalResponse }); },
             });
             if (!String(full || "").trim()) throw new Error("로컬 GGUF가 빈 응답을 반환했습니다.");
             await finalizeAssistantResponse(full, convId, isGuest, currentMsgs, trimmed, displayContent);
@@ -4184,8 +4185,9 @@
           badge.style.cssText = "margin-top:6px;font-size:11px;opacity:.8;line-height:1.4;";
           host.appendChild(badge);
         }
-        const model = S.localModel?.modelName || "저장 GGUF";
-        badge.textContent = window.GFDAI?.getMode() === 'free' ? '☁️ 무료 Cloudflare API · 공유 사용량 제한' : S.localModel?.ready ? `🤖 로컬 GGUF 응답 엔진: ${model}` : (S.ggufAutoFallback ? "☁️ API 우선 · API 장애/오프라인 시 저장 GGUF 자동 전환" : "☁️ API 모드");
+        const activeLocal = window.LocalGGUF?.getStatus?.() || S.localModel || {};
+        const model = activeLocal.modelName || "저장 GGUF";
+        badge.textContent = window.GFDAI?.getMode() === 'free' ? '☁️ 무료 Cloudflare API · 공유 사용량 제한' : activeLocal.ready ? `🤖 로컬 GGUF 응답 엔진: ${model}` : (S.ggufAutoFallback ? "☁️ API 우선 · API 장애/오프라인 시 저장 GGUF 자동 전환" : "☁️ API 모드");
       }
 
       async function ensureLocalGGUFForFallback(preferredModelId = "") {
