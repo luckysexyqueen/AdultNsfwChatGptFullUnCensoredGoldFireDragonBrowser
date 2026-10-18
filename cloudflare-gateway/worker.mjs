@@ -27,8 +27,9 @@ export default {
    if (u.pathname === '/api/jp/search-url') return Response.json({engine:'Google Japan',url:target.toString(),region:'JP',language:'ko',japanEgressVerified:false},{headers});
    return Response.redirect(target.toString(),302);
   }
-  // Server-side Japan web search: fetch public Google Japan HTML through the Worker.
-  // Search engine anti-bot pages and Cloudflare egress location cannot be guaranteed.
+  // Google-only search. Cloudflare server-side scraping is blocked by Google's
+  // automated traffic protections (HTTP 429); redirect the user's browser to
+  // Google itself instead of returning a misleading HTTP 502.
   if (u.pathname === '/api/jp/search-html') {
    if (request.method !== 'GET') return new Response('Method not allowed',{status:405});
    const q=(u.searchParams.get('q')||'').trim();
@@ -36,14 +37,8 @@ export default {
    const target=new URL('https://www.google.co.jp/search');
    target.searchParams.set('q',q);
    for(const [k,v] of Object.entries({gl:'jp',hl:'ko',safe:'off',nfpr:'1',filter:'0',pws:'0'})) target.searchParams.set(k,v);
-   try {
-    const result=await fetch(target.toString(),{redirect:'follow',headers:{'Accept':'text/html','Accept-Language':'ko-KR,ko;q=0.9,ja-JP;q=0.8','User-Agent':'Mozilla/5.0 (compatible; GoldFireDragonSearch/1.0)'},signal:AbortSignal.timeout(10000)});
-    if (result.status!==200 || !['www.google.co.jp','www.google.com'].includes(new URL(result.url).hostname)) return Response.json({error:'Search provider unavailable',providerStatus:result.status,finalUrl:result.url,fallbackUrl:target.toString()},{status:502,headers});
-    const body=await result.text();
-    if(body.length>1500000) return Response.json({error:'Search response too large'},{status:502,headers});
-    if(/unusual traffic|detected unusual|captcha|sorry\/index/i.test(body)) return Response.json({error:'Search provider challenged request',fallbackUrl:target.toString()},{status:502,headers});
-    return new Response(body,{status:200,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'; sandbox",'X-Content-Type-Options':'nosniff'}});
-   } catch {return Response.json({error:'Search provider network error',fallbackUrl:target.toString()},{status:502,headers});}
+   if(u.searchParams.get('btnI')==='1') target.searchParams.set('btnI','1');
+   return Response.redirect(target.toString(),302);
   }
   if (u.pathname === '/api/jp/proxy') {
    if (!jpOrigin) return Response.json({error:'Japan server not configured',required:'JP_SERVER_ORIGIN'},{status:503,headers});
