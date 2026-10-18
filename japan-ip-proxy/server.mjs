@@ -3,7 +3,10 @@ import http from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {ProxyAgent, fetch as proxyFetch} from 'undici';
 const listed=JSON.parse(await readFile(new URL('./proxies.json',import.meta.url),'utf8')).proxies;
-const proxyUrls=listed.filter(p=>p.country_code==='JP'&&p.protocol==='http').map(p=>'http://'+p.ip+':'+p.port);
+const proxyUrls=listed.filter(p=>p.country_code==='JP' && ['http','https'].includes(p.protocol)).flatMap(p=>{
+ const host=p.ip+':'+p.port;
+ return p.verifiedProtocol ? [p.protocol+'://'+host] : ['https://'+host,'http://'+host];
+});
 const port=Number(process.env.PORT||8080);
 const token=process.env.JP_PROXY_TOKEN;
 if(!token || token.length<24) throw Error('Set a strong JP_PROXY_TOKEN (24+ chars)');
