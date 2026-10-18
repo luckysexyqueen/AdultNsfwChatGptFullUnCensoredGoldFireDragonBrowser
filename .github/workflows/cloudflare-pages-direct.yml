@@ -48,4 +48,4 @@ jobs:
           if ! [[ "$CLOUDFLARE_ACCOUNT_ID" =~ ^[0-9a-fA-F]{32}$ ]]; then echo 'Invalid Cloudflare account ID: expected a single 32-character hexadecimal ID. Correct the GitHub secret.'; exit 1; fi
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo 'Missing CLOUDFLARE_API_TOKEN'; exit 1; fi
           npx --yes wrangler@4 pages project create goldfiredragon-browser-web --production-branch=fix/free-api-local-gguf-engine-20261018 || echo 'Project may already exist; proceeding to deploy.'
-          npx --yes wrangler@4 pages deploy site-dist --project-name=goldfiredragon-browser-web --branch=fix/free-api-local-gguf-engine-20261018
+          npx --yes wrangler@4 pages deploy site-dist --functions functions --project-name=goldfiredragon-browser-web --branch=fix/free-api-local-gguf-engine-20261018
