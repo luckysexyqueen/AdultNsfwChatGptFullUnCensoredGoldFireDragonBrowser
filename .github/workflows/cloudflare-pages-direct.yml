@@ -23,6 +23,20 @@ jobs:
           npm run build:static
           test -s site-dist/index.html || { echo 'Missing website entry: site-dist/index.html'; exit 1; }
           test -s site-dist/GoldFireDragonBrowser.html || { echo 'Missing browser screen'; exit 1; }
+      - name: Smoke-test Node.js server and browser page
+        run: |
+          GFD_STATIC_ROOT="$PWD/site-dist" PORT=8787 node server.js > /tmp/gfd-server.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for i in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:8787/api/gateway/status > /tmp/gfd-status.json; then break; fi
+            sleep 1
+          done
+          node -e "const s=require('/tmp/gfd-status.json');if(!s.available)process.exit(1)"
+          curl --fail --silent http://127.0.0.1:8787/ -o /tmp/gfd-index.html
+          grep -qi '<html' /tmp/gfd-index.html
+          curl --fail --silent http://127.0.0.1:8787/GoldFireDragonBrowser.html -o /tmp/gfd-browser.html
+          grep -qi '<html' /tmp/gfd-browser.html
       - name: Upload to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
