@@ -61,6 +61,17 @@ jobs:
           echo "Targeting verified Cloudflare Pages account and existing project"
           echo "Cloudflare token must be authorized for account ba9f503376f9f52c15ea9ee2ee7a39af (Pages Edit)."
           npx --yes wrangler@4 pages project list
-          npx --yes wrangler@4 pages deploy site-dist --project-name goldfiredragon-browser-web --branch fix/free-api-local-gguf-engine-20261018
+          npx --yes wrangler@4 pages deploy site-dist --project-name goldfiredragon-browser-web --branch main --commit-dirty=true
+      - name: Verify the live website renders HTML
+        run: |
+          for attempt in $(seq 1 12); do
+            if curl -fsSL --max-time 15 https://goldfiredragon-browser-web.pages.dev/ -o /tmp/goldfiredragon-live.html && grep -qi "<html" /tmp/goldfiredragon-live.html; then
+              echo "Website HTML is live at https://goldfiredragon-browser-web.pages.dev/"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Cloudflare deployment did not serve HTML at the production URL"
+          exit 1
       - name: Print production URL
         run: echo "https://goldfiredragon-browser-web.pages.dev"
