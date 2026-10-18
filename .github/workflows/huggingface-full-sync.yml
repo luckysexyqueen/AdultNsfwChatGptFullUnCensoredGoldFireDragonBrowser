@@ -1,0 +1,55 @@
+name: Sync complete repository to Hugging Face Space
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/free-api-local-gguf-engine-20261018
+permissions:
+  contents: read
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+      - name: Check Hugging Face configuration
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_REPO: ${{ vars.HF_SPACE_REPO }}
+        run: |
+          test -n "$HF_TOKEN" || { echo "Missing HF_TOKEN secret"; exit 1; }
+          test -n "$HF_SPACE_REPO" || { echo "Missing HF_SPACE_REPO variable (username/space-name)"; exit 1; }
+      - name: Prepare complete repository snapshot
+        run: |
+          git lfs install
+          git lfs pull
+          mkdir -p /tmp/gfd-hf
+          git ls-files -z | tar --null -T - -cf - | (cd /tmp/gfd-hf && tar -xf -)
+          cp Dockerfile.huggingface /tmp/gfd-hf/Dockerfile
+          cat > /tmp/gfd-hf/README.md <<'EOF'
+          ---
+          title: GoldFireDragon Browser FULL
+          emoji: 🐉
+          colorFrom: red
+          colorTo: yellow
+          sdk: docker
+          app_port: 7860
+          ---
+          GoldFireDragon Browser full repository snapshot.
+          EOF
+      - name: Publish complete snapshot to Hugging Face
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_SPACE_REPO: ${{ vars.HF_SPACE_REPO }}
+        run: |
+          cd /tmp/gfd-hf
+          git init
+          git config user.name "GoldFireDragon Sync"
+          git config user.email "actions@users.noreply.github.com"
+          git lfs install
+          git add -A
+          git commit -m "Sync complete GoldFireDragon repository snapshot"
+          git branch -M main
+          git -c http.extraheader="Authorization: Basic $(printf 'oauth2:%s' "$HF_TOKEN" | base64 -w0)" push --force "https://huggingface.co/spaces/$HF_SPACE_REPO" main
