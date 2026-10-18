@@ -14,7 +14,7 @@ jobs:
       - name: Verify Cloudflare credentials
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CF_ACCOUNT: 2ab77068b2ceb185d13f5c2f07c42264
+          CF_ACCOUNT: ba9f503376f9f52c15ea9ee2ee7a39af
         run: |
           test -n "$CF_TOKEN" || { echo 'Missing repository Actions secret CLOUDFLARE_API_TOKEN. Set it in Settings > Secrets and variables > Actions (repository secrets).'; exit 1; }
           test -n "$CF_ACCOUNT" || { echo 'Missing CLOUDFLARE_ACCOUNT_ID'; exit 1; }
@@ -47,11 +47,11 @@ jobs:
       - name: Upload to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: 2ab77068b2ceb185d13f5c2f07c42264
+          CLOUDFLARE_ACCOUNT_ID: ba9f503376f9f52c15ea9ee2ee7a39af
         run: |
           CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^[Bb]earer[[:space:]]+//')"
           CLOUDFLARE_ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
           export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
           if ! [[ "$CLOUDFLARE_ACCOUNT_ID" =~ ^[0-9a-fA-F]{32}$ ]]; then echo 'Invalid Cloudflare account ID: expected a single 32-character hexadecimal ID. Correct the GitHub secret.'; exit 1; fi
           if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo 'Missing CLOUDFLARE_API_TOKEN'; exit 1; fi
-          npx --yes wrangler@4 pages deploy site-dist --project-name=goldfiredragon-browser --branch=fix/free-api-local-gguf-engine-20261018
+          npx --yes wrangler@4 pages deploy site-dist --project-name=goldfiredragon-browser-web --branch=fix/free-api-local-gguf-engine-20261018
