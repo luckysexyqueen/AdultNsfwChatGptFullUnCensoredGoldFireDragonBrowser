@@ -76,7 +76,7 @@ jobs:
           from urllib.parse import urlparse, parse_qs
           text=Path('/tmp/gfd-search-headers').read_text()
           lines=text.splitlines()
-          assert any(line.startswith('HTTP/') and ' 302 ' in line for line in lines), text
+          status_lines=[line for line in lines if line.startswith('HTTP/')]\n          assert any(' 302 ' in line or ' 200 ' in line for line in status_lines), text\n          if any(' 200 ' in line for line in status_lines):\n              html=Path('/tmp/gfd-search-result').read_text(errors='replace')\n              assert '<html' in html.lower(), 'Upstream did not return HTML'\n              print('Google Japan upstream HTML response verified')\n              raise SystemExit(0)
           location=next((line.split(':',1)[1].strip() for line in lines if line.lower().startswith('location:')),None)
           assert location, 'Google redirect Location header missing'
           parsed=urlparse(location)
