@@ -40,6 +40,36 @@
       check.textContent = '웹 게이트웨이 상태 확인';
       check.style.cssText = 'margin-top:10px;padding:9px;width:100%';
       input.after(check);
+      const jpPanel = document.createElement('div');
+      jpPanel.style.cssText = 'display:grid;gap:8px;margin-top:12px';
+      const jpStatus = document.createElement('button');
+      jpStatus.textContent = '🇯🇵 일본 프록시 연결 확인';
+      jpStatus.style.cssText = 'padding:10px;background:#374151;color:white;border:1px solid #6b7280;border-radius:6px';
+      const jpSearch = document.createElement('input');
+      jpSearch.type = 'search';
+      jpSearch.placeholder = '일본 Google 검색어';
+      jpSearch.style.cssText = 'padding:10px;background:#303134;color:white;border:1px solid #777;border-radius:6px';
+      const jpGo = document.createElement('button');
+      jpGo.textContent = '🇯🇵 일본 검색 실행';
+      jpGo.style.cssText = 'padding:10px;background:#0f766e;color:white;border:0;border-radius:6px';
+      jpPanel.append(jpStatus,jpSearch,jpGo);
+      check.after(jpPanel);
+      jpStatus.onclick = async () => {
+        try {
+          const r = await fetch('./api/jp/status', {cache:'no-store',signal:AbortSignal.timeout(7000)});
+          if (!r.ok) throw Error('HTTP '+r.status);
+          const d = await r.json();
+          status.textContent = d.configured
+            ? '일본 HTTPS 프록시 설정됨 · 실제 일본 출구 IP는 별도 검증 필요'
+            : '일본 검색은 사용 가능 · 일본 IP 프록시는 서버 연결 설정(JP_SERVER_ORIGIN)이 필요';
+        } catch (e) { status.textContent = '일본 프록시 상태 확인 실패: '+e.message; }
+      };
+      jpGo.onclick = () => {
+        const q = jpSearch.value.trim();
+        if (!q) { status.textContent = '검색어를 입력하세요.'; return; }
+        window.open('./api/jp/search?q='+encodeURIComponent(q),'_blank','noopener,noreferrer');
+      };
+      jpSearch.addEventListener('keydown', e => { if (e.key === 'Enter') jpGo.click(); });
       check.onclick = async () => {
         try {
           const response = await fetch('./api/gateway/status', {cache:'no-store',signal:AbortSignal.timeout(5000)});
