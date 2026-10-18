@@ -55,3 +55,25 @@ jobs:
           echo "::error::Worker is not serving website HTML"
           curl -sSI --max-redirs 0 --max-time 10 https://goldfiredragon-jp-web-gateway.choluckyhexsexyqueen.workers.dev/ || true
           exit 1
+
+      - name: Verify Japan internet search proxy and browser wiring
+        run: |
+          set -euo pipefail
+          BASE=https://goldfiredragon-jp-web-gateway.choluckyhexsexyqueen.workers.dev
+          curl -fsSL --max-time 20 "$BASE/GoldFireDragonBrowser.html" -o /tmp/gfd-browser.html
+          grep -q 'api/jp/search-html' /tmp/gfd-browser.html || { echo "::error::Browser search not connected to server proxy"; exit 1; }
+          curl -fsSL --max-time 20 "$BASE/api/jp/status" -o /tmp/gfd-jp-status.json
+          python3 - <<'PY'
+          import json
+          data=json.load(open('/tmp/gfd-jp-status.json'))
+          assert 'configured' in data, 'Japan gateway API missing'
+          print('Japan gateway API reachable:', data)
+          PY
+          HTTP_CODE=$(curl -sSL --max-time 25 -o /tmp/gfd-search-result -w '%{http_code}' "$BASE/api/jp/search-html?q=Tokyo")
+          if [ "$HTTP_CODE" != 200 ]; then
+            echo "::error::Google Japan search proxy returned HTTP $HTTP_CODE"
+            head -c 600 /tmp/gfd-search-result || true
+            exit 1
+          fi
+          grep -qi '<html' /tmp/gfd-search-result || { echo "::error::Search proxy returned non-HTML response"; exit 1; }
+          echo "Original browser and Google Japan search proxy verified"
