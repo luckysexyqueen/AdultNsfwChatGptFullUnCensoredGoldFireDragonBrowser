@@ -21,18 +21,34 @@ jobs:
         run: |
           test -n "$HF_TOKEN" || { echo "Missing HF_TOKEN secret"; exit 1; }
           test -n "$HF_SPACE_REPO" || { echo "Missing HF_SPACE_REPO variable (username/space-name)"; exit 1; }
-      - name: Create private Hugging Face Docker Space if missing
+      - name: Validate Hugging Face token owner and Space permissions
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_SPACE_REPO: LoveBoundLuckySexySuccubusQueen135Age/GoldFireDragon-Browser-FULL
         run: |
           python3 -m pip -q install huggingface_hub
           python3 - <<'PY'
-          import os
+          import os, sys
           from huggingface_hub import HfApi
+          from huggingface_hub.utils import HfHubHTTPError
           repo = os.environ['HF_SPACE_REPO']
+          namespace = repo.split('/')[0]
           api = HfApi(token=os.environ['HF_TOKEN'])
-          api.create_repo(repo_id=repo, repo_type='space', space_sdk='docker', private=True, exist_ok=True)
+          try:
+              identity = api.whoami()
+          except Exception as exc:
+              sys.exit(f'::error::HF_TOKEN authentication failed: {type(exc).__name__}. Replace GitHub secret HF_TOKEN with a valid Hugging Face write token.')
+          login = identity.get('name', '')
+          print('Authenticated Hugging Face user:', login)
+          print('Requested Space namespace:', namespace)
+          org_names = [org.get('name', '') if isinstance(org, dict) else str(org) for org in identity.get('orgs', [])]
+          if login.casefold() != namespace.casefold() and namespace.casefold() not in {o.casefold() for o in org_names}:
+              sys.exit(f'::error::HF_TOKEN belongs to {login}, not {namespace}. Create a write token while logged in as {namespace}, then update the GitHub Actions HF_TOKEN secret. No repository files were changed.')
+          try:
+              api.create_repo(repo_id=repo, repo_type='space', space_sdk='docker', private=True, exist_ok=True)
+          except HfHubHTTPError as exc:
+              code = getattr(exc.response, 'status_code', 'unknown')
+              sys.exit(f'::error::Cannot create/access Space {repo} (HTTP {code}). Ensure the HF_TOKEN has permission to create and write Spaces in this namespace; or create a private Docker Space manually and grant this token write access.')
           print('Private Hugging Face Docker Space ready:', repo)
           PY
       - name: Prepare complete repository snapshot
