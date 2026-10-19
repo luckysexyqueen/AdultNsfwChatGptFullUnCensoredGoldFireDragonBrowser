@@ -50,3 +50,37 @@ jobs:
           echo "VPN egress IPv4: $IP"
           curl -fsS --max-time 15 "https://ipwho.is/$IP" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("Country:",d.get("country_code")); sys.exit(0 if d.get("success") and d.get("country_code")=="JP" else 1)'
           echo "Verified Japanese exit while OpenVPN was running"
+
+      - name: Verify website gateway routes through live VPN
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG="$(mktemp)"
+          sudo -n openvpn --config "$GFD_OVPN_PROFILE" --script-security 1 >"$LOG" 2>&1 &
+          VPN_PID=$!
+          GATEWAY_PID=""
+          trap 'if [ -n "$GATEWAY_PID" ]; then kill "$GATEWAY_PID" 2>/dev/null || true; fi; sudo -n kill "$VPN_PID" 2>/dev/null || true; rm -f "$LOG"' EXIT
+          READY=0
+          for i in $(seq 1 60); do
+            if grep -q 'Initialization Sequence Completed' "$LOG"; then READY=1; break; fi
+            sleep 1
+          done
+          test "$READY" -eq 1
+          PORT=18787 GFD_WEB_GATEWAY_HOST=127.0.0.1 GFD_STATIC_ROOT="$PWD" node server.js > /tmp/gfd-vpn-gateway.log 2>&1 &
+          GATEWAY_PID=$!
+          STATUS="$(mktemp)"
+          trap 'rm -f "$STATUS"; kill "$GATEWAY_PID" 2>/dev/null || true; sudo -n kill "$VPN_PID" 2>/dev/null || true; rm -f "$LOG"' EXIT
+          VERIFIED=0
+          for i in $(seq 1 20); do
+            if curl -fsS --max-time 12 http://127.0.0.1:18787/api/gateway/status > "$STATUS"; then
+              if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("japanEgressVerified") is True and d.get("tunnel") is True else 1)' "$STATUS"; then VERIFIED=1; break; fi
+            fi
+            sleep 2
+          done
+          if [ "$VERIFIED" -ne 1 ]; then
+            echo "::error::Website gateway did not verify Japanese VPN egress"
+            cat "$STATUS"
+            tail -n 30 /tmp/gfd-vpn-gateway.log
+            exit 1
+          fi
+          echo "PASS: live website gateway confirms VPN tunnel and Japan egress"
