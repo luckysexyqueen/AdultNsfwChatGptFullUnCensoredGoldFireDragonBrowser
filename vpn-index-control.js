@@ -160,24 +160,32 @@
     };
     modal.querySelector('#gfd-vpn-start').onclick = async () => {
       if (!native) {
-        if (!localProfile) { status.textContent = '먼저 .ovpn 파일을 선택하세요.'; return; }
-        // Browsers cannot open TUN interfaces. Never upload private keys to an
-        // arbitrary host: require an explicitly configured, same-origin backend.
-        // Request a real tunnel only through the authenticated same-origin controller.
-        // Never upload the .ovpn file or embedded credentials from the browser.
+        const token = window.prompt('서버 VPN 제어 토큰 입력 (GFD_VPN_CONTROL_TOKEN)');
+        if (!token) { status.textContent = 'VPN 제어 인증이 필요합니다.'; return; }
         try {
-          status.textContent = 'VPN 연결 서버 확인 중…';
-          const response = await fetch('./api/vpn/status', { cache: 'no-store', signal: AbortSignal.timeout(7000) });
-          if (!response.ok) throw new Error('상태 확인 HTTP ' + response.status);
-          const state = await response.json();
-          if (!state.controlAvailable) {
-            status.textContent = 'VPN 연결 엔진이 서버에 설정되지 않았습니다. 웹 게이트웨이 연결과 실제 OVPN 터널은 다릅니다.';
-            return;
+          status.textContent = '서버 OVPN 프로필 확인 중…';
+          const headers = { 'x-gfd-vpn-token': token };
+          const listResponse = await fetch('./api/vpn/control/profiles', { headers, cache: 'no-store' });
+          const list = await listResponse.json();
+          if (!listResponse.ok) throw Error(list.error || '프로필 조회 실패');
+          const names = list.profiles || [];
+          if (!names.length) throw Error('서버에 설치된 .ovpn 프로필이 없습니다.');
+          const requested = select.value && names.includes(select.value) ? select.value : names[0];
+          const chosen = names.length === 1 ? requested : window.prompt('연결할 서버 OVPN 프로필', requested);
+          if (!chosen || !names.includes(chosen)) { status.textContent = '프로필 선택 취소'; return; }
+          const response = await fetch('./api/vpn/control/start', {
+            method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ profile: chosen })
+          });
+          const result = await response.json();
+          if (!response.ok) throw Error(result.error || 'VPN 시작 요청 실패');
+          status.textContent = '서버 OpenVPN 시작 요청됨: ' + chosen + ' · 실제 연결 상태 확인 중';
+          const stateResponse = await fetch('./api/vpn/control/status', { headers, cache: 'no-store' });
+          if (stateResponse.ok) {
+            const state = await stateResponse.json();
+            if (state.lastError) status.textContent += ' · ' + state.lastError;
           }
-          status.textContent = 'VPN 연결 엔진 확인됨. 서버에서 인증된 연결 요청 기능을 활성화해야 합니다.';
-        } catch (error) {
-          status.textContent = 'VPN 연결 서버에 접근할 수 없습니다: ' + error.message;
-        }
+        } catch (error) { status.textContent = '서버 VPN 연결 실패: ' + error.message; }
         return;
       }
       if (!select.value) { status.textContent = 'VPN 프로필을 먼저 선택하세요.'; return; }
