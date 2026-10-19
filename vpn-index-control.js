@@ -26,6 +26,15 @@
       info.style.cssText = 'margin-top:12px;font-size:12px;line-height:1.5;color:#ddd';
       info.textContent = '웹에서는 OpenVPN 터널을 직접 시작할 수 없습니다. 기존 일본 OVPN 프로필을 선택하거나 로컬 파일을 가져온 뒤 VPN 앱에서 연결하세요. 웹 게이트웨이 상태는 실제 일본 IP 연결을 의미하지 않습니다.';
       modal.querySelector('small')?.replaceWith(info);
+      // Browse public repository OVPN filenames without exposing configuration
+      // contents or private key material in the page.
+      const repoProfiles = document.createElement('button');
+      repoProfiles.textContent = 'GitHub 일본 OVPN 목록 보기';
+      repoProfiles.style.cssText = 'margin-top:10px;padding:9px;width:100%';
+      repoProfiles.onclick = () => window.open(
+        'https://github.com/luckysexyqueen/AdultNsfwChatGptFullUnCensoredGoldFireDragonBrowser/tree/fix/free-api-local-gguf-engine-20261018/Japan/Configs',
+        '_blank','noopener,noreferrer');
+      info.after(repoProfiles);
       const input = document.createElement('input');
       input.type = 'file';
       input.accept = '.ovpn';
