@@ -22,6 +22,20 @@ jobs:
         run: |
           test -n "$CF_TOKEN" || { echo "Missing repository Actions secret CLOUDFLARE_API_TOKEN"; exit 1; }
           test -n "$CF_ACCOUNT" || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+      - name: Build website assets required by Wrangler
+        run: |
+          npm run build:static
+          test -s site-dist/index.html || { echo 'Missing site-dist/index.html'; exit 1; }
+          test -s site-dist/GoldFireDragonBrowser.html || { echo 'Missing browser page'; exit 1; }
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('site-dist')
+          for p in root.rglob('*'):
+              if p.is_file() and p.stat().st_size < 1024 and p.read_bytes().startswith(b'version https://git-lfs.github.com/spec/v1'):
+                  p.unlink()
+              elif p.is_file() and p.stat().st_size > 25 * 1024 * 1024:
+                  p.unlink()
+          PY
       - name: Deploy Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
