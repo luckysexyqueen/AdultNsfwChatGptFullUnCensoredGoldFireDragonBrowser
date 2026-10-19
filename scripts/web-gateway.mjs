@@ -59,7 +59,7 @@ const server = http.createServer(async (req,res) => {
           if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.ovpn')) continue;
           const full=path.join(dir,entry.name);
           const contents=await readFile(full,'utf8');
-          const remote=contents.match(/^\\s*remote\\s+(\\S+)\\s+(\\d+)/m);
+          const remote=contents.match(/^\s*remote\s+(\S+)\s+(\d+)/m);
           const proto=contents.match(/^\\s*proto\\s+(\\S+)/m);
           if (remote) files.push({name:entry.name,host:remote[1],port:Number(remote[2]),protocol:proto?.[1]||'unknown'});
         }
