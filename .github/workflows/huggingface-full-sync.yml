@@ -69,23 +69,7 @@ jobs:
         run: |
           test -n "$HF_TOKEN" || { echo "::error::Set HF_TOKEN secret"; exit 1; }
           python3 -m pip -q install huggingface_hub
-          python3 - <<'PY'
-          import os, sys
-          from huggingface_hub import HfApi
-          from huggingface_hub.utils import HfHubHTTPError
-          api = HfApi(token=os.environ['HF_TOKEN'])
-          repo = os.environ['HF_REPO']
-          owner = api.whoami()['name']
-          if owner.casefold() != repo.split('/')[0].casefold():
-              sys.exit(f'::error::HF_TOKEN account {owner} differs from destination {repo}')
-          try:
-              api.create_repo(repo_id=repo, repo_type='model', private=True, exist_ok=True)
-              api.upload_folder(folder_path='/tmp/gfd-backup', repo_id=repo, repo_type='model', commit_message='Back up full GoldFireDragon source and available models')
-          except HfHubHTTPError as exc:
-              status = getattr(exc.response, 'status_code', '?')
-              sys.exit(f'::error::Hugging Face model repository backup failed (HTTP {status}). Check account repository/storage quotas and token write access.')
-          print('Backup completed:', 'https://huggingface.co/' + repo)
-          PY
+          python3 scripts/hf-backup-safe.py
   deploy:
     needs: backup
     if: ${{ always() }}
