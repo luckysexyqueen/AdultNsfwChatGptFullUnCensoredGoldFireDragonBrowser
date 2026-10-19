@@ -1,6 +1,7 @@
 // Node.js same-origin web gateway. Not an OS-level VPN.
 // Restrict destinations to configured HTTPS origins to prevent an open proxy.
 import http from 'node:http';
+import { handleVpnControl } from './vpn-control.mjs';
 import { readFile, stat, readdir, access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -18,6 +19,7 @@ const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset
 const server = http.createServer(async (req,res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
+    if (await handleVpnControl(req, res, url.pathname)) return;
     // Only the public VPN metadata/status endpoints support cross-origin reads.
     const origin = req.headers.origin || '';
     const trustedOrigins = new Set([
