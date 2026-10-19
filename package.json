@@ -24,7 +24,9 @@
     "start": "node server.js",
     "build:alt": "echo \"npm run build\"",
     "predeploy": "npm run build:static",
-    "deploy": "gh-pages -d site-dist --dotfiles"
+    "deploy": "gh-pages -d site-dist --dotfiles",
+    "vpn:install": "node scripts/vpn-install.mjs",
+    "vpn:check": "node scripts/vpn-install.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
