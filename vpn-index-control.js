@@ -179,9 +179,21 @@
           const response = await fetch(vpnStatusUrl, { cache: 'no-store', signal: AbortSignal.timeout(15000) });
           if (!response.ok) throw Error('VPN 상태 조회 HTTP ' + response.status + ' · VPN API 서버 배포 및 주소를 확인하세요.');
           const state = await response.json();
-          status.textContent = state.connected === true && state.egressVerified === true
-            ? '웹사이트 서버 VPN 연결 완료 · 일본 출구 IP 검증됨'
-            : '웹사이트 서버 VPN 미연결 또는 일본 출구 IP 미검증 · 서버에서 VPN 자동 연결 설정이 필요합니다.';
+          if (state.connected === true && state.egressVerified === true) {
+            status.textContent = '웹사이트 서버 VPN 연결 완료 · 일본 출구 IP 검증됨';
+          } else {
+            const probeUrl = 'https://zuhevuyotcigibupboaz.supabase.co/functions/v1/goldfiredragon-jp-gateway?action=status';
+            try {
+              const probeResponse = await fetch(probeUrl, {cache:'no-store',signal:AbortSignal.timeout(9000)});
+              if (!probeResponse.ok) throw new Error('HTTP '+probeResponse.status);
+              const probe = await probeResponse.json();
+              status.textContent = probe.japanEgressVerified === true
+                ? '🇯🇵 Supabase API 일본 출구 IP 확인 (' + probe.egressIp + ') · 웹사이트 서버 OpenVPN은 미연결'
+                : 'Supabase API 출구 IP: ' + (probe.egressIp || '미확인') + ' · 국가: ' + (probe.egressCountry || '미확인') + ' · 일본 출구 IP 미검증 · 웹사이트 서버 VPN은 별도 연결 필요';
+            } catch {
+              status.textContent = '웹사이트 서버 VPN 미연결 · Supabase 일본 출구 IP 확인 실패 · 실제 Linux VPN 서버 설정 필요';
+            }
+          }
         } catch (error) { status.textContent = 'VPN 서버 연결 실패: ' + error.message; }
         return;
       }
