@@ -89,6 +89,19 @@ const server = http.createServer(async (req,res) => {
       try { await scan(base); } catch(e) { if(e.code!=='ENOENT') throw e; }
       return res.end(JSON.stringify({profiles:files,connected:false,source:'Japan/Configs',privateProfilesExcluded:true}));
     }
+    if (url.pathname === '/api/jp/egress-status') {
+      if (req.method !== 'GET') { res.writeHead(405); return res.end(); }
+      const probe = 'https://zuhevuyotcigibupboaz.supabase.co/functions/v1/goldfiredragon-jp-egress-status';
+      try {
+        const response = await fetch(probe, {signal:AbortSignal.timeout(9000),cache:'no-store'});
+        const result = await response.json();
+        res.writeHead(response.ok ? 200 : 503, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
+        return res.end(JSON.stringify({ ...result, japanEgressVerified:response.ok && result.japanEgressVerified === true, vpnConnected:false, vpnVerified:false, source:'supabase-edge-probe' }));
+      } catch (error) {
+        res.writeHead(503, {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});
+        return res.end(JSON.stringify({japanEgressVerified:false,vpnConnected:false,vpnVerified:false,error:'Supabase egress probe unavailable',source:'supabase-edge-probe'}));
+      }
+    }
     if (url.pathname === '/api/gateway/status') {
       res.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store'});
       const egress = await verifiedEgress();
