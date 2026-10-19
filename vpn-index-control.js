@@ -61,6 +61,28 @@
           status.textContent = 'OVPN 확인 실패: ' + error.message;
         }
       });
+      const remoteCatalog = document.createElement('button');
+      remoteCatalog.textContent = '🇯🇵 GitHub OVPN 자동 목록 불러오기';
+      remoteCatalog.style.cssText = 'display:block;margin-top:10px;padding:9px;width:100%';
+      remoteCatalog.onclick = async () => {
+        status.textContent = '기존 GitHub OVPN 목록 확인 중…';
+        try {
+          const response = await fetch('https://goldfiredragon-web-gateway.onrender.com/api/vpn/profiles', {signal:AbortSignal.timeout(15000)});
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          const data = await response.json();
+          select.replaceChildren();
+          for (const p of data.profiles || []) {
+            const opt = document.createElement('option');
+            opt.value = p.name;
+            opt.textContent = p.name + ' (' + p.host + ':' + p.port + '/' + p.protocol + ')';
+            select.append(opt);
+          }
+          status.textContent = select.options.length
+            ? select.options.length + '개 OVPN 프로필 확인됨 · 서버 터널 연결 여부는 별도 확인'
+            : '서버에 사용 가능한 공개 OVPN 프로필이 없습니다.';
+        } catch(e) { status.textContent = 'OVPN 목록 조회 실패: ' + e.message; }
+      };
+      input.after(remoteCatalog);
       const check = document.createElement('button');
       check.textContent = '웹 게이트웨이 상태 확인';
       check.style.cssText = 'margin-top:10px;padding:9px;width:100%';
