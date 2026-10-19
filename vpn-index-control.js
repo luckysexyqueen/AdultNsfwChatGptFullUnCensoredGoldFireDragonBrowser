@@ -174,27 +174,31 @@
     modal.querySelector('#gfd-vpn-start').onclick = async () => {
       if (!native) {
         status.textContent = '웹사이트 서버 VPN 연결 상태 확인 중…';
+        let vpnConnected = false;
+        let vpnError = '';
         try {
           const vpnStatusUrl = window.GFD_VPN_API_BASE ? new URL('/api/vpn/status', window.GFD_VPN_API_BASE).href : (location.hostname.endsWith('github.io') ? 'https://goldfiredragon-web-gateway.onrender.com/api/vpn/status' : './api/vpn/status');
-          const response = await fetch(vpnStatusUrl, { cache: 'no-store', signal: AbortSignal.timeout(15000) });
-          if (!response.ok) throw Error('VPN 상태 조회 HTTP ' + response.status + ' · VPN API 서버 배포 및 주소를 확인하세요.');
+          const response = await fetch(vpnStatusUrl, { cache: 'no-store', signal: AbortSignal.timeout(10000) });
+          if (!response.ok) throw Error('HTTP ' + response.status);
           const state = await response.json();
-          if (state.connected === true && state.egressVerified === true) {
-            status.textContent = '웹사이트 서버 VPN 연결 완료 · 일본 출구 IP 검증됨';
-          } else {
-            const probeUrl = 'https://zuhevuyotcigibupboaz.supabase.co/functions/v1/goldfiredragon-jp-gateway?action=status&forceFunctionRegion=ap-northeast-1';
-            try {
-              const probeResponse = await fetch(probeUrl, {cache:'no-store',signal:AbortSignal.timeout(9000)});
-              if (!probeResponse.ok) throw new Error('HTTP '+probeResponse.status);
-              const probe = await probeResponse.json();
-              status.textContent = probe.japanEgressVerified === true
-                ? '🇯🇵 Supabase API 일본 출구 IP 확인 (' + probe.egressIp + ') · 웹사이트 서버 OpenVPN은 미연결'
-                : 'Supabase API 출구 IP: ' + (probe.egressIp || '미확인') + ' · 국가: ' + (probe.egressCountry || '미확인') + ' · 일본 출구 IP 미검증 · 웹사이트 서버 VPN은 별도 연결 필요';
-            } catch {
-              status.textContent = '웹사이트 서버 VPN 미연결 · Supabase 일본 출구 IP 확인 실패 · 실제 Linux VPN 서버 설정 필요';
-            }
+          vpnConnected = state.connected === true && state.egressVerified === true;
+        } catch (error) { vpnError = error?.message || String(error); }
+        if (vpnConnected) {
+          status.textContent = '웹사이트 서버 OpenVPN 연결 완료 · 일본 출구 IP 검증됨';
+        } else {
+          // Supabase status must still work if the Render VPN endpoint is down or asleep.
+          const probeUrl = 'https://zuhevuyotcigibupboaz.supabase.co/functions/v1/goldfiredragon-jp-gateway?action=status&forceFunctionRegion=ap-northeast-1';
+          try {
+            const probeResponse = await fetch(probeUrl, { cache:'no-store', signal:AbortSignal.timeout(9000) });
+            if (!probeResponse.ok) throw Error('HTTP ' + probeResponse.status);
+            const probe = await probeResponse.json();
+            status.textContent = probe.japanEgressVerified === true
+              ? '🇯🇵 Supabase API 일본 출구 IP 확인 (' + (probe.egressIp || 'IP 비공개') + ') · 웹사이트 서버 OpenVPN은 미연결'
+              : 'Supabase API 출구 IP: ' + (probe.egressIp || '미확인') + ' · 국가: ' + (probe.egressCountry || '미확인') + ' · 일본 출구 IP 미검증 · 웹사이트 서버 VPN은 별도 연결 필요';
+          } catch (error) {
+            status.textContent = '일본 API 출구 IP 검사 실패 (' + (error?.message || String(error)) + ') · 서버 OpenVPN ' + (vpnError ? '상태 조회 불가' : '미연결');
           }
-        } catch (error) { status.textContent = 'VPN 서버 연결 실패: ' + error.message; }
+        }
         return;
       }
       if (!select.value) { status.textContent = 'VPN 프로필을 먼저 선택하세요.'; return; }
