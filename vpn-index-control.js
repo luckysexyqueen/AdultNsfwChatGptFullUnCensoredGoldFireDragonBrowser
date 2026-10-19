@@ -180,10 +180,17 @@
           const result = await response.json();
           if (!response.ok) throw Error(result.error || 'VPN 시작 요청 실패');
           status.textContent = '서버 OpenVPN 시작 요청됨: ' + chosen + ' · 실제 연결 상태 확인 중';
-          const stateResponse = await fetch('./api/vpn/control/status', { headers, cache: 'no-store' });
-          if (stateResponse.ok) {
+          for (let attempt = 0; attempt < 15; attempt++) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const stateResponse = await fetch('./api/vpn/control/status', { headers, cache: 'no-store' });
+            if (!stateResponse.ok) throw Error('VPN 상태 확인 HTTP ' + stateResponse.status);
             const state = await stateResponse.json();
-            if (state.lastError) status.textContent += ' · ' + state.lastError;
+            if (state.connected) { status.textContent = '서버 OpenVPN 실제 연결 완료: ' + chosen; break; }
+            if (state.lastError || !state.starting) {
+              status.textContent = '서버 OpenVPN 연결 실패: ' + (state.lastError || '프로세스 종료');
+              break;
+            }
+            if (attempt === 14) status.textContent = '서버 OpenVPN 연결 진행 중 · 잠시 후 상태를 확인하세요.';
           }
         } catch (error) { status.textContent = '서버 VPN 연결 실패: ' + error.message; }
         return;
