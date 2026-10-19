@@ -31,11 +31,23 @@ jobs:
           GFD_STATIC_ROOT="$PWD/site-dist" PORT=8787 node server.js > /tmp/gfd-server.log 2>&1 &
           SERVER_PID=$!
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          READY=0
           for i in $(seq 1 30); do
-            if curl --fail --silent http://127.0.0.1:8787/api/gateway/status > /tmp/gfd-status.json; then break; fi
+            if curl --fail --silent --show-error --max-time 3 http://127.0.0.1:8787/api/gateway/status -o /tmp/gfd-status.json \\
+               && node -e "const fs=require('node:fs');const s=JSON.parse(fs.readFileSync('/tmp/gfd-status.json','utf8'));if(s.available!==true)process.exit(1)" 2>/dev/null; then
+              READY=1
+              break
+            fi
             sleep 1
           done
-          node -e "const s=require('/tmp/gfd-status.json');if(!s.available)process.exit(1)"
+          if [ "$READY" -ne 1 ]; then
+            echo "::error::Gateway did not return a valid available=true JSON response within 30 seconds"
+            echo "--- server log ---"
+            tail -n 100 /tmp/gfd-server.log || true
+            echo "--- status response ---"
+            head -c 2000 /tmp/gfd-status.json || true
+            exit 1
+          fi
           curl --fail --silent http://127.0.0.1:8787/ -o /tmp/gfd-index.html
           grep -qi '<html' /tmp/gfd-index.html
           curl --fail --silent http://127.0.0.1:8787/GoldFireDragonBrowser.html -o /tmp/gfd-browser.html
