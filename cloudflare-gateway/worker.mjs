@@ -57,14 +57,36 @@ export default {
     if (request.method !== 'GET') return new Response('Method not allowed',{status:405});
     const q=(u.searchParams.get('q')||'').trim();
     if (!q || q.length>300) return Response.json({error:'Invalid search query'},{status:400,headers});
-    const endpoint=new URL('https://zuhevuyotcigibupboaz.supabase.co/functions/v1/goldfiredragon-jp-html-relay');
-    endpoint.searchParams.set('q',q);
     const fallback=new URL('https://www.google.co.jp/search');
     for(const [key,value] of Object.entries({q,gl:'jp',hl:'ko',safe:'off',nfpr:'1',filter:'0',pws:'0'})) fallback.searchParams.set(key,value);
+    // Render runs japan-ip-proxy/server.mjs, which requires a private bearer token.
+    // No token is ever sent to browsers or included in a public response.
+    const relayOrigin=jpOrigin;
+    if (relayOrigin && env.JP_PROXY_TOKEN) {
+      const target=new URL('/search',relayOrigin);
+      target.searchParams.set('q',q);
+      try {
+        const response=await fetch(target,{headers:{Authorization:'Bearer '+env.JP_PROXY_TOKEN,Accept:'text/html'},redirect:'manual',signal:AbortSignal.timeout(18000)});
+        if(response.ok && (response.headers.get('content-type')||'').includes('text/html')) {
+          const length=Number(response.headers.get('content-length')||0);
+          if(length>0 && length>MAX_PROXY_BYTES) return new Response('Response too large',{status:413});
+          const body=await response.arrayBuffer();
+          if(body.byteLength>MAX_PROXY_BYTES)return new Response('Response too large',{status:413});
+          return new Response(body,{status:200,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Relay-Provider':'render','X-Japan-Egress-Verified':'false','Content-Security-Policy':"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'"}});
+        }
+      } catch {}
+    }
+    // Tokyo Supabase is a best-effort secondary HTML relay.
+    const endpoint=new URL('https://zuhevuyotcigibupboaz.supabase.co/functions/v1/goldfiredragon-jp-html-relay');
+    endpoint.searchParams.set('q',q);
     try {
       const response=await fetch(endpoint,{headers:{'x-region':'ap-northeast-1'},redirect:'manual',signal:AbortSignal.timeout(15000)});
       if (!response.ok || !(response.headers.get('content-type')||'').includes('text/html')) return Response.redirect(fallback.toString(),302);
-      return new Response(response.body,{status:response.status,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Japan-Egress-Verified':'false','Content-Security-Policy':"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'"}});
+      const length=Number(response.headers.get('content-length')||0);
+      if(length>MAX_PROXY_BYTES)return new Response('Response too large',{status:413});
+      const body=await response.arrayBuffer();
+      if(body.byteLength>MAX_PROXY_BYTES)return new Response('Response too large',{status:413});
+      return new Response(body,{status:200,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Relay-Provider':'supabase','X-Japan-Egress-Verified':'false','Content-Security-Policy':"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'"}});
     } catch { return Response.redirect(fallback.toString(),302); }
   }
   if (u.pathname === '/api/jp/proxy') {
