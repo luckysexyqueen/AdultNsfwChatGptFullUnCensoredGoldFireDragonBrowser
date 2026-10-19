@@ -1,0 +1,36 @@
+name: Self-hosted Linux OpenVPN Diagnostics
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  vpn:
+    runs-on: [self-hosted, linux, x64, goldfiredragon-vpn]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify host VPN prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          command -v openvpn
+          command -v ip
+          command -v curl
+          test -c /dev/net/tun
+          test -n "${GFD_OVPN_PROFILE:-}" || { echo 'Set GFD_OVPN_PROFILE runner environment variable'; exit 1; }
+          case "$GFD_OVPN_PROFILE" in
+            Japan/Configs/*.ovpn) ;;
+            *) echo 'Only public Japan/Configs/*.ovpn profiles are supported'; exit 1 ;;
+          esac
+          test -f "$GFD_OVPN_PROFILE"
+          echo 'OpenVPN and TUN prerequisites detected'
+      - name: Verify actual Japanese exit via existing host VPN
+        shell: bash
+        run: |
+          set -euo pipefail
+          ip -4 route get 1.1.1.1
+          IP="$(curl -4fsS --max-time 15 https://api.ipify.org)"
+          export IP
+          echo "Egress IPv4: $IP"
+          curl -fsS --max-time 15 "https://ipwho.is/$IP" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("Country:",d.get("country_code")); sys.exit(0 if d.get("success") and d.get("country_code")=="JP" else 1)'
+          echo 'Verified current runner egress IP geolocates to Japan. This does not prove OpenVPN was started by this workflow.'
