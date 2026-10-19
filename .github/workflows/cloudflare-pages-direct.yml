@@ -33,9 +33,11 @@ jobs:
           trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
           READY=0
           for i in $(seq 1 30); do
-            if curl --fail --silent --show-error --max-time 3 http://127.0.0.1:8787/api/gateway/status -o /tmp/gfd-status.json && node -e "const fs=require('node:fs');const s=JSON.parse(fs.readFileSync('/tmp/gfd-status.json','utf8'));if(s.available!==true)process.exit(1)" 2>/dev/null; then
-              READY=1
-              break
+            if curl --fail --silent --max-time 3 http://127.0.0.1:8787/api/gateway/status -o /tmp/gfd-status.json; then
+              if node -e "const fs=require('node:fs');const s=JSON.parse(fs.readFileSync('/tmp/gfd-status.json','utf8'));if(s.available!==true)process.exit(1)" 2>/dev/null; then
+                READY=1
+                break
+              fi
             fi
             sleep 1
           done
