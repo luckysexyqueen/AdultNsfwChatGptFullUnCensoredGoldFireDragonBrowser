@@ -18,6 +18,27 @@ const expectedEgressCountry = 'JP';
 const deploymentRegion = process.env.GFD_DEPLOYMENT_REGION || 'unverified';
 const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.wasm':'application/wasm','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.woff':'font/woff','.woff2':'font/woff2','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8'};
 async function verifiedEgress() {
+  // Remote Linux VPN node can be reached only through an explicitly configured
+  // HTTPS endpoint with a private bearer token. Never trust browser-supplied URLs.
+  const remote = process.env.GFD_VPN_NODE_URL;
+  const secret = process.env.GFD_VPN_NODE_TOKEN;
+  if (remote) {
+    if (!secret) return { verified:false, reason:'VPN node token not configured' };
+    try {
+      const endpoint = new URL('/api/vpn/status', remote);
+      if (endpoint.protocol !== 'https:' || endpoint.username || endpoint.password)
+        return { verified:false, reason:'VPN node must use authenticated HTTPS' };
+      const response = await fetch(endpoint, {
+        headers: { Authorization: 'Bearer ' + secret },
+        signal: AbortSignal.timeout(7000), cache:'no-store'
+      });
+      if (!response.ok) return { verified:false, reason:'VPN node status HTTP ' + response.status };
+      const state = await response.json();
+      return state.connected === true && state.egressVerified === true && state.egressCountry === 'JP'
+        ? { verified:true, country:'JP', ip:state.egressIp || null, remote:true }
+        : { verified:false, reason:state.message || 'Remote Japan VPN not verified' };
+    } catch(error) { return { verified:false, reason:'VPN node unavailable: ' + error.message }; }
+  }
   // The persistent systemd OpenVPN runs independently of this Node process.
   // Verify the host route and public IP directly instead of requiring a child PID.
   try { return await verifyVpnEgress(); }
@@ -77,7 +98,7 @@ const server = http.createServer(async (req,res) => {
       if (req.method !== 'GET') {res.writeHead(405);return res.end();}
       if (token && req.headers['x-gfd-gateway-token'] !== token) {res.writeHead(401);return res.end('Unauthorized');}
       const egress = await verifiedEgress();
-      if (!egress.verified) {res.writeHead(503, {'Content-Type':'application/json'});return res.end(JSON.stringify({error:'VPN egress not verified',reason:egress.reason}));}
+      if (!egress.verified || egress.remote) {res.writeHead(503, {'Content-Type':'application/json'});return res.end(JSON.stringify({error:'Direct VPN gateway not available',reason:egress.remote?'Remote VPN verified but secure traffic forwarding is not configured':egress.reason}));}
       const destination = new URL(url.searchParams.get('url') || 'about:blank');
       if (destination.protocol !== 'https:' || !allowed.has(destination.origin) || destination.username || destination.password) {res.writeHead(403);return res.end('Destination not allowed');}
       const response = await fetch(destination, {redirect:'manual',signal:AbortSignal.timeout(15000),headers:{'Accept':req.headers.accept || '*/*', 'Accept-Language':'ko-KR,ko;q=0.9,ja-JP;q=0.8'}});
