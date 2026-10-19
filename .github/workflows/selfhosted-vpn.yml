@@ -1,4 +1,4 @@
-name: Self-hosted Linux OpenVPN Diagnostics
+name: Self-hosted Linux OpenVPN 24x7
 on:
   workflow_dispatch:
 permissions:
@@ -9,78 +9,45 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
-      - name: Verify host VPN prerequisites
+      - name: Verify prerequisites and choose existing OVPN
         shell: bash
         run: |
           set -euo pipefail
-          command -v openvpn
-          command -v ip
-          command -v curl
+          sudo -n true
+          for binary in openvpn ip curl python3 systemctl; do command -v "$binary"; done
           test -c /dev/net/tun
-          test -n "${GFD_OVPN_PROFILE:-}" || { echo 'Set GFD_OVPN_PROFILE runner environment variable'; exit 1; }
-          case "$GFD_OVPN_PROFILE" in
+          PROFILE="${GFD_OVPN_PROFILE:-}"
+          if [ -z "$PROFILE" ]; then
+            PROFILE="$(find Japan/Configs -maxdepth 3 -type f -name '*.ovpn' ! -path '*/Private/*' | LC_ALL=C sort | head -n 1)"
+          fi
+          test -n "$PROFILE" || { echo "::error::No public OVPN found in Japan/Configs"; exit 1; }
+          case "$PROFILE" in
             Japan/Configs/*.ovpn) ;;
-            *) echo 'Only public Japan/Configs/*.ovpn profiles are supported'; exit 1 ;;
+            *) echo "::error::Invalid OVPN profile path"; exit 1 ;;
           esac
-          test -f "$GFD_OVPN_PROFILE"
-          echo 'OpenVPN and TUN prerequisites detected'
-      - name: Start OpenVPN and verify tunnel initialization
+          test -f "$PROFILE"
+          echo "GFD_OVPN_PROFILE=$PROFILE" >> "$GITHUB_ENV"
+      - name: Install persistent systemd OpenVPN watchdog
         shell: bash
         run: |
           set -euo pipefail
-          LOG="$(mktemp)"
-          sudo -n openvpn --config "$GFD_OVPN_PROFILE" --script-security 1 >"$LOG" 2>&1 &
-          VPN_PID=$!
-          trap 'sudo -n kill "$VPN_PID" 2>/dev/null || true; rm -f "$LOG"' EXIT
-          CONNECTED=0
-          for i in $(seq 1 60); do
-            if grep -q 'Initialization Sequence Completed' "$LOG"; then CONNECTED=1; break; fi
-            if ! sudo -n kill -0 "$VPN_PID" 2>/dev/null; then break; fi
-            sleep 1
-          done
-          if [ "$CONNECTED" -ne 1 ]; then
-            echo "::error::OpenVPN did not initialize within 60 seconds"
-            tail -n 35 "$LOG" | sed -E 's/(password|auth-user-pass|token).*/[REDACTED]/Ig'
-            exit 1
-          fi
-          echo "OpenVPN tunnel initialized"
-          ip -4 route get 1.1.1.1
-          IP="$(curl -4fsS --max-time 15 https://api.ipify.org)"
-          export IP
-          echo "VPN egress IPv4: $IP"
-          curl -fsS --max-time 15 "https://ipwho.is/$IP" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("Country:",d.get("country_code")); sys.exit(0 if d.get("success") and d.get("country_code")=="JP" else 1)'
-          echo "Verified Japanese exit while OpenVPN was running"
-
-      - name: Verify website gateway routes through live VPN
+          sudo -n bash scripts/vpn-24x7.sh install
+          sudo -n systemctl is-enabled --quiet goldfiredragon-vpn.service
+          sudo -n systemctl is-active --quiet goldfiredragon-vpn.service
+      - name: Verify live Japan VPN route and exit
         shell: bash
         run: |
           set -euo pipefail
-          LOG="$(mktemp)"
-          sudo -n openvpn --config "$GFD_OVPN_PROFILE" --script-security 1 >"$LOG" 2>&1 &
-          VPN_PID=$!
-          GATEWAY_PID=""
-          trap 'if [ -n "$GATEWAY_PID" ]; then kill "$GATEWAY_PID" 2>/dev/null || true; fi; sudo -n kill "$VPN_PID" 2>/dev/null || true; rm -f "$LOG"' EXIT
-          READY=0
-          for i in $(seq 1 60); do
-            if grep -q 'Initialization Sequence Completed' "$LOG"; then READY=1; break; fi
-            sleep 1
-          done
-          test "$READY" -eq 1
-          PORT=18787 GFD_WEB_GATEWAY_HOST=127.0.0.1 GFD_STATIC_ROOT="$PWD" node server.js > /tmp/gfd-vpn-gateway.log 2>&1 &
-          GATEWAY_PID=$!
-          STATUS="$(mktemp)"
-          trap 'rm -f "$STATUS"; kill "$GATEWAY_PID" 2>/dev/null || true; sudo -n kill "$VPN_PID" 2>/dev/null || true; rm -f "$LOG"' EXIT
-          VERIFIED=0
-          for i in $(seq 1 20); do
-            if curl -fsS --max-time 12 http://127.0.0.1:18787/api/gateway/status > "$STATUS"; then
-              if python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); sys.exit(0 if d.get("japanEgressVerified") is True and d.get("tunnel") is True else 1)' "$STATUS"; then VERIFIED=1; break; fi
+          for i in $(seq 1 24); do
+            if ip -4 route get 1.1.1.1 | grep -Eq 'dev (tun[0-9]+|tap[0-9]+)'; then
+              IP="$(curl -4fsS --max-time 10 https://api.ipify.org || true)"
+              if [ -n "$IP" ] && curl -4fsS --max-time 10 "https://ipwho.is/$IP" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("success") and d.get("country_code")=="JP" else 1)'; then
+                echo "PASS: persistent service active and Japan VPN egress verified"
+                exit 0
+              fi
             fi
-            sleep 2
+            sleep 5
           done
-          if [ "$VERIFIED" -ne 1 ]; then
-            echo "::error::Website gateway did not verify Japanese VPN egress"
-            cat "$STATUS"
-            tail -n 30 /tmp/gfd-vpn-gateway.log
-            exit 1
-          fi
-          echo "PASS: live website gateway confirms VPN tunnel and Japan egress"
+          sudo -n systemctl --no-pager status goldfiredragon-vpn.service || true
+          echo "::error::Japanese VPN egress not verified"
+          exit 1
