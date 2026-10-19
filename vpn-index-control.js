@@ -181,7 +181,22 @@
         return;
       }
       if (!select.value) { status.textContent = 'VPN 프로필을 먼저 선택하세요.'; return; }
-      const r = await native.startVpn(select.value); status.textContent = r.status || r.error || '연결 요청 완료';
+      const button = modal.querySelector('#gfd-vpn-start');
+      button.disabled = true;
+      status.textContent = 'OVPN 연결 요청 중…';
+      try {
+        const r = await native.startVpn(select.value);
+        if (r?.error || r?.success === false) throw new Error(r.error || r.message || 'VPN 시작 실패');
+        const state = await native.getVpnStatus();
+        const connected = state?.connected === true || /^(connected|active)$/i.test(String(state?.status || ''));
+        status.textContent = connected
+          ? 'VPN 연결됨: ' + select.value
+          : 'VPN 연결 요청 전달됨 · 상태: ' + (state?.status || r?.status || '확인 중');
+      } catch (error) {
+        status.textContent = 'OVPN 연결 실패: ' + (error?.message || String(error));
+      } finally {
+        button.disabled = false;
+      }
     };
     modal.querySelector('#gfd-vpn-stop').onclick = async () => {
       if (!native) { status.textContent = '연결된 원격 VPN 제어 서버가 없어 해제할 터널이 없습니다.'; return; }
