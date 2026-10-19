@@ -18,6 +18,20 @@ const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset
 const server = http.createServer(async (req,res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
+    // Only the public VPN metadata/status endpoints support cross-origin reads.
+    const origin = req.headers.origin || '';
+    const trustedOrigins = new Set([
+      'https://luckysexyqueen.github.io',
+      'https://goldfiredragon-browser-web.pages.dev',
+      'https://goldfiredragon-jp-web-gateway.choluckyhexsexyqueen.workers.dev'
+    ]);
+    if ((url.pathname === '/api/vpn/profiles' || url.pathname === '/api/vpn/status') && trustedOrigins.has(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+    }
+    if (url.pathname === '/api/vpn/profiles' || url.pathname === '/api/vpn/status') {
+      if (req.method === 'OPTIONS') {res.writeHead(204);return res.end();}
+    }
     if (url.pathname === '/api/vpn/profiles' || url.pathname === '/api/vpn/status') {
       if (req.method !== 'GET') {res.writeHead(405);return res.end();}
       res.setHeader('Content-Type','application/json; charset=utf-8');
@@ -64,6 +78,12 @@ const server = http.createServer(async (req,res) => {
     if (req.method !== 'GET' && req.method !== 'HEAD') {res.writeHead(405);return res.end();}
     const file = path.resolve(root, '.' + decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname));
     if (!file.startsWith(root + path.sep)) {res.writeHead(403);return res.end();}
+    // Never serve raw OVPN profiles, certificates, keys or internal folders as static assets.
+    const relative = path.relative(root, file).split(path.sep).join('/');
+    if (/\\.(?:ovpn|pem|key|p12|pfx)$/i.test(relative) ||
+        /(?:^|\\/)(?:Private|\\.git|\\.github)(?:\\/|$)/i.test(relative)) {
+      res.writeHead(403);return res.end('Forbidden');
+    }
     if (!(await stat(file)).isFile()) {res.writeHead(404);return res.end('Not found');}
     const data = await readFile(file);
     res.writeHead(200, {'Content-Type':mime[path.extname(file)] || 'application/octet-stream','X-Content-Type-Options':'nosniff'});
