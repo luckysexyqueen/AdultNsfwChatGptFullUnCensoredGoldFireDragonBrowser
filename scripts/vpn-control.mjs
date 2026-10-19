@@ -82,3 +82,27 @@ export async function handleVpnControl(req, res, pathname) {
   send(res, 404, { error: 'Unknown VPN control action' });
   return true;
 }
+
+export function publicVpnState() {
+  return { connected: Boolean(child && child.exitCode === null && tunnelReady), starting: Boolean(child && child.exitCode === null && !tunnelReady), engine: 'openvpn', profile: current, egressVerified: false };
+}
+export async function startManagedVpn() {
+  const name = process.env.GFD_OVPN_AUTOSTART_PROFILE;
+  if (!name) return;
+  if (!(await profiles()).includes(name)) throw Error('GFD_OVPN_AUTOSTART_PROFILE not installed');
+  const full = path.join(directory, name);
+  if (!(await stat(full)).isFile()) throw Error('Profile unavailable');
+  if (child && child.exitCode === null) return;
+  tunnelReady = false; lastError = null;
+  const proc = spawn('openvpn', ['--config', full, '--script-security', '1'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  child = proc; current = name;
+  const log = data => {
+    const line = String(data);
+    if (line.includes('Initialization Sequence Completed')) tunnelReady = true;
+    if (/AUTH_FAILED|Options error|ERROR:|Exiting due to fatal error/i.test(line)) lastError = line.slice(-300);
+  };
+  proc.stdout.on('data', log);
+  proc.stderr.on('data', log);
+  proc.on('error', error => { lastError = error.message; if (child === proc) { child = null; current = null; tunnelReady = false; } });
+  proc.on('exit', code => { if (child === proc) { child = null; current = null; tunnelReady = false; } if (code) lastError = 'OpenVPN exited: ' + code; });
+}
