@@ -162,8 +162,9 @@
       if (!native) {
         status.textContent = '웹사이트 서버 VPN 연결 상태 확인 중…';
         try {
-          const response = await fetch('./api/vpn/status', { cache: 'no-store' });
-          if (!response.ok) throw Error('VPN 상태 조회 HTTP ' + response.status);
+          const vpnStatusUrl = window.GFD_VPN_API_BASE ? new URL('/api/vpn/status', window.GFD_VPN_API_BASE).href : (location.hostname.endsWith('github.io') ? 'https://goldfiredragon-web-gateway.onrender.com/api/vpn/status' : './api/vpn/status');
+          const response = await fetch(vpnStatusUrl, { cache: 'no-store', signal: AbortSignal.timeout(15000) });
+          if (!response.ok) throw Error('VPN 상태 조회 HTTP ' + response.status + ' · VPN API 서버 배포 및 주소를 확인하세요.');
           const state = await response.json();
           status.textContent = state.connected === true && state.egressVerified === true
             ? '웹사이트 서버 VPN 연결 완료 · 일본 출구 IP 검증됨'
