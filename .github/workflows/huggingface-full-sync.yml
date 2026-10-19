@@ -58,6 +58,8 @@ jobs:
                   continue
               if f.stat().st_size <= 1024 and f.read_bytes().startswith(b'version https://git-lfs.github.com/spec/v1\n'):
                   missing.append(rel)
+                  f.unlink()
+                  continue
           (root / 'BACKUP_LFS_STATUS.txt').write_text('Unresolved Git LFS pointers (original bytes unavailable):\n' + '\n'.join(missing) + '\n')
           (root / 'BACKUP_EXCLUSIONS.txt').write_text('Credential-like files excluded:\n' + '\n'.join(excluded) + '\n')
           print('Unresolved LFS:', len(missing), 'Excluded sensitive-looking files:', len(excluded))
