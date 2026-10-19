@@ -7,7 +7,7 @@ export async function verifyVpnEgress({ route = async () => (await exec('ip', ['
   return response.json();
 } } = {}) {
   const routeText = await route();
-  if (!/\\bdev\\s+(?:tun\\d+|tap\\d+)\\b/.test(routeText)) return { verified: false, reason: 'Default outbound route does not use VPN tunnel' };
+  if (!/\bdev\s+(?:tun\d+|tap\d+)\b/.test(routeText)) return { verified: false, reason: 'Default outbound route does not use VPN tunnel' };
   const data = await lookup();
   if (data.success !== true || data.country_code !== 'JP') return { verified: false, reason: 'VPN exit country is not verified as Japan' };
   return { verified: true, country: 'JP', ip: data.ip };
