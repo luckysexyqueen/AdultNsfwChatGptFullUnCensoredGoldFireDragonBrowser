@@ -1,9 +1,6 @@
 name: Backup full source to Hugging Face and deploy Node server
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - fix/free-api-local-gguf-engine-20261018
 permissions:
   contents: read
 concurrency:
