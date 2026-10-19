@@ -87,6 +87,22 @@
       check.textContent = '웹 게이트웨이 상태 확인';
       check.style.cssText = 'margin-top:10px;padding:9px;width:100%';
       input.after(check);
+      const virtualBtn = document.createElement('button');
+      virtualBtn.textContent = '🌐 웹 가상 네트워크 어댑터 활성화';
+      virtualBtn.style.cssText = 'margin-top:10px;padding:9px;width:100%';
+      virtualBtn.onclick = async () => {
+        try {
+          const {webVirtualTun} = await import('./web-virtual-tun.js');
+          if (webVirtualTun.status.enabled) {
+            webVirtualTun.disable();
+            status.textContent = '웹 HTTP 어댑터 비활성화 · OS VPN 터널 아님';
+          } else {
+            await webVirtualTun.enable();
+            status.textContent = '웹 HTTP 어댑터 활성화 · 검색 요청 전용 · 전체 트래픽 VPN 아님';
+          }
+        } catch (e) { status.textContent = '웹 어댑터 연결 실패: ' + e.message; }
+      };
+      check.after(virtualBtn);
       const jpPanel = document.createElement('div');
       jpPanel.style.cssText = 'display:grid;gap:8px;margin-top:12px';
       const jpStatus = document.createElement('button');
