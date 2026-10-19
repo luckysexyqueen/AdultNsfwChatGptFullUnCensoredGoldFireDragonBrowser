@@ -23,9 +23,9 @@ jobs:
           test -c /dev/net/tun
           PROFILE="${GFD_OVPN_PROFILE:-}"
           if [ -z "$PROFILE" ]; then
-            PROFILE="$(find Japan/Configs -maxdepth 3 -type f -name '*.ovpn' ! -path '*/Private/*' | LC_ALL=C sort | head -n 1)"
+            PROFILE="$(find Japan/Configs -maxdepth 5 -type f -name '*.ovpn' | LC_ALL=C sort | head -n 1)"
           fi
-          test -n "$PROFILE" || { echo "::error::No public OVPN found in Japan/Configs"; exit 1; }
+          test -n "$PROFILE" || { echo "::error::No OVPN found in Japan/Configs (including Private)"; exit 1; }
           case "$PROFILE" in
             Japan/Configs/*.ovpn) ;;
             *) echo "::error::Invalid OVPN profile path"; exit 1 ;;
@@ -39,7 +39,9 @@ jobs:
           # Keep service files outside the ephemeral GitHub Actions workspace.
           sudo -n install -d -m 755 /opt/gfd-vpn/scripts
           sudo -n install -m 755 scripts/vpn-24x7.sh /opt/gfd-vpn/scripts/vpn-24x7.sh
-          sudo -n install -D -m 600 "$GFD_OVPN_PROFILE" "/opt/gfd-vpn/$GFD_OVPN_PROFILE"
+          # Keep sibling certs/keys available for profiles using relative paths. Never print contents.
+          sudo -n cp -a Japan/Configs/. /opt/gfd-vpn/Japan/Configs/
+          sudo -n chmod -R go-rwx /opt/gfd-vpn/Japan/Configs
           sudo -n bash /opt/gfd-vpn/scripts/vpn-24x7.sh install
           sudo -n systemctl is-enabled --quiet goldfiredragon-vpn.service
           sudo -n systemctl is-active --quiet goldfiredragon-vpn.service
