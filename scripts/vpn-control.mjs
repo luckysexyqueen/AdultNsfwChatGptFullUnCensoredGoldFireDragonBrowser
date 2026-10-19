@@ -8,6 +8,7 @@ const secret = process.env.GFD_VPN_CONTROL_TOKEN || '';
 let child = null;
 let current = null;
 let lastError = null;
+let tunnelReady = false;
 
 function send(res, code, data) {
   res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -38,7 +39,7 @@ export async function handleVpnControl(req, res, pathname) {
   }
   const action = pathname.slice('/api/vpn/control/'.length);
   if (action === 'status' && req.method === 'GET') {
-    send(res, 200, { controlAvailable: true, connected: Boolean(child && child.exitCode === null), profile: current, lastError });
+    send(res, 200, { controlAvailable: true, connected: Boolean(child && child.exitCode === null && tunnelReady), starting: Boolean(child && child.exitCode === null && !tunnelReady), profile: current, lastError });
     return true;
   }
   if (action === 'profiles' && req.method === 'GET') {
@@ -63,10 +64,15 @@ export async function handleVpnControl(req, res, pathname) {
       const full = path.join(directory, name);
       if (!(await stat(full)).isFile()) throw Error('Profile unavailable');
       lastError = null;
+      tunnelReady = false;
       const proc = spawn('openvpn', ['--config', full, '--script-security', '1'], { stdio: ['ignore', 'ignore', 'pipe'] });
       child = proc; current = name;
-      proc.stderr.on('data', data => { lastError = String(data).slice(-300); });
-      proc.on('error', error => { lastError = error.message; if (child === proc) { child = null; current = null; } });
+      proc.stderr.on('data', data => {
+        const line = String(data);
+        if (line.includes('Initialization Sequence Completed')) tunnelReady = true;
+        if (/AUTH_FAILED|Options error|ERROR:|Exiting due to fatal error/i.test(line)) lastError = line.slice(-300);
+      });
+      proc.on('error', error => { lastError = error.message; if (child === proc) { child = null; current = null; tunnelReady = false; } });
       proc.on('exit', code => { if (child === proc) { child = null; current = null; } if (code) lastError = 'OpenVPN exited: ' + code; });
       send(res, 202, { status: 'starting', profile: name });
     } catch (e) { send(res, 400, { error: e.message }); }
