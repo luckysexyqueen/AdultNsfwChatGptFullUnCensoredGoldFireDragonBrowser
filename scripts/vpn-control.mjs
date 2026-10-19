@@ -107,7 +107,7 @@ export async function handleVpnControl(req, res, pathname) {
 }
 
 export function publicVpnState() {
-  return { connected: Boolean(child && child.exitCode === null && tunnelReady && egressVerified), tunnelReady, egressVerified, egressIp, verificationError, starting: Boolean(child && child.exitCode === null && !tunnelReady), engine: 'openvpn', profile: current, egressVerified: false };
+  return { connected: Boolean(child && child.exitCode === null && tunnelReady && egressVerified), tunnelReady, egressVerified, egressIp, verificationError, starting: Boolean(child && child.exitCode === null && !tunnelReady), engine: 'openvpn', profile: current };
 }
 export async function startManagedVpn() {
   const name = process.env.GFD_OVPN_AUTOSTART_PROFILE;
