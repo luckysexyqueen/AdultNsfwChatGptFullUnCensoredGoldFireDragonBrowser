@@ -8,7 +8,30 @@ const secret = process.env.GFD_VPN_CONTROL_TOKEN || '';
 let child = null;
 let current = null;
 let lastError = null;
-let tunnelReady = false;
+let tunnelReady = false; egressVerified = false; egressIp = null;
+let egressVerified = false;
+let egressIp = null;
+let verificationError = null;
+async function verifyEgress() {
+  egressVerified = false; egressIp = null; verificationError = null;
+  if (!tunnelReady) return;
+  try {
+    const response = await fetch('https://ipwho.is/', { signal: AbortSignal.timeout(10000) });
+    if (!response.ok) throw Error('IP lookup HTTP ' + response.status);
+    const result = await response.json();
+    if (result.success !== true || !result.ip) throw Error('Invalid IP lookup response');
+    egressIp = result.ip;
+    egressVerified = result.country_code === 'JP';
+    if (!egressVerified) verificationError = 'Server public egress is not Japan: ' + (result.country_code || 'unknown');
+  } catch (error) { verificationError = error.message; }
+}
+function markReady(data) {
+  if (String(data).includes('Initialization Sequence Completed') && !tunnelReady) {
+    tunnelReady = true;
+    void verifyEgress();
+  }
+}
+
 
 function send(res, code, data) {
   res.writeHead(code, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -39,7 +62,7 @@ export async function handleVpnControl(req, res, pathname) {
   }
   const action = pathname.slice('/api/vpn/control/'.length);
   if (action === 'status' && req.method === 'GET') {
-    send(res, 200, { controlAvailable: true, connected: Boolean(child && child.exitCode === null && tunnelReady), starting: Boolean(child && child.exitCode === null && !tunnelReady), profile: current, lastError });
+    send(res, 200, { controlAvailable: true, connected: Boolean(child && child.exitCode === null && tunnelReady && egressVerified), tunnelReady, egressVerified, egressIp, verificationError, starting: Boolean(child && child.exitCode === null && !tunnelReady), profile: current, lastError });
     return true;
   }
   if (action === 'profiles' && req.method === 'GET') {
@@ -64,17 +87,17 @@ export async function handleVpnControl(req, res, pathname) {
       const full = path.join(directory, name);
       if (!(await stat(full)).isFile()) throw Error('Profile unavailable');
       lastError = null;
-      tunnelReady = false;
+      tunnelReady = false; egressVerified = false; egressIp = null;
       const proc = spawn('openvpn', ['--config', full, '--script-security', '1'], { stdio: ['ignore', 'pipe', 'pipe'] });
       child = proc; current = name;
-      proc.stdout.on('data', data => { if (String(data).includes('Initialization Sequence Completed')) tunnelReady = true; });
+      proc.stdout.on('data', data => { markReady(data); });
       proc.stderr.on('data', data => {
         const line = String(data);
-        if (line.includes('Initialization Sequence Completed')) tunnelReady = true;
+        markReady(line);
         if (/AUTH_FAILED|Options error|ERROR:|Exiting due to fatal error/i.test(line)) lastError = line.slice(-300);
       });
-      proc.on('error', error => { lastError = error.message; if (child === proc) { child = null; current = null; tunnelReady = false; } });
-      proc.on('exit', code => { if (child === proc) { child = null; current = null; tunnelReady = false; } if (code) lastError = 'OpenVPN exited: ' + code; });
+      proc.on('error', error => { lastError = error.message; if (child === proc) { child = null; current = null; tunnelReady = false; egressVerified = false; egressIp = null; } });
+      proc.on('exit', code => { if (child === proc) { child = null; current = null; tunnelReady = false; egressVerified = false; egressIp = null; } if (code) lastError = 'OpenVPN exited: ' + code; });
       send(res, 202, { status: 'starting', profile: name });
     } catch (e) { send(res, 400, { error: e.message }); }
     return true;
@@ -84,7 +107,7 @@ export async function handleVpnControl(req, res, pathname) {
 }
 
 export function publicVpnState() {
-  return { connected: Boolean(child && child.exitCode === null && tunnelReady), starting: Boolean(child && child.exitCode === null && !tunnelReady), engine: 'openvpn', profile: current, egressVerified: false };
+  return { connected: Boolean(child && child.exitCode === null && tunnelReady && egressVerified), tunnelReady, egressVerified, egressIp, verificationError, starting: Boolean(child && child.exitCode === null && !tunnelReady), engine: 'openvpn', profile: current, egressVerified: false };
 }
 export async function startManagedVpn() {
   const name = process.env.GFD_OVPN_AUTOSTART_PROFILE;
@@ -93,16 +116,16 @@ export async function startManagedVpn() {
   const full = path.join(directory, name);
   if (!(await stat(full)).isFile()) throw Error('Profile unavailable');
   if (child && child.exitCode === null) return;
-  tunnelReady = false; lastError = null;
+  tunnelReady = false; egressVerified = false; egressIp = null; lastError = null;
   const proc = spawn('openvpn', ['--config', full, '--script-security', '1'], { stdio: ['ignore', 'pipe', 'pipe'] });
   child = proc; current = name;
   const log = data => {
     const line = String(data);
-    if (line.includes('Initialization Sequence Completed')) tunnelReady = true;
+    markReady(line);
     if (/AUTH_FAILED|Options error|ERROR:|Exiting due to fatal error/i.test(line)) lastError = line.slice(-300);
   };
   proc.stdout.on('data', log);
   proc.stderr.on('data', log);
-  proc.on('error', error => { lastError = error.message; if (child === proc) { child = null; current = null; tunnelReady = false; } });
-  proc.on('exit', code => { if (child === proc) { child = null; current = null; tunnelReady = false; } if (code) lastError = 'OpenVPN exited: ' + code; });
+  proc.on('error', error => { lastError = error.message; if (child === proc) { child = null; current = null; tunnelReady = false; egressVerified = false; egressIp = null; } });
+  proc.on('exit', code => { if (child === proc) { child = null; current = null; tunnelReady = false; egressVerified = false; egressIp = null; } if (code) lastError = 'OpenVPN exited: ' + code; });
 }
