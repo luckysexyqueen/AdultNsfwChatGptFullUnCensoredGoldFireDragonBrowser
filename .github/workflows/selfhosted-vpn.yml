@@ -1,6 +1,11 @@
 name: Self-hosted Linux OpenVPN 24x7
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/free-api-local-gguf-engine-20261018
+    paths:
+      - .github/workflows/selfhosted-vpn.yml
 permissions:
   contents: read
 jobs:
