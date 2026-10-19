@@ -1,11 +1,18 @@
 // Cloudflare edge gateway; unlike server.js this runs without a persistent Node process.
 // Never treat this as an OS VPN or a verified Japanese exit IP.
-const allowed = new Set(['https://www.google.co.jp']);
+// Node server.js gateway compatibility: allow only explicitly configured HTTPS origins.
+const defaultAllowed = 'https://www.google.co.jp';
+const MAX_PROXY_BYTES = 8 * 1024 * 1024;
+function allowedOrigins(env) {
+ const origins = String(env.GFD_PROXY_ALLOWED_ORIGINS || defaultAllowed).split(',').map(x=>x.trim()).filter(Boolean);
+ return new Set(origins.filter(x=>{try {const u=new URL(x);return u.protocol==='https:' && u.origin===x && !u.username && !u.password;}catch{return false;}}));
+}
 export default {
  async fetch(request, env) {
   const u = new URL(request.url);
+  const allowed = allowedOrigins(env);
   const headers = {'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','Access-Control-Allow-Origin':env.ALLOWED_WEB_ORIGIN || 'https://luckysexyqueen.github.io','Vary':'Origin'};
-  if (request.method === 'OPTIONS') return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'GET,OPTIONS','Access-Control-Allow-Headers':'Authorization'}});
+  if (request.method === 'OPTIONS') return new Response(null,{status:204,headers:{...headers,'Access-Control-Allow-Methods':'GET,OPTIONS','Access-Control-Allow-Headers':'Authorization,X-GFD-Gateway-Token'}});
   // Japan server is opt-in: set JP_SERVER_ORIGIN to a verified HTTPS origin hosted in Japan.
   // Merely setting this variable does not prove the server's egress location.
   let jpOrigin = null;
@@ -13,7 +20,12 @@ export default {
    const configured = new URL(env.JP_SERVER_ORIGIN || '');
    if (configured.protocol === 'https:' && !configured.username && !configured.password && configured.pathname === '/' && !configured.search && !configured.hash && configured.hostname !== u.hostname) jpOrigin = configured.origin;
   } catch {}
-  if (u.pathname === '/api/gateway/status') return Response.json({available:true,mode:'cloudflare-edge-proxy',regionTarget:'JP',japanEgressVerified:false,japanServerConfigured:!!jpOrigin,tunnel:false,configured:true},{headers});
+  if (u.pathname === '/api/gateway/status') return Response.json({
+   available:true,mode:'cloudflare-workers-node-compatible',tunnel:false,
+   configured:allowed.size>0,region:'JP',language:'ko-KR',expectedEgressCountry:'JP',
+   deploymentRegion:'unverified',japanEgressVerified:false,japanServerConfigured:!!jpOrigin,
+   features:{staticAssets:!!env.ASSETS,proxyFetch:true,japanSearch:true,htmlRelay:true,nodeProcess:false}
+  },{headers});
   if (u.pathname === '/api/jp/status') return Response.json({configured:!!(jpOrigin && env.JP_PROXY_TOKEN),region:'JP',egressVerified:false,mode:(jpOrigin && env.JP_PROXY_TOKEN)?'https-upstream':'google-japan-direct',missing:[...(!jpOrigin?['JP_SERVER_ORIGIN']:[]),...(!env.JP_PROXY_TOKEN?['JP_PROXY_TOKEN']:[])],searchEngine:'Google Japan'},{headers});
   // Supabase Tokyo-region search URL service. Does not claim verified Japan egress.
   if (u.pathname === '/api/jp/supabase-search') {
@@ -78,7 +90,8 @@ export default {
    return env.ASSETS.fetch(request);
   }
   if (request.method !== 'GET') return new Response('Method not allowed',{status:405});
-  if (!env.GATEWAY_TOKEN || request.headers.get('Authorization') !== 'Bearer '+env.GATEWAY_TOKEN) return new Response('Unauthorized',{status:401});
+  const gatewayToken = env.GFD_GATEWAY_TOKEN || env.GATEWAY_TOKEN;
+  if (!gatewayToken || (request.headers.get('Authorization') !== 'Bearer '+gatewayToken && request.headers.get('x-gfd-gateway-token') !== gatewayToken)) return new Response('Unauthorized',{status:401});
   let target;
   try {target = new URL(u.searchParams.get('url') || '');} catch {return new Response('Invalid URL',{status:400});}
   if (target.protocol !== 'https:' || !allowed.has(target.origin) || target.username || target.password) return new Response('Forbidden',{status:403});
@@ -86,9 +99,9 @@ export default {
    const response = await fetch(target.toString(),{redirect:'manual',headers:{'Accept-Language':'ko-KR,ko;q=0.9,ja-JP;q=0.8'},signal:AbortSignal.timeout(12000)});
    if (response.status >= 300 && response.status < 400) return new Response('Redirect blocked',{status:502});
    const length = Number(response.headers.get('content-length') || 0);
-   if (length > 2*1024*1024) return new Response('Too large',{status:413});
+   if (length > MAX_PROXY_BYTES) return new Response('Too large',{status:413});
    const body = await response.arrayBuffer();
-   if (body.byteLength > 2*1024*1024) return new Response('Too large',{status:413});
+   if (body.byteLength > MAX_PROXY_BYTES) return new Response('Too large',{status:413});
    return new Response(body,{status:response.status,headers:{'Content-Type':response.headers.get('content-type') || 'application/octet-stream','Cache-Control':'no-store','Access-Control-Allow-Origin':headers['Access-Control-Allow-Origin'],'X-Content-Type-Options':'nosniff'}});
   } catch {return new Response('Upstream unavailable',{status:502});}
  }
