@@ -32,9 +32,25 @@
       input.style.cssText = 'display:block;margin-top:12px;max-width:100%';
       input.setAttribute('aria-label','로컬 OpenVPN 설정 파일 가져오기');
       info.after(input);
-      input.addEventListener('change', () => {
+      input.addEventListener('change', async () => {
         localProfile = input.files?.[0] || null;
-        if (localProfile) status.textContent = '선택된 로컬 프로필: ' + localProfile.name + ' (VPN 앱에서 연결 필요)';
+        if (!localProfile) return;
+        if (!/\\.ovpn$/i.test(localProfile.name) || localProfile.size > 256 * 1024) {
+          localProfile = null;
+          status.textContent = '256KB 이하의 .ovpn 파일만 선택할 수 있습니다.';
+          return;
+        }
+        try {
+          const contents = await localProfile.text();
+          if (!/^\\s*(?:client|remote|dev|proto|#|;)/m.test(contents) || !/^\\s*remote\\s+\\S+/m.test(contents)) {
+            throw new Error('remote 서버 주소가 없는 OVPN 설정입니다.');
+          }
+          const remote = contents.match(/^\\s*remote\\s+(\\S+)(?:\\s+(\\d+))?/m);
+          status.textContent = 'OVPN 읽기 완료: ' + localProfile.name + ' · 서버: ' + remote[1] + ' · 서버 연결은 별도 호스팅이 필요합니다.';
+        } catch (error) {
+          localProfile = null;
+          status.textContent = 'OVPN 확인 실패: ' + error.message;
+        }
       });
       const check = document.createElement('button');
       check.textContent = '웹 게이트웨이 상태 확인';
@@ -78,9 +94,9 @@
           status.textContent = data.available ? '웹 게이트웨이 응답 정상 · 일본 VPN IP 연결은 별도 확인 필요' : '웹 게이트웨이 사용 불가';
         } catch { status.textContent = '웹 게이트웨이 연결 안 됨'; }
       };
-      modal.querySelector('#gfd-vpn-install').textContent = 'OpenVPN 앱 안내';
-      modal.querySelector('#gfd-vpn-start').textContent = 'OVPN 파일 받기';
-      modal.querySelector('#gfd-vpn-stop').textContent = 'VPN 연결 안내';
+      modal.querySelector('#gfd-vpn-install').textContent = '서버 상태 확인';
+      modal.querySelector('#gfd-vpn-start').textContent = 'OVPN 연결 요청';
+      modal.querySelector('#gfd-vpn-stop').textContent = '연결 해제 요청';
     }
     try {
       const profiles = native ? await native.getOvpnList() : await fetch('./vpn-profiles.json').then((response) => response.ok ? response.json() : {});
@@ -92,27 +108,22 @@
       status.textContent = `상태: ${state?.status || 'DISCONNECTED'}`;
     } catch (error) { status.textContent = `VPN 프로필 오류: ${error.message}`; }
     modal.querySelector('#gfd-vpn-install').onclick = async () => {
-      if (!native) { window.open('https://openvpn.net/client/', '_blank', 'noopener,noreferrer'); status.textContent = 'OpenVPN 공식 클라이언트 안내를 열었습니다.'; return; }
+      if (!native) { check.click(); return; }
       const r = await native.installOpenVpn(); status.textContent = r.message || r.error || '설치 요청 완료';
     };
     modal.querySelector('#gfd-vpn-start').onclick = async () => {
       if (!native) {
-        if (localProfile) {
-          const link = document.createElement('a');
-          const blobUrl = URL.createObjectURL(localProfile);
-          link.href = blobUrl; link.download = localProfile.name; link.click();
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-          status.textContent = 'OVPN 파일을 준비했습니다. VPN 앱에 가져와 연결하세요.';
-        } else {
-          status.textContent = '기존 목록의 파일은 서버에 공개하지 않습니다. 로컬 .ovpn 파일을 선택해 주세요.';
-        }
+        if (!localProfile) { status.textContent = '먼저 .ovpn 파일을 선택하세요.'; return; }
+        // Browsers cannot open TUN interfaces. Never upload private keys to an
+        // arbitrary host: require an explicitly configured, same-origin backend.
+        status.textContent = 'OVPN 프로필을 확인했습니다. 별도 호스팅의 인증된 VPN 제어 서버가 아직 연결되지 않아 터널을 시작할 수 없습니다.';
         return;
       }
       if (!select.value) { status.textContent = 'VPN 프로필을 먼저 선택하세요.'; return; }
       const r = await native.startVpn(select.value); status.textContent = r.status || r.error || '연결 요청 완료';
     };
     modal.querySelector('#gfd-vpn-stop').onclick = async () => {
-      if (!native) { status.textContent = '웹에서는 VPN 연결을 해제할 수 없습니다. OpenVPN 앱에서 해제하세요.'; return; }
+      if (!native) { status.textContent = '연결된 원격 VPN 제어 서버가 없어 해제할 터널이 없습니다.'; return; }
       const r = await native.stopVpn(); status.textContent = r.status || r.error || '해제 요청 완료';
     };
   }
