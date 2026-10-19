@@ -1,0 +1,23 @@
+name: Pages deployment queue (manual)
+on:
+  workflow_dispatch:
+concurrency:
+  group: goldfiredragon-pages-serialized
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  verify-site:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2 pinned
+        with:
+          persist-credentials: false
+      - name: Build and validate site without triggering duplicate Pages deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build:static
+          test -s site-dist/index.html
+          echo 'PASS: static site built. Pages deployment is managed separately.'
