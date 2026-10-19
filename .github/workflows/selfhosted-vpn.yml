@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   vpn:
-    runs-on: [self-hosted, linux, x64, goldfiredragon-vpn]
+    runs-on: [self-hosted, linux, ARM64, goldfiredragon-vpn]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
