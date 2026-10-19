@@ -18,7 +18,8 @@ const expectedEgressCountry = 'JP';
 const deploymentRegion = process.env.GFD_DEPLOYMENT_REGION || 'unverified';
 const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.wasm':'application/wasm','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.woff':'font/woff','.woff2':'font/woff2','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8'};
 async function verifiedEgress() {
-  if (!publicVpnState().connected) return { verified: false, reason: 'OpenVPN tunnel is not connected' };
+  // The persistent systemd OpenVPN runs independently of this Node process.
+  // Verify the host route and public IP directly instead of requiring a child PID.
   try { return await verifyVpnEgress(); }
   catch (error) { return { verified: false, reason: error.message }; }
 }
@@ -48,7 +49,7 @@ const server = http.createServer(async (req,res) => {
         let tunAvailable = false;
         try { await access('/dev/net/tun'); tunAvailable = true; } catch {}
         const egress = await verifiedEgress();
-        return res.end(JSON.stringify({available:true,...publicVpnState(),egressVerified:egress.verified,egressCountry:egress.country || null,tunAvailable,hosting:'node-linux',message:egress.verified?'Japan VPN egress verified':egress.reason}));
+        return res.end(JSON.stringify({available:true,...publicVpnState(),connected:egress.verified,egressVerified:egress.verified,egressIp:egress.ip || null,egressCountry:egress.country || null,tunAvailable,hosting:'node-linux',message:egress.verified?'Japan VPN egress verified':egress.reason}));
       }
       const base = path.join(projectRoot,'Japan','Configs');
       const files = [];
