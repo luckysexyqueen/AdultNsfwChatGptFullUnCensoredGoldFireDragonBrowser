@@ -32,7 +32,8 @@ Environment=GFD_VPN_CHECK_INTERVAL=30
 WantedBy=multi-user.target
 EOF
     systemctl daemon-reload
-    systemctl enable --now goldfiredragon-vpn.service
+    systemctl enable goldfiredragon-vpn.service
+    systemctl restart goldfiredragon-vpn.service
     echo "Installed. Check: systemctl status goldfiredragon-vpn.service"
     ;;
   run)
