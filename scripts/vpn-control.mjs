@@ -129,3 +129,31 @@ export async function startManagedVpn() {
   proc.on('error', error => { lastError = error.message; if (child === proc) { child = null; current = null; tunnelReady = false; egressVerified = false; egressIp = null; } });
   proc.on('exit', code => { if (child === proc) { child = null; current = null; tunnelReady = false; egressVerified = false; egressIp = null; } if (code) lastError = 'OpenVPN exited: ' + code; });
 }
+
+let managedMonitor = null;
+let managedFailures = 0;
+let managedLastAttempt = 0;
+export function enableManagedVpnRecovery() {
+  if (!process.env.GFD_OVPN_AUTOSTART_PROFILE || managedMonitor) return;
+  const interval = Math.max(10000, Number(process.env.GFD_OVPN_HEALTH_INTERVAL_MS || 30000));
+  managedMonitor = setInterval(async () => {
+    if (child && child.exitCode === null && tunnelReady && egressVerified) {
+      managedFailures = 0;
+      await verifyEgress();
+      if (!egressVerified) lastError = verificationError || 'VPN egress verification failed';
+      return;
+    }
+    if (child && child.exitCode === null) {
+      if (Date.now() - managedLastAttempt < 90000) return;
+      child.kill('SIGTERM');
+      return;
+    }
+    const wait = Math.min(300000, 5000 * 2 ** Math.min(managedFailures, 6));
+    if (Date.now() - managedLastAttempt < wait) return;
+    managedLastAttempt = Date.now();
+    managedFailures++;
+    try { await startManagedVpn(); }
+    catch (error) { lastError = error.message; }
+  }, interval);
+  managedMonitor.unref();
+}
