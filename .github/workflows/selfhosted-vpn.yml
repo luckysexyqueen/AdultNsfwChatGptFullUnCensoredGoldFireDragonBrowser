@@ -37,7 +37,7 @@ jobs:
         run: |
           set -euo pipefail
           # Keep service files outside the ephemeral GitHub Actions workspace.
-          sudo -n install -d -m 755 /opt/gfd-vpn/scripts
+          sudo -n install -d -m 755 /opt/gfd-vpn/scripts /opt/gfd-vpn/Japan/Configs
           sudo -n install -m 755 scripts/vpn-24x7.sh /opt/gfd-vpn/scripts/vpn-24x7.sh
           # Keep sibling certs/keys available for profiles using relative paths. Never print contents.
           sudo -n cp -a Japan/Configs/. /opt/gfd-vpn/Japan/Configs/
