@@ -31,7 +31,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sudo -n bash scripts/vpn-24x7.sh install
+          # Keep service files outside the ephemeral GitHub Actions workspace.
+          sudo -n install -d -m 755 /opt/gfd-vpn/scripts
+          sudo -n install -m 755 scripts/vpn-24x7.sh /opt/gfd-vpn/scripts/vpn-24x7.sh
+          sudo -n install -D -m 600 "$GFD_OVPN_PROFILE" "/opt/gfd-vpn/$GFD_OVPN_PROFILE"
+          sudo -n bash /opt/gfd-vpn/scripts/vpn-24x7.sh install
           sudo -n systemctl is-enabled --quiet goldfiredragon-vpn.service
           sudo -n systemctl is-active --quiet goldfiredragon-vpn.service
       - name: Verify live Japan VPN route and exit
