@@ -98,9 +98,18 @@ const server = http.createServer(async (req,res) => {
       if (req.method !== 'GET') {res.writeHead(405);return res.end();}
       if (token && req.headers['x-gfd-gateway-token'] !== token) {res.writeHead(401);return res.end('Unauthorized');}
       const egress = await verifiedEgress();
-      if (!egress.verified || egress.remote) {res.writeHead(503, {'Content-Type':'application/json'});return res.end(JSON.stringify({error:'Direct VPN gateway not available',reason:egress.remote?'Remote VPN verified but secure traffic forwarding is not configured':egress.reason}));}
+      if (!egress.verified) {res.writeHead(503, {'Content-Type':'application/json'});return res.end(JSON.stringify({error:'VPN egress not verified',reason:egress.reason}));}
       const destination = new URL(url.searchParams.get('url') || 'about:blank');
       if (destination.protocol !== 'https:' || !allowed.has(destination.origin) || destination.username || destination.password) {res.writeHead(403);return res.end('Destination not allowed');}
+      if (egress.remote) {
+        const endpoint = new URL('/api/vpn/fetch',process.env.GFD_VPN_NODE_URL);
+        endpoint.searchParams.set('url',destination.href);
+        const relay = await fetch(endpoint,{redirect:'manual',signal:AbortSignal.timeout(20000),headers:{Authorization:'Bearer '+process.env.GFD_VPN_NODE_TOKEN,Accept:req.headers.accept||'*/*'}});
+        const bytes=Buffer.from(await relay.arrayBuffer());
+        if(bytes.length>8*1024*1024){res.writeHead(413);return res.end('Response too large');}
+        res.writeHead(relay.status,{'Content-Type':relay.headers.get('content-type')||'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
+        return res.end(bytes);
+      }
       const response = await fetch(destination, {redirect:'manual',signal:AbortSignal.timeout(15000),headers:{'Accept':req.headers.accept || '*/*', 'Accept-Language':'ko-KR,ko;q=0.9,ja-JP;q=0.8'}});
       const contentType = response.headers.get('content-type') || 'application/octet-stream';
       if (response.status >= 300 && response.status < 400) {res.writeHead(502);return res.end('Redirect blocked');}
