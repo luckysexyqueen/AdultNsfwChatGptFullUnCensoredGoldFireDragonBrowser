@@ -70,7 +70,7 @@ const server = http.createServer(async (req,res) => {
         let tunAvailable = false;
         try { await access('/dev/net/tun'); tunAvailable = true; } catch {}
         const egress = await verifiedEgress();
-        return res.end(JSON.stringify({available:true,...publicVpnState(),connected:egress.verified,egressVerified:egress.verified,egressIp:egress.ip || null,egressCountry:egress.country || null,tunAvailable,hosting:'node-linux',message:egress.verified?'Japan VPN egress verified':egress.reason}));
+        return res.end(JSON.stringify({available:true,...publicVpnState(),connected:egress.verified,trafficForwardingVerified:egress.verified && !egress.remote,remoteNodeVerified:Boolean(egress.remote),egressVerified:egress.verified,egressIp:egress.ip || null,egressCountry:egress.country || null,tunAvailable,hosting:'node-linux',message:egress.verified?'Japan VPN egress verified':egress.reason}));
       }
       const base = path.join(projectRoot,'Japan','Configs');
       const files = [];
@@ -92,7 +92,7 @@ const server = http.createServer(async (req,res) => {
     if (url.pathname === '/api/gateway/status') {
       res.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store'});
       const egress = await verifiedEgress();
-      return res.end(JSON.stringify({available:true, mode:'web-proxy', tunnel:egress.verified, configured:allowed.size>0, region, language, expectedEgressCountry, deploymentRegion, japanEgressVerified:egress.verified,reason:egress.reason || null}));
+      return res.end(JSON.stringify({available:true, mode:'web-proxy', tunnel:egress.verified, configured:allowed.size>0, region, language, expectedEgressCountry, deploymentRegion, japanEgressVerified:egress.verified,trafficForwardingVerified:egress.verified && !egress.remote,remoteNodeVerified:Boolean(egress.remote),reason:egress.reason || null}));
     }
     if (url.pathname === '/api/gateway/fetch') {
       if (req.method !== 'GET') {res.writeHead(405);return res.end();}
