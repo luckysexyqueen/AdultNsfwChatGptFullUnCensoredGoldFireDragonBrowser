@@ -1519,6 +1519,16 @@
             GoldFireDragon 검색
           </button>
           <button
+            id="wayback-btn"
+            type="button"
+            class="px-6 py-3 bg-transparent border border-sky-400 hover:bg-sky-500/20 active:scale-95 rounded-xl text-sm font-semibold text-sky-200 transition-all"
+            title="입력한 웹사이트의 Wayback Machine 보관 기록 보기"
+            aria-label="Wayback Machine 웹사이트 기록 검색"
+          >
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            Wayback Machine
+          </button>
+          <button
             id="lucky-btn"
             class="px-6 py-3 bg-transparent border border-purple-400 hover:bg-purple-500/20 active:scale-95 rounded-xl text-sm font-semibold transition-all"
           >
@@ -1810,6 +1820,7 @@
         var input = document.getElementById("search-input");
         var searchBtn = document.getElementById("search-btn");
         var luckyBtn = document.getElementById("lucky-btn");
+        var waybackBtn = document.getElementById("wayback-btn");
         var croxyBtn = document.getElementById("croxy-btn");
         var bypassBtn = document.getElementById("bypass-btn");
 
@@ -1934,6 +1945,27 @@
           const keyword = input.value;
           runAllSupabaseFunctions(keyword);
           openSearch(keyword, true);
+        });
+
+        // Wayback Machine: URL이면 해당 사이트의 보관 기록을, 검색어면 아카이브 사이트 검색을 연다.
+        waybackBtn.addEventListener("click", function () {
+          var raw = (input.value || "").trim();
+          if (!raw) { input.focus(); return; }
+          var archiveUrl;
+          var candidate = raw;
+          if (!/^https?:\/\//i.test(candidate) && /^[^\s/]+\.[a-z]{2,}(?:[/:?#]|$)/i.test(candidate)) {
+            candidate = "https://" + candidate;
+          }
+          try {
+            var parsed = new URL(candidate);
+            if ((parsed.protocol === "https:" || parsed.protocol === "http:") && parsed.hostname && !parsed.username && !parsed.password) {
+              archiveUrl = "https://web.archive.org/web/*/" + parsed.href;
+            }
+          } catch (e) {}
+          if (!archiveUrl) {
+            archiveUrl = "https://web.archive.org/web/*/" + encodeURIComponent(raw);
+          }
+          window.open(archiveUrl, "_blank", "noopener,noreferrer");
         });
 
         // CroxyProxy 우회 버튼
