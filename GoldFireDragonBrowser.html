@@ -1519,6 +1519,15 @@
             GoldFireDragon 검색
           </button>
           <button
+            id="japan-google-btn"
+            type="button"
+            class="px-6 py-3 bg-transparent border border-rose-400 hover:bg-rose-500/20 active:scale-95 rounded-xl text-sm font-semibold text-rose-100 transition-all"
+            title="일본 지역 검색 설정: 한국어 Google 검색 (일본 IP는 중계 서버 설정에 따라 달라짐)"
+            aria-label="일본 지역 한국어 Google 검색"
+          >
+            🇯🇵 일본 Google 한국어 검색
+          </button>
+          <button
             id="wayback-btn"
             type="button"
             class="px-6 py-3 bg-transparent border border-sky-400 hover:bg-sky-500/20 active:scale-95 rounded-xl text-sm font-semibold text-sky-200 transition-all"
@@ -1821,6 +1830,7 @@
         var searchBtn = document.getElementById("search-btn");
         var luckyBtn = document.getElementById("lucky-btn");
         var waybackBtn = document.getElementById("wayback-btn");
+        var japanGoogleBtn = document.getElementById("japan-google-btn");
         var croxyBtn = document.getElementById("croxy-btn");
         var bypassBtn = document.getElementById("bypass-btn");
 
@@ -1945,6 +1955,16 @@
           const keyword = input.value;
           runAllSupabaseFunctions(keyword);
           openSearch(keyword, true);
+        });
+
+        // Japan-targeted Korean Google results via existing same-origin relay.
+        // gl=jp/hl=ko/safe=off are preferences, not proof of Japanese egress or bypass.
+        japanGoogleBtn.addEventListener("click", function () {
+          var keyword = (input.value || "").trim();
+          if (!keyword) { input.focus(); return; }
+          var gatewaySearch = new URL("./api/jp/search-html", window.location.href);
+          gatewaySearch.searchParams.set("q", keyword);
+          window.open(gatewaySearch.toString(), "_blank", "noopener,noreferrer");
         });
 
         // Wayback Machine: URL이면 해당 사이트의 보관 기록을, 검색어면 아카이브 사이트 검색을 연다.
