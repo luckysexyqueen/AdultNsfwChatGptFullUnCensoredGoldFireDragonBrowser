@@ -1,7 +1,7 @@
 // Node.js same-origin web gateway. Not an OS-level VPN.
 // Restrict destinations to configured HTTPS origins to prevent an open proxy.
 import http from 'node:http';
-import { handleVpnControl } from './vpn-control.mjs';
+import { handleVpnControl, publicVpnState, startManagedVpn } from './vpn-control.mjs';
 import { readFile, stat, readdir, access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -41,7 +41,7 @@ const server = http.createServer(async (req,res) => {
       if (url.pathname === '/api/vpn/status') {
         let tunAvailable = false;
         try { await access('/dev/net/tun'); tunAvailable = true; } catch {}
-        return res.end(JSON.stringify({available:true,connected:false,engine:'not-configured',tunAvailable,hosting:'render-node',message:tunAvailable?'TUN device found; OpenVPN engine not configured':'Host does not expose /dev/net/tun; OpenVPN cannot start here'}));
+        return res.end(JSON.stringify({available:true,...publicVpnState(),tunAvailable,hosting:'node-linux',message:tunAvailable?'OpenVPN state reported by server':'Host does not expose /dev/net/tun'}));
       }
       const base = path.join(projectRoot,'Japan','Configs');
       const files = [];
@@ -93,3 +93,5 @@ const server = http.createServer(async (req,res) => {
   } catch(e) {res.writeHead(e.code === 'ENOENT' ? 404 : 502);res.end('Gateway error');}
 });
 server.listen(port,host,()=>console.log('GoldFireDragon web gateway: http://'+host+':'+port));
+
+startManagedVpn().catch(error => console.error('Managed VPN startup failed:', error.message));
