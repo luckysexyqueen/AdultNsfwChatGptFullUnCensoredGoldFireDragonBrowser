@@ -2,6 +2,29 @@
 <html lang="ko">
   <head>
     <meta charset="UTF-8" />
+    <!-- Keep the standalone browser page on the same native-navigation path as index.html. -->
+    <script src="./webviews/gecko/adapter.js"></script>
+    <script src="./webviews/chromium/adapter.js"></script>
+    <script src="./webviews/custom/adapter.js"></script>
+    <script src="./inapp-browser.js"></script>
+    <script id="gfd-hard-search-router">
+      (function () {
+        "use strict";
+        window.GFDOpenSearch = async function (target) {
+          if (typeof target !== "string" || !/^https?:\/\//i.test(target)) return false;
+          try {
+            if (window.GFDInAppBrowser && typeof window.GFDInAppBrowser.open === "function") {
+              await window.GFDInAppBrowser.open(target);
+              return true;
+            }
+          } catch (error) {
+            console.warn("[GFD search] Native browser route failed:", error && error.message);
+          }
+          window.location.assign(target);
+          return true;
+        };
+      })();
+    </script>
     <title>골드파이어드래곤브라우저 360 XR &amp; HDR (Soft - Full Bypass Edition)</title>
 
     <!-- 메타 태그 모음 -->
@@ -1942,7 +1965,7 @@
           const gatewaySearch = new URL("./api/jp/search-html", window.location.href);
           gatewaySearch.searchParams.set("q", keyword);
           if (lucky) gatewaySearch.searchParams.set("btnI", "1");
-          window.open(gatewaySearch.toString(), "_blank", "noopener,noreferrer");
+          void window.GFDOpenSearch(gatewaySearch.toString());
         }
 
         searchBtn.addEventListener("click", function () {
@@ -1964,7 +1987,7 @@
           if (!keyword) { input.focus(); return; }
           var gatewaySearch = new URL("./api/jp/search-html", window.location.href);
           gatewaySearch.searchParams.set("q", keyword);
-          window.open(gatewaySearch.toString(), "_blank", "noopener,noreferrer");
+          void window.GFDOpenSearch(gatewaySearch.toString());
         });
 
         // Wayback Machine: URL이면 해당 사이트의 보관 기록을, 검색어면 아카이브 사이트 검색을 연다.
@@ -2001,7 +2024,7 @@
           var targetUrl = isURL
             ? q
             : `https://www.google.co.jp/search?q=${encodeURIComponent(q)}&gl=jp&hl=ko&safe=off&nfpr=1&filter=0&pws=0&desktop=true&adult=true&age=19&is_adult=Y&adult_auth=true`;
-          window.open("https://www.croxyproxy.com/_ko/?__cpLangSet=1&url=" + encodeURIComponent(targetUrl), "_blank");
+          void window.GFDOpenSearch("https://www.croxyproxy.com/_ko/?__cpLangSet=1&url=" + encodeURIComponent(targetUrl));
         });
 
         // 🔥 무로그인 강력 우회 접속 (BlockAway) 버튼
@@ -2017,7 +2040,7 @@
           var targetUrl = isURL
             ? q
             : `https://www.google.co.jp/search?q=${encodeURIComponent(q)}&gl=jp&hl=ko&safe=off&nfpr=1&filter=0&pws=0&desktop=true&adult=true&age=19&is_adult=Y&adult_auth=true`;
-          window.open("https://www.blockaway.net/_ko/?__cpLangSet=1&url=" + encodeURIComponent(targetUrl), "_blank");
+          void window.GFDOpenSearch("https://www.blockaway.net/_ko/?__cpLangSet=1&url=" + encodeURIComponent(targetUrl));
         });
 
         input.addEventListener("keydown", function (e) {

@@ -35,7 +35,7 @@ const server=http.createServer(async(req,res)=>{
   }
   const body=await upstream.text();
   await agent.close();
-  if(body.length>1500000||/unusual traffic|detected unusual|captcha|sorry\\/index/i.test(body)){failures.push({proxy:selected,error:'Google challenge'});continue;}
+  if(body.length>1500000||/unusual traffic|detected unusual|captcha|sorry\/index/i.test(body)){failures.push({proxy:selected,error:'Google challenge'});continue;}
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'; sandbox",'X-Content-Type-Options':'nosniff'});
   res.end(body);return;
   }
