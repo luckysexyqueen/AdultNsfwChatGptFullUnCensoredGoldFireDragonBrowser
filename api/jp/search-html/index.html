@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,follow">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GoldFireDragon 일본 Google 검색 연결</title>
+</head>
+<body>
+<p id="status">Google 검색으로 연결 중입니다…</p>
+<script>
+(function () {
+  "use strict";
+  var params = new URLSearchParams(location.search);
+  var q = (params.get("q") || "").trim();
+  if (!q) {
+    document.getElementById("status").textContent = "검색어(q)가 없습니다.";
+    return;
+  }
+  var target = new URL("https://www.google.co.jp/search");
+  target.searchParams.set("q", q);
+  target.searchParams.set("gl", "jp");
+  target.searchParams.set("hl", "ko");
+  target.searchParams.set("safe", "off");
+  target.searchParams.set("nfpr", "1");
+  target.searchParams.set("filter", "0");
+  target.searchParams.set("pws", "0");
+  if (params.get("btnI") === "1") target.searchParams.set("btnI", "1");
+  var link = document.createElement("a");
+  link.href = target.href;
+  link.textContent = "Google 검색 결과 열기";
+  document.body.appendChild(link);
+  location.replace(target.href);
+})();
+</script>
+</body>
+</html>
