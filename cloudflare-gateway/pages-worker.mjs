@@ -64,7 +64,7 @@ export default {
     }
     if (url.pathname === '/') {
       // Show the original GoldFireDragon Browser interface on the website homepage.
-      return env.ASSETS.fetch(new Request(new URL('/index.html', url.origin), request));
+      return env.ASSETS.fetch(request);
     }
     // Keep /GoldFireDragonBrowser.html as the real browser page and /index.html as AI chat.
     return env.ASSETS.fetch(request);
