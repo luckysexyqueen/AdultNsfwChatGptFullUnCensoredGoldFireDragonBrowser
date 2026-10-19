@@ -151,7 +151,20 @@
       select.replaceChildren();
       for (const name of names) { const option = document.createElement('option'); option.value = name; option.textContent = name; select.append(option); }
       if (!names.length) { const option = document.createElement('option'); option.value = ''; option.textContent = 'VPN 프로필 없음'; select.append(option); }
-      const state = native ? await native.getVpnStatus() : { status: '웹에서는 OS VPN 터널을 직접 연결할 수 없습니다' };
+      const state = native ? await native.getVpnStatus() : await (async () => {
+        const apiUrl = window.GFD_VPN_API_BASE
+          ? new URL('/api/vpn/status', window.GFD_VPN_API_BASE).href
+          : (location.hostname.endsWith('github.io') ? 'https://goldfiredragon-web-gateway.onrender.com/api/vpn/status' : './api/vpn/status');
+        try {
+          const response = await fetch(apiUrl, { cache: 'no-store', signal: AbortSignal.timeout(15000) });
+          if (!response.ok) return { status: '서버 VPN 상태 조회 실패 (HTTP ' + response.status + ')' };
+          const data = await response.json();
+          return { status: data.connected === true && data.egressVerified === true
+            ? '일본 VPN 연결 확인됨' : '서버 VPN 연결 대기 또는 일본 IP 미검증' };
+        } catch (error) {
+          return { status: '서버 VPN 상태 확인 불가: ' + error.message };
+        }
+      })();
       status.textContent = `상태: ${state?.status || 'DISCONNECTED'}`;
     } catch (error) { status.textContent = `VPN 프로필 오류: ${error.message}`; }
     modal.querySelector('#gfd-vpn-install').onclick = async () => {
