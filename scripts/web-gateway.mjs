@@ -2,7 +2,7 @@
 // Restrict destinations to configured HTTPS origins to prevent an open proxy.
 import http from 'node:http';
 import { verifyVpnEgress } from './vpn-egress.mjs';
-import { handleVpnControl, publicVpnState, startManagedVpn } from './vpn-control.mjs';
+import { handleVpnControl, publicVpnState, startManagedVpn, enableManagedVpnRecovery } from './vpn-control.mjs';
 import { readFile, stat, readdir, access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -104,4 +104,5 @@ const server = http.createServer(async (req,res) => {
 });
 server.listen(port,host,()=>console.log('GoldFireDragon web gateway: http://'+host+':'+port));
 
+enableManagedVpnRecovery();
 startManagedVpn().catch(error => console.error('Managed VPN startup failed:', error.message));
