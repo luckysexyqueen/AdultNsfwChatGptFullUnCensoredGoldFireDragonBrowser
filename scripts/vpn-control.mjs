@@ -8,7 +8,7 @@ const secret = process.env.GFD_VPN_CONTROL_TOKEN || '';
 let child = null;
 let current = null;
 let lastError = null;
-let tunnelReady = false; egressVerified = false; egressIp = null;
+let tunnelReady = false;
 let egressVerified = false;
 let egressIp = null;
 let verificationError = null;
