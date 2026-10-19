@@ -160,39 +160,15 @@
     };
     modal.querySelector('#gfd-vpn-start').onclick = async () => {
       if (!native) {
-        const token = window.prompt('서버 VPN 제어 토큰 입력 (GFD_VPN_CONTROL_TOKEN)');
-        if (!token) { status.textContent = 'VPN 제어 인증이 필요합니다.'; return; }
+        status.textContent = '웹사이트 서버 VPN 연결 상태 확인 중…';
         try {
-          status.textContent = '서버 OVPN 프로필 확인 중…';
-          const headers = { 'x-gfd-vpn-token': token };
-          const listResponse = await fetch('./api/vpn/control/profiles', { headers, cache: 'no-store' });
-          const list = await listResponse.json();
-          if (!listResponse.ok) throw Error(list.error || '프로필 조회 실패');
-          const names = list.profiles || [];
-          if (!names.length) throw Error('서버에 설치된 .ovpn 프로필이 없습니다.');
-          const requested = select.value && names.includes(select.value) ? select.value : names[0];
-          const chosen = names.length === 1 ? requested : window.prompt('연결할 서버 OVPN 프로필', requested);
-          if (!chosen || !names.includes(chosen)) { status.textContent = '프로필 선택 취소'; return; }
-          const response = await fetch('./api/vpn/control/start', {
-            method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ profile: chosen })
-          });
-          const result = await response.json();
-          if (!response.ok) throw Error(result.error || 'VPN 시작 요청 실패');
-          status.textContent = '서버 OpenVPN 시작 요청됨: ' + chosen + ' · 실제 연결 상태 확인 중';
-          for (let attempt = 0; attempt < 15; attempt++) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const stateResponse = await fetch('./api/vpn/control/status', { headers, cache: 'no-store' });
-            if (!stateResponse.ok) throw Error('VPN 상태 확인 HTTP ' + stateResponse.status);
-            const state = await stateResponse.json();
-            if (state.connected) { status.textContent = '서버 OpenVPN 실제 연결 완료: ' + chosen; break; }
-            if (state.lastError || !state.starting) {
-              status.textContent = '서버 OpenVPN 연결 실패: ' + (state.lastError || '프로세스 종료');
-              break;
-            }
-            if (attempt === 14) status.textContent = '서버 OpenVPN 연결 진행 중 · 잠시 후 상태를 확인하세요.';
-          }
-        } catch (error) { status.textContent = '서버 VPN 연결 실패: ' + error.message; }
+          const response = await fetch('./api/vpn/status', { cache: 'no-store' });
+          if (!response.ok) throw Error('VPN 상태 조회 HTTP ' + response.status);
+          const state = await response.json();
+          status.textContent = state.connected === true && state.egressVerified === true
+            ? '웹사이트 서버 VPN 연결 완료 · 일본 출구 IP 검증됨'
+            : '웹사이트 서버 VPN 미연결 또는 일본 출구 IP 미검증 · 서버에서 VPN 자동 연결 설정이 필요합니다.';
+        } catch (error) { status.textContent = 'VPN 서버 연결 실패: ' + error.message; }
         return;
       }
       if (!select.value) { status.textContent = 'VPN 프로필을 먼저 선택하세요.'; return; }
@@ -215,14 +191,7 @@
     };
     modal.querySelector('#gfd-vpn-stop').onclick = async () => {
       if (!native) {
-        const token = window.prompt('서버 VPN 제어 토큰 입력 (GFD_VPN_CONTROL_TOKEN)');
-        if (!token) { status.textContent = 'VPN 제어 인증이 필요합니다.'; return; }
-        try {
-          const response = await fetch('./api/vpn/control/stop', { method: 'POST', headers: { 'x-gfd-vpn-token': token } });
-          const result = await response.json();
-          if (!response.ok) throw Error(result.error || 'VPN 종료 요청 실패');
-          status.textContent = '서버 VPN 종료 요청: ' + result.status;
-        } catch (error) { status.textContent = '서버 VPN 종료 실패: ' + error.message; }
+        status.textContent = '웹사이트 서버 VPN은 서버에서 관리됩니다. 이 버튼은 서버 VPN을 임의로 종료하지 않습니다.';
         return;
       }
       const r = await native.stopVpn(); status.textContent = r.status || r.error || '해제 요청 완료';
