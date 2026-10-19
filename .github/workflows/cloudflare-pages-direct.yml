@@ -1,8 +1,5 @@
 name: Deploy full GoldFireDragon website to Cloudflare Pages
 on:
-  push:
-    branches:
-      - fix/free-api-local-gguf-engine-20261018
   workflow_dispatch:
 permissions:
   contents: read
