@@ -1,6 +1,7 @@
 // Node.js same-origin web gateway. Not an OS-level VPN.
 // Restrict destinations to configured HTTPS origins to prevent an open proxy.
 import http from 'node:http';
+import { verifyVpnEgress } from './vpn-egress.mjs';
 import { handleVpnControl, publicVpnState, startManagedVpn } from './vpn-control.mjs';
 import { readFile, stat, readdir, access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,11 @@ const language = 'ko-KR';
 const expectedEgressCountry = 'JP';
 const deploymentRegion = process.env.GFD_DEPLOYMENT_REGION || 'unverified';
 const mime = {'.html':'text/html; charset=utf-8','.js':'text/javascript; charset=utf-8','.mjs':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.json':'application/json; charset=utf-8','.wasm':'application/wasm','.svg':'image/svg+xml','.png':'image/png','.ico':'image/x-icon','.webp':'image/webp','.jpg':'image/jpeg','.jpeg':'image/jpeg','.gif':'image/gif','.woff':'font/woff','.woff2':'font/woff2','.ttf':'font/ttf','.txt':'text/plain; charset=utf-8'};
+async function verifiedEgress() {
+  if (!publicVpnState().connected) return { verified: false, reason: 'OpenVPN tunnel is not connected' };
+  try { return await verifyVpnEgress(); }
+  catch (error) { return { verified: false, reason: error.message }; }
+}
 const server = http.createServer(async (req,res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
@@ -41,7 +47,8 @@ const server = http.createServer(async (req,res) => {
       if (url.pathname === '/api/vpn/status') {
         let tunAvailable = false;
         try { await access('/dev/net/tun'); tunAvailable = true; } catch {}
-        return res.end(JSON.stringify({available:true,...publicVpnState(),tunAvailable,hosting:'node-linux',message:tunAvailable?'OpenVPN state reported by server':'Host does not expose /dev/net/tun'}));
+        const egress = await verifiedEgress();
+        return res.end(JSON.stringify({available:true,...publicVpnState(),egressVerified:egress.verified,egressCountry:egress.country || null,tunAvailable,hosting:'node-linux',message:egress.verified?'Japan VPN egress verified':egress.reason}));
       }
       const base = path.join(projectRoot,'Japan','Configs');
       const files = [];
@@ -62,11 +69,14 @@ const server = http.createServer(async (req,res) => {
     }
     if (url.pathname === '/api/gateway/status') {
       res.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store'});
-      return res.end(JSON.stringify({available:true, mode:'web-proxy', tunnel:false, configured:allowed.size>0, region, language, expectedEgressCountry, deploymentRegion, japanEgressVerified:false}));
+      const egress = await verifiedEgress();
+      return res.end(JSON.stringify({available:true, mode:'web-proxy', tunnel:egress.verified, configured:allowed.size>0, region, language, expectedEgressCountry, deploymentRegion, japanEgressVerified:egress.verified,reason:egress.reason || null}));
     }
     if (url.pathname === '/api/gateway/fetch') {
       if (req.method !== 'GET') {res.writeHead(405);return res.end();}
       if (token && req.headers['x-gfd-gateway-token'] !== token) {res.writeHead(401);return res.end('Unauthorized');}
+      const egress = await verifiedEgress();
+      if (!egress.verified) {res.writeHead(503, {'Content-Type':'application/json'});return res.end(JSON.stringify({error:'VPN egress not verified',reason:egress.reason}));}
       const destination = new URL(url.searchParams.get('url') || 'about:blank');
       if (destination.protocol !== 'https:' || !allowed.has(destination.origin) || destination.username || destination.password) {res.writeHead(403);return res.end('Destination not allowed');}
       const response = await fetch(destination, {redirect:'manual',signal:AbortSignal.timeout(15000),headers:{'Accept':req.headers.accept || '*/*', 'Accept-Language':'ko-KR,ko;q=0.9,ja-JP;q=0.8'}});
