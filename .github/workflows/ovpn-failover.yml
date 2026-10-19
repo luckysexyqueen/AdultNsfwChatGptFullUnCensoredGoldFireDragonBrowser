@@ -9,7 +9,21 @@ on:
 permissions:
   contents: read
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Explain persistent VPN runner requirements
+        shell: bash
+        run: |
+          echo '::notice::Persistent OpenVPN installation requires a registered, online self-hosted Linux runner with label goldfiredragon-vpn.'
+          echo '::notice::A GitHub-hosted runner cannot replace a persistent VPN server.'
+          echo '::notice::Check repository Settings > Actions > Runners and register the actual Linux host.'
   install:
+    # Only schedule installation when a real VPN host has been registered.
+    # Set repository variable GFD_VPN_RUNNER_READY=true after registering it.
+    if: vars.GFD_VPN_RUNNER_READY == 'true'
+    needs: preflight
     runs-on: [self-hosted, linux, goldfiredragon-vpn]
     timeout-minutes: 20
     steps:
