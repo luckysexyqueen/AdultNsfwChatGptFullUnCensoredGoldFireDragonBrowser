@@ -10,7 +10,7 @@ permissions:
   contents: read
 jobs:
   install:
-    runs-on: [self-hosted, linux, ARM64, goldfiredragon-vpn]
+    runs-on: [self-hosted, linux, goldfiredragon-vpn]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -22,6 +22,7 @@ jobs:
           for cmd in openvpn ip curl python3 systemctl; do command -v "$cmd"; done
           test -c /dev/net/tun
           test -d Japan/Configs
+          find Japan/Configs -maxdepth 5 -type f -name '*.ovpn' -print -quit | grep -q . || { echo '::error::No .ovpn profiles found'; exit 1; }
           sudo -n install -d -m 755 /opt/gfd-vpn/scripts /opt/gfd-vpn/Japan/Configs
           sudo -n cp -a Japan/Configs/. /opt/gfd-vpn/Japan/Configs/
           sudo -n chmod -R go-rwx /opt/gfd-vpn/Japan/Configs
@@ -46,6 +47,7 @@ jobs:
             fi
             sleep 5
           done
-          sudo -n journalctl -u goldfiredragon-vpn.service --no-pager -n 25 | sed -E 's/(password|token|secret|auth)[^ ]*/[REDACTED]/Ig'
+          sudo -n systemctl is-active goldfiredragon-vpn.service || true
+          echo '::warning::Inspect VPN service logs privately on the Linux host; logs may contain sensitive profile details.'
           echo "::error::Japan egress not verified"
           exit 1
