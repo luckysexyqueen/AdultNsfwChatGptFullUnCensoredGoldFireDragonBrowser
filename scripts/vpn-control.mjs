@@ -65,15 +65,16 @@ export async function handleVpnControl(req, res, pathname) {
       if (!(await stat(full)).isFile()) throw Error('Profile unavailable');
       lastError = null;
       tunnelReady = false;
-      const proc = spawn('openvpn', ['--config', full, '--script-security', '1'], { stdio: ['ignore', 'ignore', 'pipe'] });
+      const proc = spawn('openvpn', ['--config', full, '--script-security', '1'], { stdio: ['ignore', 'pipe', 'pipe'] });
       child = proc; current = name;
+      proc.stdout.on('data', data => { if (String(data).includes('Initialization Sequence Completed')) tunnelReady = true; });
       proc.stderr.on('data', data => {
         const line = String(data);
         if (line.includes('Initialization Sequence Completed')) tunnelReady = true;
         if (/AUTH_FAILED|Options error|ERROR:|Exiting due to fatal error/i.test(line)) lastError = line.slice(-300);
       });
       proc.on('error', error => { lastError = error.message; if (child === proc) { child = null; current = null; tunnelReady = false; } });
-      proc.on('exit', code => { if (child === proc) { child = null; current = null; } if (code) lastError = 'OpenVPN exited: ' + code; });
+      proc.on('exit', code => { if (child === proc) { child = null; current = null; tunnelReady = false; } if (code) lastError = 'OpenVPN exited: ' + code; });
       send(res, 202, { status: 'starting', profile: name });
     } catch (e) { send(res, 400, { error: e.message }); }
     return true;
