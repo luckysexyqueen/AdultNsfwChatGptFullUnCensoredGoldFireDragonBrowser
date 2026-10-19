@@ -1,0 +1,29 @@
+name: Install Supabase Server Skill
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/free-api-local-gguf-engine-20261018
+    paths:
+      - .github/workflows/install-supabase-server-skill.yml
+permissions:
+  contents: write
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install skill
+        run: npx --yes skills add supabase/server --yes
+      - name: Commit installed skill files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m "chore: install supabase server skill"
+            git push
+          fi
