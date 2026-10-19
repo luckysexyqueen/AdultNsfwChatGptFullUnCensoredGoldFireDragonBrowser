@@ -182,7 +182,7 @@
           if (state.connected === true && state.egressVerified === true) {
             status.textContent = '웹사이트 서버 VPN 연결 완료 · 일본 출구 IP 검증됨';
           } else {
-            const probeUrl = 'https://zuhevuyotcigibupboaz.supabase.co/functions/v1/goldfiredragon-jp-egress-status';
+            const probeUrl = 'https://zuhevuyotcigibupboaz.supabase.co/functions/v1/goldfiredragon-jp-gateway?action=status';
             try {
               const probeResponse = await fetch(probeUrl, {cache:'no-store',signal:AbortSignal.timeout(9000)});
               if (!probeResponse.ok) throw new Error('HTTP '+probeResponse.status);
