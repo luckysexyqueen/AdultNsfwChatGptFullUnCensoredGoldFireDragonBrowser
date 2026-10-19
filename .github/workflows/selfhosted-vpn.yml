@@ -13,7 +13,7 @@ jobs:
     runs-on: [self-hosted, linux, ARM64, goldfiredragon-vpn]
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Verify prerequisites and choose existing OVPN
         shell: bash
         run: |
