@@ -41,30 +41,17 @@ export default {
    if (u.pathname === '/api/jp/search-url') return Response.json({engine:'Google Japan',url:target.toString(),region:'JP',language:'ko',japanEgressVerified:false},{headers});
    return Response.redirect(target.toString(),302);
   }
-  // Google-only search. Cloudflare server-side scraping is blocked by Google's
-  // automated traffic protections (HTTP 429); redirect the user's browser to
-  // Google itself instead of returning a misleading HTTP 502.
-  if (u.pathname === '/api/jp/search-html') {
-   if (request.method !== 'GET') return new Response('Method not allowed',{status:405});
-   const q=(u.searchParams.get('q')||'').trim();
-   if (!q || q.length>300) return Response.json({error:'q must be 1-300 characters'},{status:400,headers});
-   const target=new URL('https://www.google.co.jp/search');
-   target.searchParams.set('q',q);
-   for(const [k,v] of Object.entries({gl:'jp',hl:'ko',safe:'off',nfpr:'1',filter:'0',pws:'0'})) target.searchParams.set(k,v);
-   if(u.searchParams.get('btnI')==='1') target.searchParams.set('btnI','1');
-   // A separately deployed Japan-hosted HTTPS server can provide Japan egress.
-   // Never forward requests to arbitrary hosts; only configured JP_SERVER_ORIGIN.
-   if (jpOrigin && env.JP_PROXY_TOKEN) {
+  if (u.pathname === '/api/jp/search-html' || u.pathname === '/api/jp/relay') {
+    if (request.method !== 'GET') return new Response('Method not allowed',{status:405});
+    const q=(u.searchParams.get('q')||'').trim();
+    if (!q || q.length>300) return Response.json({error:'Invalid search query'},{status:400,headers});
+    const endpoint=new URL('https://zuhevuyotcigibupboaz.supabase.co/functions/v1/goldfiredragon-jp-html-relay');
+    endpoint.searchParams.set('q',q);
     try {
-     const upstream=new URL('/search',jpOrigin);
-     upstream.searchParams.set('q',q);
-     const reply=await fetch(upstream,{headers:{Authorization:'Bearer '+env.JP_PROXY_TOKEN},signal:AbortSignal.timeout(15000),redirect:'error'});
-     if(reply.ok && (reply.headers.get('content-type')||'').includes('text/html')) {
-      return new Response(reply.body,{status:200,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','Content-Security-Policy':"default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'; sandbox",'X-Content-Type-Options':'nosniff'}});
-     }
-    } catch {}
-   }
-   return Response.redirect(target.toString(),302);
+      const response=await fetch(endpoint,{headers:{'x-region':'ap-northeast-1'},redirect:'manual',signal:AbortSignal.timeout(15000)});
+      if (!(response.headers.get('content-type')||'').includes('text/html')) return Response.json({error:'Relay returned non-HTML',status:response.status},{status:502,headers});
+      return new Response(response.body,{status:response.status,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','X-Japan-Egress-Verified':'false','Content-Security-Policy':"sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; form-action 'none'"}});
+    } catch { return Response.json({error:'Supabase relay unavailable'},{status:502,headers}); }
   }
   if (u.pathname === '/api/jp/proxy') {
    if (!jpOrigin) return Response.json({error:'Japan server not configured',required:'JP_SERVER_ORIGIN'},{status:503,headers});
