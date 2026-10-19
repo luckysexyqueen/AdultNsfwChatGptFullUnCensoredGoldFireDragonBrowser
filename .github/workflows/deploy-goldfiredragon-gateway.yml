@@ -1,9 +1,6 @@
 name: Deploy original GoldFireDragon gateway Worker
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - fix/free-api-local-gguf-engine-20261018
 permissions:
   contents: read
 jobs:
