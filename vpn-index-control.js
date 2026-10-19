@@ -163,7 +163,21 @@
         if (!localProfile) { status.textContent = '먼저 .ovpn 파일을 선택하세요.'; return; }
         // Browsers cannot open TUN interfaces. Never upload private keys to an
         // arbitrary host: require an explicitly configured, same-origin backend.
-        status.textContent = 'OVPN 프로필을 확인했습니다. 별도 호스팅의 인증된 VPN 제어 서버가 아직 연결되지 않아 터널을 시작할 수 없습니다.';
+        // Request a real tunnel only through the authenticated same-origin controller.
+        // Never upload the .ovpn file or embedded credentials from the browser.
+        try {
+          status.textContent = 'VPN 연결 서버 확인 중…';
+          const response = await fetch('./api/vpn/status', { cache: 'no-store', signal: AbortSignal.timeout(7000) });
+          if (!response.ok) throw new Error('상태 확인 HTTP ' + response.status);
+          const state = await response.json();
+          if (!state.controlAvailable) {
+            status.textContent = 'VPN 연결 엔진이 서버에 설정되지 않았습니다. 웹 게이트웨이 연결과 실제 OVPN 터널은 다릅니다.';
+            return;
+          }
+          status.textContent = 'VPN 연결 엔진 확인됨. 서버에서 인증된 연결 요청 기능을 활성화해야 합니다.';
+        } catch (error) {
+          status.textContent = 'VPN 연결 서버에 접근할 수 없습니다: ' + error.message;
+        }
         return;
       }
       if (!select.value) { status.textContent = 'VPN 프로필을 먼저 선택하세요.'; return; }
