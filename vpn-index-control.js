@@ -207,7 +207,17 @@
       }
     };
     modal.querySelector('#gfd-vpn-stop').onclick = async () => {
-      if (!native) { status.textContent = '연결된 원격 VPN 제어 서버가 없어 해제할 터널이 없습니다.'; return; }
+      if (!native) {
+        const token = window.prompt('서버 VPN 제어 토큰 입력 (GFD_VPN_CONTROL_TOKEN)');
+        if (!token) { status.textContent = 'VPN 제어 인증이 필요합니다.'; return; }
+        try {
+          const response = await fetch('./api/vpn/control/stop', { method: 'POST', headers: { 'x-gfd-vpn-token': token } });
+          const result = await response.json();
+          if (!response.ok) throw Error(result.error || 'VPN 종료 요청 실패');
+          status.textContent = '서버 VPN 종료 요청: ' + result.status;
+        } catch (error) { status.textContent = '서버 VPN 종료 실패: ' + error.message; }
+        return;
+      }
       const r = await native.stopVpn(); status.textContent = r.status || r.error || '해제 요청 완료';
     };
   }
