@@ -91,7 +91,7 @@ const server = http.createServer(async (req,res) => {
     }
     if (url.pathname === '/api/jp/egress-status') {
       if (req.method !== 'GET') { res.writeHead(405); return res.end(); }
-      const probe = 'https://zuhevuyotcigibupboaz.supabase.co/functions/v1/goldfiredragon-jp-egress-status';
+      const probe = 'https://zuhevuyotcigibupboaz.supabase.co/functions/v1/goldfiredragon-jp-gateway?action=status';
       try {
         const response = await fetch(probe, {signal:AbortSignal.timeout(9000),cache:'no-store'});
         const result = await response.json();
