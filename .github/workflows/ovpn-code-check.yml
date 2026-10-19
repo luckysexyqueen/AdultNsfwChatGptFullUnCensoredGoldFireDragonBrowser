@@ -1,0 +1,23 @@
+name: Verify OVPN Failover Code
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/free-api-local-gguf-engine-20261018]
+    paths:
+      - scripts/ovpn-profile-rotation-v2.sh
+      - .github/workflows/ovpn-code-check.yml
+permissions:
+  contents: read
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate OVPN failover script
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/ovpn-profile-rotation-v2.sh
+          grep -Fq "find \"\$ROOT/Japan/Configs\"" scripts/ovpn-profile-rotation-v2.sh
+          grep -Fq "country" scripts/ovpn-profile-rotation-v2.sh
+          echo 'PASS: script syntax and OVPN discovery checks'
