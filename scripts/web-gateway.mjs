@@ -81,7 +81,7 @@ const server = http.createServer(async (req,res) => {
     // Never serve raw OVPN profiles, certificates, keys or internal folders as static assets.
     const relative = path.relative(root, file).split(path.sep).join('/');
     if (/\\.(?:ovpn|pem|key|p12|pfx)$/i.test(relative) ||
-        /(?:^|\\/)(?:Private|\\.git|\\.github)(?:\\/|$)/i.test(relative)) {
+        /(?:^|\/)(?:Private|\.git|\.github)(?:\/|$)/i.test(relative)) {
       res.writeHead(403);return res.end('Forbidden');
     }
     if (!(await stat(file)).isFile()) {res.writeHead(404);return res.end('Not found');}
