@@ -24,13 +24,29 @@ jobs:
           esac
           test -f "$GFD_OVPN_PROFILE"
           echo 'OpenVPN and TUN prerequisites detected'
-      - name: Verify actual Japanese exit via existing host VPN
+      - name: Start OpenVPN and verify tunnel initialization
         shell: bash
         run: |
           set -euo pipefail
+          LOG="$(mktemp)"
+          sudo -n openvpn --config "$GFD_OVPN_PROFILE" --script-security 1 >"$LOG" 2>&1 &
+          VPN_PID=$!
+          trap 'sudo -n kill "$VPN_PID" 2>/dev/null || true; rm -f "$LOG"' EXIT
+          CONNECTED=0
+          for i in $(seq 1 60); do
+            if grep -q 'Initialization Sequence Completed' "$LOG"; then CONNECTED=1; break; fi
+            if ! sudo -n kill -0 "$VPN_PID" 2>/dev/null; then break; fi
+            sleep 1
+          done
+          if [ "$CONNECTED" -ne 1 ]; then
+            echo "::error::OpenVPN did not initialize within 60 seconds"
+            tail -n 35 "$LOG" | sed -E 's/(password|auth-user-pass|token).*/[REDACTED]/Ig'
+            exit 1
+          fi
+          echo "OpenVPN tunnel initialized"
           ip -4 route get 1.1.1.1
           IP="$(curl -4fsS --max-time 15 https://api.ipify.org)"
           export IP
-          echo "Egress IPv4: $IP"
+          echo "VPN egress IPv4: $IP"
           curl -fsS --max-time 15 "https://ipwho.is/$IP" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("Country:",d.get("country_code")); sys.exit(0 if d.get("success") and d.get("country_code")=="JP" else 1)'
-          echo 'Verified current runner egress IP geolocates to Japan. This does not prove OpenVPN was started by this workflow.'
+          echo "Verified Japanese exit while OpenVPN was running"
