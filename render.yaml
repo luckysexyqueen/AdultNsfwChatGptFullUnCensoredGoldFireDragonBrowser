@@ -14,6 +14,12 @@ services:
         value: unverified
       - key: GFD_PROXY_ALLOWED_ORIGINS
         sync: false
+      # HTTPS endpoint of the real Linux VPN node (not a Cloudflare/Pages URL).
+      - key: GFD_VPN_NODE_URL
+        sync: false
+      # Private bearer token shared with the Linux VPN node; never commit it.
+      - key: GFD_VPN_NODE_TOKEN
+        sync: false
 
   - type: web
     name: goldfiredragon-jp-https-relay
