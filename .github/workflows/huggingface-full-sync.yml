@@ -21,11 +21,22 @@ jobs:
         with:
           fetch-depth: 1
           lfs: false
+      - name: Check optional Hugging Face credentials
+        id: hf_config
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo "::notice::Hugging Face backup skipped: HF_TOKEN not configured."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Recover available Git LFS data
+        if: steps.hf_config.outputs.ready == 'true'
         run: |
           git lfs install
           git lfs pull || echo "::warning::Unavailable Git LFS objects will be recorded, not silently recovered"
       - name: Snapshot tracked source and models without credentials
+        if: steps.hf_config.outputs.ready == 'true'
         run: |
           mkdir -p /tmp/gfd-backup
           git ls-files -z | tar --null -T - -cf - | tar -xf - -C /tmp/gfd-backup
@@ -52,6 +63,7 @@ jobs:
           print('Unresolved LFS:', len(missing), 'Excluded sensitive-looking files:', len(excluded))
           PY
       - name: Create private Hugging Face model repository and upload full snapshot
+        if: steps.hf_config.outputs.ready == 'true'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
