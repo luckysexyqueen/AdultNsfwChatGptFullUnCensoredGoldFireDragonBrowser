@@ -15,6 +15,20 @@ export default {
   } catch {}
   if (u.pathname === '/api/gateway/status') return Response.json({available:true,mode:'cloudflare-edge-proxy',regionTarget:'JP',japanEgressVerified:false,japanServerConfigured:!!jpOrigin,tunnel:false,configured:true},{headers});
   if (u.pathname === '/api/jp/status') return Response.json({configured:!!(jpOrigin && env.JP_PROXY_TOKEN),region:'JP',egressVerified:false,mode:(jpOrigin && env.JP_PROXY_TOKEN)?'https-upstream':'google-japan-direct',missing:[...(!jpOrigin?['JP_SERVER_ORIGIN']:[]),...(!env.JP_PROXY_TOKEN?['JP_PROXY_TOKEN']:[])],searchEngine:'Google Japan'},{headers});
+  // Supabase Tokyo-region search URL service. Does not claim verified Japan egress.
+  if (u.pathname === '/api/jp/supabase-search') {
+   if (request.method !== 'GET') return new Response('Method not allowed',{status:405});
+   const q=(u.searchParams.get('q')||'').trim();
+   if (!q || q.length>300) return Response.json({error:'q must be 1-300 characters'},{status:400,headers});
+   const upstream=new URL('https://zuhevuyotcigibupboaz.supabase.co/functions/v1/goldfiredragon-jp-gateway');
+   upstream.searchParams.set('q',q);
+   try {
+    const reply=await fetch(upstream,{headers:{'x-region':'ap-northeast-1'},signal:AbortSignal.timeout(10000)});
+    if (!reply.ok) return Response.json({error:'Supabase search service unavailable',status:reply.status},{status:502,headers});
+    const data=await reply.json();
+    return Response.json(data,{headers});
+   } catch {return Response.json({error:'Supabase search service unavailable'},{status:502,headers});}
+  }
   // Public Japanese Google search launcher; no API token or Japan VPS needed.
   // gl=jp targets Japan results, hl=ko preserves Korean UI, safe=off is a preference.
   if (u.pathname === '/api/jp/search' || u.pathname === '/api/jp/search-url') {
