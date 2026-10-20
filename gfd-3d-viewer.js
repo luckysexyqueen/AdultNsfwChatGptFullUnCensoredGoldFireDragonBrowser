@@ -31,7 +31,7 @@ async function enhance(img){
   texture=await new THREE.TextureLoader().loadAsync(img.currentSrc||img.src);
   if(!img.isConnected){texture.dispose();renderer.dispose();pending.delete(img);return;}
   // Reconstruct a relief surface directly for on-screen 3D rendering.
-  const geometry=isPanorama?new THREE.SphereGeometry(500,48,32):new THREE.PlaneGeometry(5*ratio,5,80,80);
+  let geometry=isPanorama?new THREE.SphereGeometry(500,48,32):new THREE.PlaneGeometry(5*ratio,5,80,80);
   if(isPanorama)geometry.scale(-1,1,1);
   else {
    try {
@@ -58,6 +58,41 @@ async function enhance(img){
     positions.needsUpdate=true;
     geometry.computeVertexNormals();
    }catch(error){console.warn('[GFD 3D] Depth estimation unavailable',error);}
+  }
+  if(!isPanorama){
+   // Construct a closed mesh: reconstructed front, inferred back and connected sides.
+   const front=geometry;
+   const p=front.attributes.position,uv=front.attributes.uv;
+   const n=p.count,verts=[],coords=[],triangles=[];
+   for(let i=0;i<n;i++){
+    verts.push(p.getX(i),p.getY(i),p.getZ(i));
+    coords.push(uv.getX(i),uv.getY(i));
+   }
+   for(let i=0;i<n;i++){
+    verts.push(p.getX(i),p.getY(i),-0.38);
+    coords.push(1-uv.getX(i),uv.getY(i));
+   }
+   const idx=front.index;
+   for(let i=0;i<idx.count;i+=3){
+    const a=idx.getX(i),b=idx.getX(i+1),c=idx.getX(i+2);
+    triangles.push(a,b,c,c+n,b+n,a+n);
+   }
+   const edge=[];
+   const steps=80;
+   for(let x=0;x<=steps;x++)edge.push(x);
+   for(let y=1;y<=steps;y++)edge.push(y*(steps+1)+steps);
+   for(let x=steps-1;x>=0;x--)edge.push(steps*(steps+1)+x);
+   for(let y=steps-1;y>=1;y--)edge.push(y*(steps+1));
+   for(let i=0;i<edge.length;i++){
+    const a=edge[i],b=edge[(i+1)%edge.length];
+    triangles.push(a,a+n,b,b,a+n,b+n);
+   }
+   geometry=new THREE.BufferGeometry();
+   geometry.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+   geometry.setAttribute('uv',new THREE.Float32BufferAttribute(coords,2));
+   geometry.setIndex(triangles);
+   geometry.computeVertexNormals();
+   front.dispose();
   }
   camera.position.z=isPanorama?0:Math.max(6,4.5*ratio);
   const material=isPanorama ? new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide,transparent:true}) : new THREE.MeshStandardMaterial({map:texture,side:THREE.DoubleSide,roughness:.88,metalness:0,transparent:true});
