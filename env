@@ -19,3 +19,4 @@ SUPABASE_URL=https://unublyqlstbetykelfmg.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_iqmUYP3ODAIHKIH5uUmL5Q_LvbhwNgB
 SUPABASE_SECRET_KEY=sb_secret_Nz9dpd1JQRZkla-QMTXSvw_pnkqKy1X
 SUPABASE_JWKS_URL=https://unublyqlstbetykelfmg.supabase.co/auth/v1/.well-known/jwks.json
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.unublyqlstbetykelfmg.supabase.co:5432/postgres
