@@ -1,7 +1,7 @@
 /* Automatic 3D image renderer for images already present in GoldFireDragonBrowser.html. */
 (function(){
 'use strict';
-const source='https://cdn.jsdelivr.net/npm/three@0.181.2/build/three.module.js';
+const source=new URL('./gfd-three.module.js',document.currentScript?.src||location.href).href;
 let threePromise;
 let depthPipelinePromise;
 async function inferDepth(image){
