@@ -125,6 +125,33 @@ async function enhance(img){
    scene.add(keyLight);
   }
   const mesh=new THREE.Mesh(geometry,material);scene.add(mesh);
+  // Optional AI completion service: accepts a source image and returns a generated
+  // rear-view texture. Never transmit images unless the site explicitly configures it.
+  // This does not pretend that a mirror of the front is an AI-generated hidden view.
+  if(!isPanorama && typeof window.GFD_3D_COMPLETION_URL==='string'){
+   const endpoint=window.GFD_3D_COMPLETION_URL;
+   try{
+    const parsed=new URL(endpoint,location.href);
+    if(parsed.protocol!=='https:' && parsed.origin!==location.origin)throw Error('HTTPS completion endpoint required');
+    const response=await fetch(parsed.href,{
+     method:'POST',headers:{'Content-Type':'application/json'},
+     body:JSON.stringify({image_url:img.currentSrc||img.src,task:'generate_back_view'}),
+     signal:AbortSignal.timeout(20000)
+    });
+    if(!response.ok)throw Error('Completion service HTTP '+response.status);
+    const payload=await response.json();
+    if(typeof payload.back_image_url!=='string')throw Error('Missing generated back image URL');
+    const backURL=new URL(payload.back_image_url,parsed.href);
+    if(backURL.protocol!=='https:' && backURL.origin!==location.origin)throw Error('Invalid back texture URL');
+    const backTexture=await new THREE.TextureLoader().loadAsync(backURL.href);
+    const backMaterial=new THREE.MeshStandardMaterial({map:backTexture,side:THREE.BackSide,roughness:.9});
+    const rear=new THREE.Mesh(new THREE.PlaneGeometry(5*ratio,5),backMaterial);
+    rear.position.z=-.381;
+    rear.rotation.y=Math.PI;
+    scene.add(rear);
+    holder.addEventListener('gfd-dispose',()=>{rear.geometry.dispose();backMaterial.dispose();backTexture.dispose();},{once:true});
+   }catch(error){console.warn('[GFD 3D] Optional AI back-view generation unavailable:',error);}
+  }
   holder.appendChild(renderer.domElement);
   renderer.domElement.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none;display:block;';
   img.parentNode.insertBefore(holder,img);
@@ -139,7 +166,7 @@ async function enhance(img){
   holder.addEventListener('pointercancel',()=>dragging=false);
   const observer=new ResizeObserver(()=>{const w=holder.clientWidth,h=holder.clientHeight;if(w&&h){camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);}});observer.observe(holder);
   function tick(){
-   if(!holder.isConnected){observer.disconnect();geometry.dispose();material.dispose();texture.dispose();renderer.dispose();return;}
+   if(!holder.isConnected){holder.dispatchEvent(new Event('gfd-dispose'));observer.disconnect();geometry.dispose();material.dispose();texture.dispose();renderer.dispose();return;}
    frame=requestAnimationFrame(tick);
    if(!dragging)mesh.rotation.y+=(isPanorama?0.0008:0.002);
    renderer.render(scene,camera);
