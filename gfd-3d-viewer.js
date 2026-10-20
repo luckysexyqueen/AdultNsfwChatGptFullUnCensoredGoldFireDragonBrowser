@@ -3,6 +3,25 @@
 'use strict';
 const source='https://cdn.jsdelivr.net/npm/three@0.181.2/build/three.module.js';
 let threePromise;
+let depthPipelinePromise;
+async function inferDepth(image){
+ // Optional browser-side ONNX depth model; no API key or image upload required.
+ const pipeline=await (depthPipelinePromise ||= import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1').then(m=>m.pipeline('depth-estimation','onnx-community/depth-anything-v2-small',{device:'wasm'})).catch(e=>{depthPipelinePromise=null;throw e;}));
+ const result=await pipeline(image);
+ const map=result.predicted_depth;
+ if(!map||!map.data||!map.dims)throw Error('Depth model returned no map');
+ const width=map.dims[map.dims.length-1],height=map.dims[map.dims.length-2];
+ const values=map.data;
+ let lo=Infinity,hi=-Infinity;
+ for(const value of values){if(value<lo)lo=value;if(value>hi)hi=value;}
+ const normalized=new Float32Array(128*128);
+ for(let y=0;y<128;y++)for(let x=0;x<128;x++){
+  const xx=Math.min(width-1,Math.floor(x*width/128));
+  const yy=Math.min(height-1,Math.floor(y*height/128));
+  normalized[y*128+x]=(values[yy*width+xx]-lo)/Math.max(hi-lo,1e-6);
+ }
+ return normalized;
+}
 const active=new WeakSet();
 const pending=new WeakSet();
 function loadThree(){return threePromise ||= import(source).catch(e=>{threePromise=null;throw e;});}
@@ -46,6 +65,9 @@ async function enhance(img){
      const j=i*4;
      samples[i]=((data[j]*0.2126+data[j+1]*0.7152+data[j+2]*0.0722)/255)*(data[j+3]/255);
     }
+    // Prefer learned monocular depth; retain deterministic pixel-depth fallback offline.
+    try { const predicted=await inferDepth(img);samples.set(predicted); }
+    catch(modelError){console.warn('[GFD 3D] AI depth unavailable, using local relief:',modelError);}
     const positions=geometry.attributes.position,uvs=geometry.attributes.uv;
     for(let i=0;i<positions.count;i++){
      const u=uvs.getX(i),v=uvs.getY(i);
