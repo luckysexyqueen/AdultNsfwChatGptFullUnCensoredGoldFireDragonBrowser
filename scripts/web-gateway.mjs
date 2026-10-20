@@ -1,6 +1,7 @@
 // Node.js same-origin web gateway. Not an OS-level VPN.
 // Restrict destinations to configured HTTPS origins to prevent an open proxy.
 import http from 'node:http';
+import { handleFirecrawl } from '../lib/firecrawl-handler.mjs';
 import { verifyVpnEgress } from './vpn-egress.mjs';
 import { handleVpnControl, publicVpnState, startManagedVpn, enableManagedVpnRecovery } from './vpn-control.mjs';
 import { readFile, stat, readdir, access } from 'node:fs/promises';
@@ -47,6 +48,15 @@ async function verifiedEgress() {
 const server = http.createServer(async (req,res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
+    if (url.pathname === '/api/firecrawl') {
+      res.setHeader('Content-Type','application/json; charset=utf-8');
+      res.setHeader('Cache-Control','no-store');
+      if(req.method!=='POST'){res.writeHead(405);return res.end(JSON.stringify({error:'Method not allowed'}));}
+      if(process.env.GFD_FIRECRAWL_TOKEN && req.headers['x-gfd-firecrawl-token']!==process.env.GFD_FIRECRAWL_TOKEN){res.writeHead(401);return res.end(JSON.stringify({error:'Unauthorized'}));}
+      try{let raw='';for await(const part of req){raw+=part;if(raw.length>4096){res.writeHead(413);return res.end(JSON.stringify({error:'Too large'}));}}
+        const result=await handleFirecrawl(JSON.parse(raw));res.writeHead(200);return res.end(JSON.stringify(result));
+      }catch(e){res.writeHead(400);return res.end(JSON.stringify({error:e.message||'Firecrawl failed'}));}
+    }
     if (await handleVpnControl(req, res, url.pathname)) return;
     // Only the public VPN metadata/status endpoints support cross-origin reads.
     const origin = req.headers.origin || '';

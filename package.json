@@ -129,7 +129,8 @@
     "xlsx": "^0.18.5",
     "zod": "^3.23.8",
     "zustand": "^5.0.8",
-    "@mendable/firecrawl-js": "^4.50.0"
+    "@mendable/firecrawl-js": "^4.50.0",
+    "firecrawl": "^4.50.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
