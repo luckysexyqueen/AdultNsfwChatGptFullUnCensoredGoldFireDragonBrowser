@@ -7,7 +7,7 @@ let depthPipelinePromise;
 async function inferDepth(image){
  // Optional browser-side ONNX depth model; no API key or image upload required.
  const pipeline=await (depthPipelinePromise ||= import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1').then(m=>m.pipeline('depth-estimation','onnx-community/depth-anything-v2-small',{device:'wasm'})).catch(e=>{depthPipelinePromise=null;throw e;}));
- const result=await pipeline(image);
+ const result=await pipeline(image.currentSrc||image.src);
  const map=result.predicted_depth;
  if(!map||!map.data||!map.dims)throw Error('Depth model returned no map');
  const width=map.dims[map.dims.length-1],height=map.dims[map.dims.length-2];
@@ -126,10 +126,11 @@ async function enhance(img){
   }
   const mesh=new THREE.Mesh(geometry,material);scene.add(mesh);
   holder.appendChild(renderer.domElement);
-  renderer.domElement.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
+  renderer.domElement.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:2;pointer-events:none;display:block;';
   img.parentNode.insertBefore(holder,img);
   holder.appendChild(img);
-  img.style.position='relative';img.style.opacity='0.02';
+  img.style.position='relative';img.style.opacity='0';
+  img.style.pointerEvents='auto';
   active.add(img);pending.delete(img);
   let dragging=false,x=0,y=0,frame=0;
   holder.addEventListener('pointerdown',e=>{if(e.target.closest('a,button,input'))return;dragging=true;x=e.clientX;y=e.clientY;holder.setPointerCapture(e.pointerId);});
