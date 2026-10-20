@@ -37,5 +37,27 @@ try{
  },text);
  assert.equal(await page.evaluate(()=>typeof window.GFD3DEngine?.refresh),'function');
  assert.equal(errors.filter(e=>/SyntaxError/.test(e)).length,0,errors.join('\n'));
- console.log('3D browser smoke test passed: HTML, script delivery, parsing, initialization');
+ // Verify real WebGL drawing on an existing DOM image, not just module registration.
+ const result=await page.evaluate(async()=>{
+  const image=document.createElement('img');
+  image.src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" fill="red"/></svg>');
+  image.style.cssText='display:block;width:128px;height:128px';
+  document.body.appendChild(image);
+  await image.decode();
+  window.GFD3DEngine.refresh();
+  const end=Date.now()+12000;
+  while(Date.now()<end){
+   const holder=image.closest('[data-gfd-3d-container]');
+   if(holder?.dataset.gfd3dStatus==='rendered'){
+    const canvas=holder.querySelector('canvas');
+    return {status:'rendered',width:canvas.width,height:canvas.height};
+   }
+   if(holder?.dataset.gfd3dStatus==='failed')return {status:'failed'};
+   await new Promise(resolve=>setTimeout(resolve,200));
+  }
+  return {status:'timeout'};
+ });
+ assert.equal(result.status,'rendered','3D must produce a WebGL frame: '+JSON.stringify(result));
+ assert.ok(result.width>0 && result.height>0,'WebGL canvas must have real dimensions');
+ console.log('3D browser render test passed:',result);
 }finally{await browser.close();await new Promise(ok=>server.close(ok));}
