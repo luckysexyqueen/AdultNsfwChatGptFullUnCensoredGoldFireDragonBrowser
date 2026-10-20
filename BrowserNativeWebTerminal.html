@@ -3,36 +3,41 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GoldFireDragon Browser Native Web Terminal</title>
+  <title>GoldFireDragon | Serverless Web Terminal</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
   <style>
-    body { margin:0; background:#111; color:#fff; padding:20px; font-family:system-ui,sans-serif; }
+    body { margin:0; background:#0f111a; color:#e1e4ea; padding:30px; font-family:system-ui,sans-serif; }
     #terminal { height: min(70vh,650px); background:#000; border-radius:8px; padding:12px; }
-    #status { color:#a8d8ff; min-height:1.5em; }
+    .container{max-width:1000px;margin:auto}.header{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #282a36;gap:12px}h1{color:#50fa7b}.badge{background:#ff5555;border-radius:20px;padding:6px 12px}.badge.ready{background:#50fa7b;color:#282a36}.desc-box,.config-panel{background:#1d1f27;padding:15px;border-radius:6px;margin:20px 0}.desc-box{border-left:4px solid #bd93f9}#status{color:#bd93f9;min-height:1.5em}
   </style>
 </head>
 <body>
-  <h1>🔒 브라우저 독립형 가상 터미널</h1>
-  <p>브라우저 안에서 JavaScript/Node 호환 샌드박스를 실행합니다. 실제 Linux 커널이나 OpenVPN 터널은 아닙니다.</p>
+  <div class="container"><div class="header"><h1>🔒 Serverless Web VPN Terminal</h1><span id="status-badge" class="badge">부팅 중</span></div>
+  <div class="desc-box">브라우저 내 Node.js 호환 가상 셸입니다. 실제 Linux 커널이나 OpenVPN 터널은 아닙니다.</div>
   <p id="status" role="status">터미널 초기화 중...</p>
   <div id="terminal" aria-label="WebContainer terminal"></div>
+  <div class="config-panel">🔧 PIA / SOCKS5: wscat은 WebSocket 클라이언트이며 VPN 터널을 만들지 않습니다. 실제 프록시 연결에는 별도의 정상적인 엔드포인트가 필요합니다.</div></div>
   <script type="module">
     import { Terminal } from 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/+esm';
+    import { FitAddon } from 'https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/+esm';
     import { WebContainer } from 'https://cdn.jsdelivr.net/npm/@webcontainer/api@1.6.1/+esm';
 
     const status = document.getElementById('status');
     const term = new Terminal({ cursorBlink: true, convertEol: true, theme: { background:'#000000' } });
-    term.open(document.getElementById('terminal'));
-    const report = (message) => { status.textContent = message; term.writeln(message); };
+    const fit = new FitAddon(); term.loadAddon(fit);
+    term.open(document.getElementById('terminal')); fit.fit();
+    const badge = document.getElementById('status-badge');
+    const report = (message, ready=false) => { status.textContent=message; badge.textContent=ready?'가상 셸 준비 완료':message; badge.classList.toggle('ready',ready); term.writeln(message); };
     try {
-      if (!crossOriginIsolated) throw new Error('WebContainer는 HTTPS 및 COOP/COEP 교차 출처 격리 헤더가 필요합니다.');
+      if (!window.isSecureContext || !crossOriginIsolated) throw new Error('WebContainer는 HTTPS 및 COOP/COEP 교차 출처 격리 헤더가 필요합니다.');
       report('WebContainer 부팅 중...');
       const instance = await WebContainer.boot();
       const shell = await instance.spawn('jsh', [], { terminal: { cols: term.cols, rows: term.rows } });
       shell.output.pipeTo(new WritableStream({ write(chunk) { term.write(chunk); } })).catch(error=>report('출력 오류: '+error.message));
       const writer = shell.input.getWriter();
       term.onData(data => { writer.write(data).catch(error=>report('입력 오류: '+error.message)); });
-      report('가상 터미널 준비 완료');
+      window.addEventListener('resize',()=>{fit.fit();shell.resize({cols:term.cols,rows:term.rows});});
+      report('가상 터미널 준비 완료 (VPN 연결 상태와 무관)',true);
     } catch (error) {
       report('실행 실패: '+error.message);
       term.writeln('현재 브라우저나 호스팅에서 WebContainer 실행이 지원되지 않을 수 있습니다.');
