@@ -35,7 +35,7 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          printf '{"serverlessFunctionRegion":"hnd1","resourceConfig":{"functionDefaultRegions":["hnd1"]}}' > /tmp/vercel-tokyo-patch.json
+          printf '{"resourceConfig":{"functionDefaultRegions":["hnd1"]}}' > /tmp/vercel-tokyo-patch.json
           vercel api "/v9/projects/$VERCEL_PROJECT_ID?teamId=$VERCEL_ORG_ID" -X PATCH --input /tmp/vercel-tokyo-patch.json
       - name: Pull production configuration
         env:
