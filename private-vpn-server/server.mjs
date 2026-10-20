@@ -8,6 +8,15 @@ export function createPrivateVpnServer({token=process.env.GFD_VPN_NODE_TOKEN||''
  app.disable('x-powered-by');
  app.use(cors({origin(origin,callback){callback(null,Boolean(origin && allowedOrigins.includes(origin)));},methods:['GET'],allowedHeaders:['Authorization']}));
  app.get('/health',(_req,res)=>res.json({service:'goldfiredragon-private-vpn',ready:true}));
+ // Passwordless read-only status. Bind to loopback by default; no control endpoint is exposed.
+ app.get('/api/vpn/public-status',async(_req,res)=>{
+  res.set('Cache-Control','no-store');
+  try {
+   const state=await verify();
+   const verified=state.verified===true&&state.country==='JP';
+   return res.json({connected:verified,egressVerified:verified,egressCountry:verified?'JP':null,message:verified?'Japan VPN verified':'Japan VPN unavailable'});
+  }catch{return res.status(503).json({connected:false,egressVerified:false,message:'VPN verification failed'});}
+ });
  app.get('/api/vpn/status',async(req,res)=>{
   const auth=req.get('authorization')||'';
   const expected='Bearer '+token;
