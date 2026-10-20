@@ -8,6 +8,7 @@ on:
     paths:
       - 'GoldFireDragonBrowser.html'
       - 'gfd-3d-viewer.js'
+      - 'tests/gfd-3d-browser.mjs'
       - 'google-search-patch.js'
       - 'tests/gfd-3d-browser.mjs'
       - 'scripts/build-static-site.mjs'
@@ -41,6 +42,7 @@ jobs:
           test -s site-dist/GoldFireDragonBrowser.html
           test -s site-dist/google-search-patch.js
           test -s site-dist/gfd-3d-viewer.js
+          test -s site-dist/gfd-three.module.js
           grep -q 'google-search-patch.js' site-dist/GoldFireDragonBrowser.html
           grep -q 'gfd-3d-viewer.js' site-dist/GoldFireDragonBrowser.html
 
