@@ -1,24 +1,39 @@
-name: Firecrawl integration tests
+name: Repair npm lock and test Firecrawl
 on:
   push:
     branches: [fix/free-api-local-gguf-engine-20261018]
     paths:
-      - 'lib/firecrawl-handler.mjs'
-      - 'api/firecrawl.js'
-      - 'firecrawl-panel.js'
-      - 'tests/firecrawl.test.mjs'
       - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/firecrawl-tests.yml'
+      - 'lib/firecrawl-handler.mjs'
+      - 'tests/firecrawl.test.mjs'
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
-  test:
+  repair-lock-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install Firecrawl SDK
-        run: npm install --no-save --ignore-scripts firecrawl@4.50.0
+          cache: npm
+      - name: Synchronize npm lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Verify clean installation
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Test Firecrawl integration
-        run: node --test tests/firecrawl.test.mjs
+        run: npm run firecrawl:test
+      - name: Commit regenerated lockfile
+        run: |
+          if ! git diff --quiet -- package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "fix: synchronize npm lockfile for Firecrawl"
+            git push origin HEAD:${{ github.ref_name }}
+          fi
