@@ -36,7 +36,10 @@
     "vpngate:test": "node --test tests/vpngate-directory.test.mjs tests/vpngate-api.test.mjs",
     "ovpn:web:test": "node --test tests/ovpn-web.test.mjs",
     "vpn:node-openvpn:check": "node scripts/check-node-openvpn.mjs",
-    "vpn:piajs:check": "node scripts/check-piajs.mjs"
+    "vpn:piajs:check": "node scripts/check-piajs.mjs",
+    "private-vpn:install": "npm install --prefix private-vpn-server",
+    "private-vpn:start": "npm start --prefix private-vpn-server",
+    "private-vpn:test": "node --test tests/private-vpn-server.test.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
