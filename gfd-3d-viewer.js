@@ -1,71 +1,77 @@
-/* Optional 3D image / 360 panorama viewer. Does not modify existing images or navigation. */
-(function () {
-  'use strict';
-  const id='gfd-3d-viewer';
-  let enginePromise;
-  let loadVersion=0;
-  function engine(){
-    return enginePromise ||= import('https://cdn.jsdelivr.net/npm/three@0.181.2/build/three.module.js');
-  }
-  function open(){
-    let dialog=document.getElementById(id);
-    if(dialog){dialog.hidden=false;return;}
-    dialog=document.createElement('section');
-    dialog.id=id;
-    dialog.setAttribute('aria-label','3D 및 360도 이미지 뷰어');
-    dialog.style.cssText='position:fixed;inset:8% 8%;z-index:2147483005;background:#10111b;color:#fff;border:1px solid #d4af37;border-radius:12px;padding:12px;box-sizing:border-box;display:flex;flex-direction:column;gap:8px;';
-    dialog.innerHTML='<div style="display:flex;gap:8px;align-items:center"><strong>🌐 3D / 360° 이미지</strong><button type="button" data-close style="margin-left:auto">닫기</button></div><div style="display:flex;gap:8px"><input aria-label="이미지 URL" placeholder="https://... 이미지 주소" style="flex:1;min-width:0"><button type="button" data-load>열기</button></div><div data-canvas style="flex:1;min-height:120px;overflow:hidden;background:#000"></div><p data-status role="status" style="margin:0;font:12px system-ui">이미지 주소를 입력하세요.</p>';
-    document.body.appendChild(dialog);
-    const area=dialog.querySelector('[data-canvas]'), status=dialog.querySelector('[data-status]');
-    let renderer,scene,camera,mesh,resize,raf,drag=false,lastX=0,lastY=0,THREE,panorama=false;
-    function stop(){
-      cancelAnimationFrame(raf);resize?.disconnect();
-      if(mesh){mesh.material.map?.dispose();mesh.material.dispose();mesh.geometry.dispose();}
-      renderer?.dispose();renderer?.domElement.remove();renderer=null;mesh=null;
-    }
-    dialog.querySelector('[data-close]').addEventListener('click',()=>{loadVersion++;stop();dialog.remove();});
-    dialog.querySelector('[data-load]').addEventListener('click',async()=>{
-      const raw=dialog.querySelector('input').value.trim();
-      let url;
-      try{url=new URL(raw);if(!['http:','https:'].includes(url.protocol))throw Error('invalid');}
-      catch{status.textContent='HTTP(S) 이미지 주소를 입력하세요.';return;}
-      const version=++loadVersion;
-      stop();
-      status.textContent='3D 엔진 로딩 중…';
-      try{
-        THREE=await engine();
-        if(version!==loadVersion)return;
-        scene=new THREE.Scene();
-        camera=new THREE.PerspectiveCamera(75,1,0.1,1100);
-        renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});
-        renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
-        area.appendChild(renderer.domElement);
-        const texture=await new THREE.TextureLoader().loadAsync(url.href);
-        if(version!==loadVersion){texture.dispose();return;}
-        panorama=texture.image.width/texture.image.height>1.9;
-        const geometry=panorama?new THREE.SphereGeometry(500,60,40):new THREE.PlaneGeometry(5*texture.image.width/texture.image.height,5);
-        if(panorama)geometry.scale(-1,1,1);
-        camera.position.z=panorama?0:7;
-        mesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide}));
-        scene.add(mesh);
-        function size(){const w=area.clientWidth,h=area.clientHeight;if(w&&h){camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h);}}
-        resize=new ResizeObserver(size);resize.observe(area);size();
-        const tick=()=>{raf=requestAnimationFrame(tick);if(mesh&&!drag&&!panorama)mesh.rotation.y+=0.002;renderer.render(scene,camera);};tick();
-        status.textContent=panorama?'360° 파노라마 표시 중':'이미지 3D 평면 표시 중';
-      }catch(e){if(version!==loadVersion)return;stop();status.textContent='표시 실패: 이미지 CORS 또는 WebGL 환경을 확인하세요.';console.warn('[GFD 3D]',e);}
-    });
-    area.addEventListener('pointerdown',e=>{drag=true;lastX=e.clientX;lastY=e.clientY;area.setPointerCapture(e.pointerId);});
-    area.addEventListener('pointermove',e=>{if(drag&&mesh){mesh.rotation.y+=(e.clientX-lastX)*0.005;mesh.rotation.x+=(e.clientY-lastY)*0.005;lastX=e.clientX;lastY=e.clientY;}});
-    area.addEventListener('pointerup',()=>{drag=false;});
-    area.addEventListener('pointercancel',()=>{drag=false;});
-  }
-  window.GFD3DEngine=Object.freeze({open});
-  function mount(){
-    if(document.getElementById('gfd-3d-toggle'))return;
-    const button=document.createElement('button');
-    button.id='gfd-3d-toggle';button.type='button';button.textContent='🌐 3D / 360°';
-    button.style.cssText='position:fixed;left:12px;bottom:12px;z-index:2147482998;background:#161925;color:#d4af37;border:1px solid #8c52ff;border-radius:12px;padding:10px 14px;font:600 14px system-ui;cursor:pointer';
-    button.addEventListener('click',open);document.body.appendChild(button);
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
+/* GoldFireDragon automatic image 3D/panorama enhancement.
+   No extra button. Original image stays visible if rendering fails. */
+(function(){
+'use strict';
+const active=new WeakSet();
+let threePromise;
+const loadThree=()=>threePromise ||= import('https://cdn.jsdelivr.net/npm/three@0.181.2/build/three.module.js').catch(e=>{threePromise=null;throw e;});
+const reduceMotion=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+let running=0;
+const LIMIT=3;
+const observer=new IntersectionObserver(entries=>{
+ for(const entry of entries)if(entry.isIntersecting){observer.unobserve(entry.target);void enhance(entry.target);}
+},{rootMargin:'180px'});
+function eligible(img){
+ if(active.has(img)||!img.isConnected||!img.complete||!img.naturalWidth)return false;
+ if(img.closest('button,a,nav,header,footer,[role="button"],[data-no-3d],#gfd-pia-widget'))return false;
+ if(img.naturalWidth<320||img.naturalHeight<160||img.clientWidth<240||img.clientHeight<120)return false;
+ return true;
+}
+async function enhance(img){
+ if(!eligible(img)||running>=LIMIT)return;
+ active.add(img);running++;
+ let renderer,texture,mesh,resize,frame,wrapper,scene,camera,visible=true;
+ try{
+  const THREE=await loadThree();
+  if(!img.isConnected)return;
+  wrapper=document.createElement('span');
+  wrapper.className='gfd-auto-3d';
+  wrapper.style.cssText='display:inline-block;position:relative;vertical-align:middle;max-width:100%;width:'+img.clientWidth+'px;height:'+img.clientHeight+'px;';
+  const parent=img.parentNode;
+  parent.insertBefore(wrapper,img);wrapper.appendChild(img);
+  img.style.width='100%';img.style.height='100%';img.style.objectFit='contain';
+  scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(70,1,0.1,1100);
+  renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+  const canvas=renderer.domElement;
+  canvas.style.cssText='position:absolute;inset:0;width:100%;height:100%;touch-action:pan-y;cursor:grab;';
+  wrapper.appendChild(canvas);
+  const url=img.currentSrc||img.src;
+  texture=await new THREE.TextureLoader().loadAsync(url);
+  if(!wrapper.isConnected)return;
+  const panoramic=texture.image.width/texture.image.height>=1.9;
+  const geometry=panoramic?new THREE.SphereGeometry(500,48,32):new THREE.PlaneGeometry(5*texture.image.width/texture.image.height,5);
+  if(panoramic)geometry.scale(-1,1,1);
+  camera.position.z=panoramic?0:Math.max(6,3*texture.image.width/texture.image.height);
+  mesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide}));
+  scene.add(mesh);
+  const size=()=>{const w=wrapper.clientWidth,h=wrapper.clientHeight;if(w&&h){camera.aspect=w/h;camera.updateProjectionMatrix();renderer.setSize(w,h,false);}};
+  resize=new ResizeObserver(size);resize.observe(wrapper);size();
+  let dragging=false,lastX=0,lastY=0;
+  canvas.addEventListener('pointerdown',e=>{dragging=true;lastX=e.clientX;lastY=e.clientY;canvas.setPointerCapture(e.pointerId);});
+  canvas.addEventListener('pointermove',e=>{if(!dragging)return;mesh.rotation.y+=(e.clientX-lastX)*0.004;mesh.rotation.x+=(e.clientY-lastY)*0.004;lastX=e.clientX;lastY=e.clientY;});
+  canvas.addEventListener('pointerup',()=>dragging=false);
+  canvas.addEventListener('pointercancel',()=>dragging=false);
+  const render=()=>{if(!wrapper.isConnected){cleanup();return;}frame=requestAnimationFrame(render);if(!dragging&&!reduceMotion&&!panoramic)mesh.rotation.y+=0.001;renderer.render(scene,camera);};
+  function cleanup(){cancelAnimationFrame(frame);resize?.disconnect();mesh?.geometry.dispose();mesh?.material.dispose();texture?.dispose();renderer?.dispose();}
+  img.style.visibility='hidden';
+  render();
+ }catch(err){
+  console.warn('[GFD auto 3D] original image preserved:',err);
+  if(img)img.style.visibility='';
+  if(wrapper?.isConnected){wrapper.parentNode.insertBefore(img,wrapper);wrapper.remove();}
+  resize?.disconnect();if(mesh){mesh.geometry.dispose();mesh.material.dispose();}texture?.dispose();renderer?.dispose();
+ }finally{running--;}
+}
+function scan(root=document){
+ const images=root.querySelectorAll?.('img')||[];
+ for(const img of images)if(!active.has(img)){
+  if(img.complete){if(eligible(img))observer.observe(img);}
+  else img.addEventListener('load',()=>{if(eligible(img))observer.observe(img);},{once:true});
+ }
+}
+const mutations=new MutationObserver(changes=>{for(const change of changes)for(const node of change.addedNodes)if(node.nodeType===1){if(node.matches?.('img')&&!active.has(node))scan(node.parentElement||document);else scan(node);}});
+function init(){scan();mutations.observe(document.body,{childList:true,subtree:true});}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+window.GFD3DEngine=Object.freeze({rescan:()=>scan()});
 })();
