@@ -9,6 +9,7 @@ on:
       - 'GoldFireDragonBrowser.html'
       - 'gfd-3d-viewer.js'
       - 'google-search-patch.js'
+      - 'tests/gfd-3d-browser.mjs'
       - 'scripts/build-static-site.mjs'
       - '.github/workflows/pages-single-deploy.yml'
 
@@ -43,6 +44,12 @@ jobs:
           grep -q 'google-search-patch.js' site-dist/GoldFireDragonBrowser.html
           grep -q 'gfd-3d-viewer.js' site-dist/GoldFireDragonBrowser.html
 
+      - name: Install Chromium for 3D browser smoke test
+        run: |
+          npm install --no-save --ignore-scripts playwright@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Verify 3D browser integration in Chromium
+        run: node tests/gfd-3d-browser.mjs
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b
         with:
           path: site-dist
