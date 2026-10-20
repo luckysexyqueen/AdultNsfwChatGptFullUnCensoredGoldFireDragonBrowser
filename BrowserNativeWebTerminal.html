@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>GoldFireDragon | Tokyo Gateway Web Terminal</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
   <style>
     :root{--bg-color:#0d0e15;--panel-color:#161925;--accent-color:#d4af37;--cyber-cyan:#b48aff;--text-color:#f8f8f2}
     .grid-layout{display:grid;grid-template-columns:340px minmax(0,1fr);gap:20px}
@@ -30,8 +30,8 @@
   <div id="terminal" aria-label="WebContainer terminal"></div></main></div>
   <div class="config-panel">🔧 PIA / SOCKS5: wscat은 WebSocket 클라이언트이며 VPN 터널을 만들지 않습니다. 실제 프록시 연결에는 별도의 정상적인 엔드포인트가 필요합니다.</div></div>
   <script type="module">
-    import { Terminal } from 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/+esm';
-    import { FitAddon } from 'https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/+esm';
+    import { Terminal } from 'https://cdn.jsdelivr.net/npm/xterm@5.3.0/+esm';
+    import { FitAddon } from 'https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/+esm';
     import { WebContainer } from 'https://cdn.jsdelivr.net/npm/@webcontainer/api@1.6.1/+esm';
 
     const status = document.getElementById('status');
