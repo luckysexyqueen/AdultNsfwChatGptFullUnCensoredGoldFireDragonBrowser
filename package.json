@@ -35,7 +35,8 @@
     "firecrawl:test": "node --test tests/firecrawl.test.mjs",
     "vpngate:test": "node --test tests/vpngate-directory.test.mjs tests/vpngate-api.test.mjs",
     "ovpn:web:test": "node --test tests/ovpn-web.test.mjs",
-    "vpn:node-openvpn:check": "node scripts/check-node-openvpn.mjs"
+    "vpn:node-openvpn:check": "node scripts/check-node-openvpn.mjs",
+    "vpn:piajs:check": "node scripts/check-piajs.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -157,6 +158,7 @@
     "vite": "^5.4.1"
   },
   "optionalDependencies": {
-    "node-openvpn": "0.1.1"
+    "node-openvpn": "0.1.1",
+    "piajs": "0.1.2"
   }
 }
