@@ -61,7 +61,18 @@ jobs:
           echo "Targeting verified Cloudflare Pages account and existing project"
           echo "Cloudflare token must be authorized for account ba9f503376f9f52c15ea9ee2ee7a39af (Pages Edit)."
           npx --yes wrangler@4 pages project list
-          npx --yes wrangler@4 pages deploy site-dist --project-name goldfiredragon-browser-web --branch main --commit-dirty=true
+          npx --yes wrangler@4 pages deploy site-dist --project-name goldfiredragon-browser-web --branch fix/free-api-local-gguf-engine-20261018 --commit-dirty=true
+      - name: Verify production terminal URL and WebContainer isolation headers
+        run: |
+          for attempt in $(seq 1 12); do
+            if curl -fsS -D /tmp/gfd-terminal-headers -o /tmp/gfd-terminal-page --max-time 15 https://goldfiredragon-browser-web.pages.dev/BrowserNativeWebTerminal.html; then
+              if grep -qi '<html' /tmp/gfd-terminal-page && grep -qi '^cross-origin-opener-policy: same-origin' /tmp/gfd-terminal-headers && grep -qi '^cross-origin-embedder-policy: require-corp' /tmp/gfd-terminal-headers; then
+                echo 'Terminal page and isolation headers verified'; exit 0
+              fi
+            fi
+            sleep 5
+          done
+          echo '::error::Production terminal missing or isolation headers absent'; exit 1
       - name: Verify the live website renders HTML
         run: |
           for attempt in $(seq 1 12); do
