@@ -7,6 +7,7 @@
     <script src="./webviews/chromium/adapter.js"></script>
     <script src="./webviews/custom/adapter.js"></script>
     <script src="./inapp-browser.js"></script>
+    <script src="./google-search-patch.js"></script>
     <script id="gfd-hard-search-router">
       (function () {
         "use strict";
@@ -1958,10 +1959,7 @@
             return;
           }
           // 무로그인 및 성인/연령제한 완전 우회 파라미터 적용
-          const searchUrl =
-            `https://www.google.co.jp/search?q=${encodeURIComponent(keyword)}&gl=jp&hl=ko&safe=off&nfpr=1&filter=0&pws=0&desktop=true&adult=true&age=19&is_adult=Y&adult_auth=true&has_login=true` +
-            (lucky ? "&btnI=1" : "");
-          // GitHub Pages is static: navigate to the real Google search URL.
+          const searchUrl = window.GFDGooglePatch.buildGoogleSearchURL(keyword, { lucky });
           void window.GFDOpenSearch(searchUrl);
         }
 
