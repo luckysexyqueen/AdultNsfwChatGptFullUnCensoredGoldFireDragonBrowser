@@ -42,6 +42,7 @@ async function enhance(img){
   holder.dataset.gfd3dContainer='true';
   holder.style.cssText='display:inline-block;position:relative;vertical-align:middle;max-width:100%;overflow:hidden;';
   holder.style.width=rect.width+'px';holder.style.height=rect.height+'px';
+  holder.dataset.gfd3dStatus='loading';
   const scene=new THREE.Scene();
   const camera=new THREE.PerspectiveCamera(75,rect.width/rect.height,.1,1100);
   renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});
@@ -125,6 +126,7 @@ async function enhance(img){
    scene.add(keyLight);
   }
   const mesh=new THREE.Mesh(geometry,material);scene.add(mesh);
+  if(!isPanorama){mesh.rotation.y=-0.24;mesh.rotation.x=-0.08;}
   // Optional AI completion service: accepts a source image and returns a generated
   // rear-view texture. Never transmit images unless the site explicitly configures it.
   // This does not pretend that a mirror of the front is an AI-generated hidden view.
@@ -158,6 +160,7 @@ async function enhance(img){
   holder.appendChild(img);
   img.style.position='relative';img.style.opacity='0';
   img.style.pointerEvents='auto';
+  renderer.domElement.setAttribute('aria-hidden','true');
   active.add(img);pending.delete(img);
   let dragging=false,x=0,y=0,frame=0;
   holder.addEventListener('pointerdown',e=>{if(e.target.closest('a,button,input'))return;dragging=true;x=e.clientX;y=e.clientY;holder.setPointerCapture(e.pointerId);});
@@ -169,7 +172,21 @@ async function enhance(img){
    if(!holder.isConnected){holder.dispatchEvent(new Event('gfd-dispose'));observer.disconnect();geometry.dispose();material.dispose();texture.dispose();renderer.dispose();return;}
    frame=requestAnimationFrame(tick);
    if(!dragging)mesh.rotation.y+=(isPanorama?0.0008:0.002);
-   renderer.render(scene,camera);
+   try {
+    renderer.render(scene,camera);
+    if(holder.dataset.gfd3dStatus!=='rendered'){
+      const gl=renderer.getContext();
+      if(gl.isContextLost())throw Error('WebGL context lost');
+      holder.dataset.gfd3dStatus='rendered';
+      holder.dataset.gfd3dFrame='1';
+    }
+   }catch(renderError){
+    holder.dataset.gfd3dStatus='failed';
+    img.style.opacity='1';
+    console.warn('[GFD 3D] Render failed, restoring source image:',renderError);
+    cancelAnimationFrame(frame);
+    observer.disconnect();geometry.dispose();material.dispose();texture.dispose();renderer.dispose();
+   }
   }
   tick();
  }catch(err){
