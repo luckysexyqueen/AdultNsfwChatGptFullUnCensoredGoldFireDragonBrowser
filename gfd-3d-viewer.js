@@ -30,9 +30,34 @@ async function enhance(img){
   renderer.setSize(rect.width,rect.height);
   texture=await new THREE.TextureLoader().loadAsync(img.currentSrc||img.src);
   if(!img.isConnected){texture.dispose();renderer.dispose();pending.delete(img);return;}
-  const geometry=isPanorama?new THREE.SphereGeometry(500,48,32):new THREE.PlaneGeometry(5*ratio,5);
+  // A segmented relief mesh provides real Z geometry rather than rotating a flat card.
+  // Brightness is only an approximate depth cue; it is not AI depth reconstruction.
+  const geometry=isPanorama?new THREE.SphereGeometry(500,48,32):new THREE.PlaneGeometry(5*ratio,5,64,64);
   if(isPanorama)geometry.scale(-1,1,1);
-  camera.position.z=isPanorama?0:Math.max(4,3.4*ratio);
+  else {
+   try{
+    const depthCanvas=document.createElement('canvas');
+    depthCanvas.width=depthCanvas.height=128;
+    const context=depthCanvas.getContext('2d',{willReadFrequently:true});
+    context.drawImage(texture.image,0,0,128,128);
+    const pixels=context.getImageData(0,0,128,128).data;
+    const positions=geometry.attributes.position;
+    const uvs=geometry.attributes.uv;
+    for(let i=0;i<positions.count;i++){
+     const px=Math.min(127,Math.max(0,Math.floor(uvs.getX(i)*127)));
+     const py=Math.min(127,Math.max(0,Math.floor((1-uvs.getY(i))*127)));
+     const index=(py*128+px)*4;
+     const alpha=pixels[index+3]/255;
+     const brightness=(pixels[index]*0.2126+pixels[index+1]*0.7152+pixels[index+2]*0.0722)/255;
+     positions.setZ(i,alpha*(0.12+brightness*0.48));
+    }
+    positions.needsUpdate=true;
+    geometry.computeVertexNormals();
+   }catch(depthError){
+    console.warn('[GFD 3D] Depth sampling unavailable; using 3D mesh fallback',depthError);
+   }
+  }
+  camera.position.z=isPanorama?0:Math.max(6,4.5*ratio);
   const material=new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide,transparent:true});
   const mesh=new THREE.Mesh(geometry,material);scene.add(mesh);
   holder.appendChild(renderer.domElement);
