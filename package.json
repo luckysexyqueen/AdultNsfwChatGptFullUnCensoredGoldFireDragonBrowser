@@ -141,7 +141,10 @@
     "@goldfiredragon/vpngate-api": "file:packages/vpngate-api",
     "@goldfiredragon/ovpn-web": "file:packages/ovpn-web",
     "websocket-stream": "^5.5.2",
-    "socks-proxy-agent": "^10.1.0"
+    "socks-proxy-agent": "^10.1.0",
+    "node-openvpn": "0.1.1",
+    "node-pty": "^1.1.0",
+    "socket.io": "^4.8.4"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
@@ -163,7 +166,6 @@
     "vite": "^5.4.1"
   },
   "optionalDependencies": {
-    "node-openvpn": "0.1.1",
     "piajs": "0.1.2"
   }
 }
