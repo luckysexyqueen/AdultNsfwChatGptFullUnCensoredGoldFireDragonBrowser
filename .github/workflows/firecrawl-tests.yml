@@ -1,0 +1,24 @@
+name: Firecrawl integration tests
+on:
+  push:
+    branches: [fix/free-api-local-gguf-engine-20261018]
+    paths:
+      - 'lib/firecrawl-handler.mjs'
+      - 'api/firecrawl.js'
+      - 'firecrawl-panel.js'
+      - 'tests/firecrawl.test.mjs'
+      - 'package.json'
+      - '.github/workflows/firecrawl-tests.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Firecrawl SDK
+        run: npm install --no-save --ignore-scripts firecrawl@4.50.0
+      - name: Test Firecrawl integration
+        run: node --test tests/firecrawl.test.mjs
