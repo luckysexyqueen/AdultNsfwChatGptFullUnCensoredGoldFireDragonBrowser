@@ -68,6 +68,14 @@ export async function buildStatic(output = path.join(root, 'site-dist')) {
     for (const icon of shortcut.icons || []) icon.src = './' + icon.src.replace(/^\/+/, '');
   }
   await writeFile(path.join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+  // Cloudflare Pages applies these headers; GitHub Pages ignores _headers.
+  await writeFile(path.join(output, '_headers'), [
+    '/*',
+    '  Cross-Origin-Opener-Policy: same-origin',
+    '  Cross-Origin-Embedder-Policy: require-corp',
+    '  Cross-Origin-Resource-Policy: same-origin',
+    ''
+  ].join('\\n'));
   await writeFile(path.join(output, '.nojekyll'), '');
   console.log(`Static site prepared: ${output}`);
   return output;
