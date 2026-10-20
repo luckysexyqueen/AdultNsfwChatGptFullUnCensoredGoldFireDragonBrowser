@@ -6,21 +6,21 @@
   <title>GoldFireDragon | Tokyo Gateway Web Terminal</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
   <style>
-    :root{--bg-color:#0d0e15;--panel-color:#161925;--accent-color:#ff79c6;--cyber-cyan:#8be9fd;--text-color:#f8f8f2}
+    :root{--bg-color:#0d0e15;--panel-color:#161925;--accent-color:#d4af37;--cyber-cyan:#b48aff;--text-color:#f8f8f2}
     .grid-layout{display:grid;grid-template-columns:340px minmax(0,1fr);gap:20px}
     .widget-panel{background:var(--panel-color);padding:20px;border:1px solid #21263e;border-radius:12px}
     .widget-title{color:#6272a4;border-bottom:1px solid #21263e;padding-bottom:8px;font-weight:bold;font-size:13px}
     .status-item{display:flex;justify-content:space-between;gap:12px;margin:14px 0;font-size:14px}
-    .status-val.online{color:#50fa7b}.status-val.loading{color:#ffb300}
+    .status-val.online{color:#d4af37}.status-val.loading{color:#ffb300}
     .action-btn{width:100%;background:#21263e;color:#fff;border:1px solid #3b4468;padding:12px;border-radius:6px;cursor:pointer}
     .action-btn:hover{background:var(--accent-color);color:#000}
     .action-btn:disabled{opacity:.5;cursor:not-allowed}
-    #system-clock{color:#8be9fd;font-size:13px}
+    #system-clock{color:#b48aff;font-size:13px}
     @media(max-width:720px){.grid-layout{grid-template-columns:1fr}}
 
     body { margin:0; background:var(--bg-color); color:var(--text-color); padding:30px; font-family:system-ui,sans-serif; }
     #terminal { height: min(70vh,650px); background:#000; border-radius:8px; padding:12px; }
-    .container{max-width:1000px;margin:auto}.header{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #282a36;gap:12px}h1{color:var(--accent-color)}.badge{background:#ff5555;border-radius:20px;padding:6px 12px}.badge.ready{background:#50fa7b;color:#282a36}.desc-box,.config-panel{background:#1d1f27;padding:15px;border-radius:6px;margin:20px 0}.desc-box{border-left:4px solid #bd93f9}#status{color:#bd93f9;min-height:1.5em}
+    .container{max-width:1000px;margin:auto}.header{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #282a36;gap:12px}h1{color:var(--accent-color)}.badge{background:#ff5555;border-radius:20px;padding:6px 12px}.badge.ready{background:#b48aff;color:#171121}.desc-box,.config-panel{background:#1d1f27;padding:15px;border-radius:6px;margin:20px 0}.desc-box{border-left:4px solid #8c52ff}#status{color:#b48aff;min-height:1.5em}
   </style>
 </head>
 <body>
