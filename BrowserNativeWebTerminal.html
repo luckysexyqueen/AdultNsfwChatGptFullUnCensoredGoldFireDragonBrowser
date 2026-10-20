@@ -34,7 +34,7 @@
   <script type="module">
     import { Terminal } from 'https://cdn.jsdelivr.net/npm/@xterm/xterm@6.0.0/+esm';
     import { FitAddon } from 'https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.11.0/+esm';
-    import { WebContainer } from 'https://cdn.jsdelivr.net/npm/@webcontainer/api@1.6.4/+esm';
+    // Load WebContainer only when isolation is available; CDN failure must not blank the terminal.
 
     const status = document.getElementById('status');
     const term = new Terminal({ cursorBlink: true, convertEol: true, theme: { background:'#000000' } });
@@ -64,6 +64,7 @@
         throw new Error('현재 호스팅은 WebContainer 실행에 필요한 COOP/COEP 헤더를 제공하지 않습니다. 헤더 지원 호스팅에서 열어주세요.');
       }
       report('WebContainer 부팅 중...');
+      const { WebContainer } = await import('https://cdn.jsdelivr.net/npm/@webcontainer/api@1.6.4/+esm');
       const instance = await WebContainer.boot();
       const gitScript = "import git from 'isomorphic-git';\nimport http from 'isomorphic-git/http/web/index.js';\nimport fs from 'node:fs';\nimport path from 'node:path';\nconst [command,location,...args]=process.argv.slice(2);\nconst root=process.cwd();\nconst dir=path.resolve(root,command==='clone'?new URL(location).pathname.split('/').filter(Boolean).pop()?.replace(/\\.git$/,''):location||'.');\nconst auth=()=>({username:process.env.GITHUB_USER||'x-access-token',password:process.env.GITHUB_TOKEN||''});\nconst corsProxy=process.env.GIT_CORS_PROXY||undefined;\ntry{\n if(command==='clone') {if(!/^https:\\/\\/github\\.com\\/[\\w.-]+\\/[\\w.-]+(?:\\.git)?\\/?$/.test(location))throw Error('GitHub HTTPS 저장소 URL 필요');await git.clone({fs,http,dir,url:location,corsProxy,onAuth:auth,singleBranch:true,depth:1});console.log('Cloned to',dir);}\n else if(command==='status'){console.log(await git.statusMatrix({fs,dir}));}\n else if(command==='add'){if(!args[0])throw Error('파일 경로 필요');await git.add({fs,dir,filepath:args[0]});console.log('Staged',args[0]);}\n else if(command==='commit'){const message=args.join(' ').trim();if(!message)throw Error('커밋 메시지 필요');console.log(await git.commit({fs,dir,message,author:{name:process.env.GIT_AUTHOR_NAME||'WebContainer User',email:process.env.GIT_AUTHOR_EMAIL||'webcontainer@localhost'}}));}\n else if(command==='push'){if(!process.env.GITHUB_TOKEN)throw Error('GITHUB_TOKEN 환경 변수 필요');console.log(await git.push({fs,http,dir,remote:'origin',corsProxy,onAuth:auth}));}\n else console.log('Usage: node git-web.mjs clone URL | status DIR | add DIR FILE | commit DIR MESSAGE | push DIR');\n}catch(error){console.error('Git 오류:',error.message);process.exitCode=1;}\n";
       await instance.fs.writeFile('git-web.mjs',gitScript);
@@ -99,6 +100,7 @@
       kernelStatus.textContent='FAILED';
       report('실행 실패: '+error.message);
       term.writeln('현재 브라우저나 호스팅에서 WebContainer 실행이 지원되지 않을 수 있습니다.');
+      term.writeln('Cloudflare Pages에서 COOP/COEP 응답 헤더와 외부 CDN 접근을 확인하세요.');
     }
   </script>
 </body>
