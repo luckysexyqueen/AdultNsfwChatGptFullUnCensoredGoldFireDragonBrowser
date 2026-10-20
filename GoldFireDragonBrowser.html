@@ -2262,16 +2262,16 @@ output.appendChild(p);
 <script src="./firecrawl-panel.js" defer></script>
 
 <!-- Standalone WebContainer terminal launcher: does not modify browser navigation or search. -->
-<a id="gfd-web-terminal-launcher" href="./BrowserNativeWebTerminal.html" target="_blank" rel="noopener noreferrer" title="브라우저 가상 터미널 열기" style="position:fixed;right:18px;bottom:18px;z-index:2147483000;background:#161b2c;color:#fff;border:1px solid #80aaff;border-radius:12px;padding:10px 14px;text-decoration:none;font:600 14px system-ui,sans-serif;box-shadow:0 3px 14px #0008;">💻 웹 터미널</a>
+<!-- Terminal launcher is available inside the collapsed VPN dock, leaving the browser viewport clear. -->
 
 <!-- GoldFireDragon Tokyo VPN status widget (does not claim or initiate a VPN tunnel). -->
-<section class="pia-vpn-widget" id="gfd-pia-widget" style="position:fixed;right:18px;bottom:68px;z-index:2147482999;background:#161925;padding:16px;border-radius:12px;border:1px solid #6542a4;width:min(420px,calc(100vw - 36px));color:#f8f8f2;box-shadow:0 5px 25px #0009;" hidden>
+<section class="pia-vpn-widget" id="gfd-pia-widget" style="position:fixed;right:12px;bottom:58px;z-index:2147482999;max-height:min(70vh,460px);overflow:auto;background:#161925;padding:16px;border-radius:12px;border:1px solid #6542a4;width:min(380px,calc(100vw - 24px));color:#f8f8f2;box-shadow:0 5px 25px #0009;" hidden>
   <div style="display:flex;justify-content:space-between;gap:10px;margin-bottom:12px;"><strong style="color:#d4af37;">🇯🇵 PIA Tokyo Private Tunnel</strong><span id="gfd-vpn-kernel-status" style="color:#b48aff;font-weight:bold;">미확인</span></div>
   <div id="gfd-vpn-terminal-box" style="height:170px;background:#000;border-radius:8px;padding:10px;box-sizing:border-box;overflow:auto;font:12px monospace;white-space:pre-wrap;" role="log">VPN 상태 조회 대기 중...</div>
   <button id="gfd-vpn-btn-connect" type="button" style="width:100%;margin-top:12px;padding:12px;background:#21263e;color:#d4af37;border:1px solid #8c52ff;border-radius:6px;cursor:pointer;font-weight:bold;">도쿄 게이트웨이 연결 상태 확인</button>
   <a href="./BrowserNativeWebTerminal.html" target="_blank" rel="noopener noreferrer" style="display:block;margin-top:10px;color:#b48aff;">💻 전체 웹 터미널 열기</a>
 </section>
-<button id="gfd-vpn-widget-toggle" type="button" aria-controls="gfd-pia-widget" aria-expanded="false" style="position:fixed;right:145px;bottom:18px;z-index:2147483000;background:#161925;color:#d4af37;border:1px solid #8c52ff;border-radius:12px;padding:10px 14px;font:600 14px system-ui,sans-serif;cursor:pointer;">🇯🇵 VPN 상태</button>
+<button id="gfd-vpn-widget-toggle" type="button" aria-controls="gfd-pia-widget" aria-expanded="false" style="position:fixed;right:12px;bottom:12px;z-index:2147483000;background:#161925;color:#d4af37;border:1px solid #8c52ff;border-radius:12px;padding:10px 14px;font:600 14px system-ui,sans-serif;cursor:pointer;">🇯🇵 VPN · 터미널</button>
 <script type="module" src="./vpn-widget.js"></script>
 </body>
 
