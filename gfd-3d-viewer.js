@@ -3,6 +3,7 @@
   'use strict';
   const id='gfd-3d-viewer';
   let enginePromise;
+  let loadVersion=0;
   function engine(){
     return enginePromise ||= import('https://cdn.jsdelivr.net/npm/three@0.181.2/build/three.module.js');
   }
@@ -22,21 +23,25 @@
       if(mesh){mesh.material.map?.dispose();mesh.material.dispose();mesh.geometry.dispose();}
       renderer?.dispose();renderer?.domElement.remove();renderer=null;mesh=null;
     }
-    dialog.querySelector('[data-close]').addEventListener('click',()=>{stop();dialog.remove();});
+    dialog.querySelector('[data-close]').addEventListener('click',()=>{loadVersion++;stop();dialog.remove();});
     dialog.querySelector('[data-load]').addEventListener('click',async()=>{
       const raw=dialog.querySelector('input').value.trim();
       let url;
       try{url=new URL(raw);if(!['http:','https:'].includes(url.protocol))throw Error('invalid');}
       catch{status.textContent='HTTP(S) 이미지 주소를 입력하세요.';return;}
+      const version=++loadVersion;
+      stop();
       status.textContent='3D 엔진 로딩 중…';
       try{
         THREE=await engine();
-        stop();scene=new THREE.Scene();
+        if(version!==loadVersion)return;
+        scene=new THREE.Scene();
         camera=new THREE.PerspectiveCamera(75,1,0.1,1100);
         renderer=new THREE.WebGLRenderer({alpha:true,antialias:true});
         renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
         area.appendChild(renderer.domElement);
         const texture=await new THREE.TextureLoader().loadAsync(url.href);
+        if(version!==loadVersion){texture.dispose();return;}
         panorama=texture.image.width/texture.image.height>1.9;
         const geometry=panorama?new THREE.SphereGeometry(500,60,40):new THREE.PlaneGeometry(5*texture.image.width/texture.image.height,5);
         if(panorama)geometry.scale(-1,1,1);
@@ -47,7 +52,7 @@
         resize=new ResizeObserver(size);resize.observe(area);size();
         const tick=()=>{raf=requestAnimationFrame(tick);if(mesh&&!drag&&!panorama)mesh.rotation.y+=0.002;renderer.render(scene,camera);};tick();
         status.textContent=panorama?'360° 파노라마 표시 중':'이미지 3D 평면 표시 중';
-      }catch(e){stop();status.textContent='표시 실패: 이미지 CORS 또는 WebGL 환경을 확인하세요.';console.warn('[GFD 3D]',e);}
+      }catch(e){if(version!==loadVersion)return;stop();status.textContent='표시 실패: 이미지 CORS 또는 WebGL 환경을 확인하세요.';console.warn('[GFD 3D]',e);}
     });
     area.addEventListener('pointerdown',e=>{drag=true;lastX=e.clientX;lastY=e.clientY;area.setPointerCapture(e.pointerId);});
     area.addEventListener('pointermove',e=>{if(drag&&mesh){mesh.rotation.y+=(e.clientX-lastX)*0.005;mesh.rotation.x+=(e.clientY-lastY)*0.005;lastX=e.clientX;lastY=e.clientY;}});
