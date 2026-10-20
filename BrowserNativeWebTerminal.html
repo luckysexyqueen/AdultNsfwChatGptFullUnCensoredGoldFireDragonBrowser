@@ -3,19 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GoldFireDragon | Serverless Web Terminal</title>
+  <title>GoldFireDragon | Tokyo Gateway Web Terminal</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css">
   <style>
-    body { margin:0; background:#0f111a; color:#e1e4ea; padding:30px; font-family:system-ui,sans-serif; }
+    :root{--bg-color:#0d0e15;--panel-color:#161925;--accent-color:#ff79c6;--cyber-cyan:#8be9fd;--text-color:#f8f8f2}
+    .grid-layout{display:grid;grid-template-columns:340px minmax(0,1fr);gap:20px}
+    .widget-panel{background:var(--panel-color);padding:20px;border:1px solid #21263e;border-radius:12px}
+    .widget-title{color:#6272a4;border-bottom:1px solid #21263e;padding-bottom:8px;font-weight:bold;font-size:13px}
+    .status-item{display:flex;justify-content:space-between;gap:12px;margin:14px 0;font-size:14px}
+    .status-val.online{color:#50fa7b}.status-val.loading{color:#ffb300}
+    .action-btn{width:100%;background:#21263e;color:#fff;border:1px solid #3b4468;padding:12px;border-radius:6px;cursor:pointer}
+    .action-btn:hover{background:var(--accent-color);color:#000}
+    .action-btn:disabled{opacity:.5;cursor:not-allowed}
+    #system-clock{color:#8be9fd;font-size:13px}
+    @media(max-width:720px){.grid-layout{grid-template-columns:1fr}}
+
+    body { margin:0; background:var(--bg-color); color:var(--text-color); padding:30px; font-family:system-ui,sans-serif; }
     #terminal { height: min(70vh,650px); background:#000; border-radius:8px; padding:12px; }
-    .container{max-width:1000px;margin:auto}.header{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #282a36;gap:12px}h1{color:#50fa7b}.badge{background:#ff5555;border-radius:20px;padding:6px 12px}.badge.ready{background:#50fa7b;color:#282a36}.desc-box,.config-panel{background:#1d1f27;padding:15px;border-radius:6px;margin:20px 0}.desc-box{border-left:4px solid #bd93f9}#status{color:#bd93f9;min-height:1.5em}
+    .container{max-width:1000px;margin:auto}.header{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #282a36;gap:12px}h1{color:var(--accent-color)}.badge{background:#ff5555;border-radius:20px;padding:6px 12px}.badge.ready{background:#50fa7b;color:#282a36}.desc-box,.config-panel{background:#1d1f27;padding:15px;border-radius:6px;margin:20px 0}.desc-box{border-left:4px solid #bd93f9}#status{color:#bd93f9;min-height:1.5em}
   </style>
 </head>
 <body>
-  <div class="container"><div class="header"><h1>🔒 Serverless Web VPN Terminal</h1><span id="status-badge" class="badge">부팅 중</span></div>
+  <div class="container"><div class="header"><h1>🔒 Serverless Web VPN Terminal</h1><span id="system-clock">JST 확인 중</span><span id="status-badge" class="badge">부팅 중</span></div>
   <div class="desc-box">브라우저 내 Node.js 호환 가상 셸입니다. 실제 Linux 커널이나 OpenVPN 터널은 아닙니다.</div>
-  <p id="status" role="status">터미널 초기화 중...</p>
-  <div id="terminal" aria-label="WebContainer terminal"></div>
+  <div class="grid-layout"><aside class="widget-panel"><div class="widget-title">🇯🇵 Tokyo Gateway / WebContainer</div><div class="status-item"><span>가상 셸:</span><strong id="kernel-status" class="status-val loading">BOOTING</strong></div><div class="status-item"><span>일본 VPN:</span><strong id="vpn-status" class="status-val loading">미확인</strong></div><div class="status-item"><span>대상 지역:</span><span>Japan (Tokyo)</span></div><button id="btn-inject" class="action-btn" type="button" disabled>일본 게이트웨이 상태 확인</button><p style="font-size:12px">가상 셸은 VPN 터널이 아닙니다. 확인 버튼은 연결 상태만 조회하며 트래픽을 변경하지 않습니다.</p></aside><main><p id="status" role="status">터미널 초기화 중...</p>
+  <div id="terminal" aria-label="WebContainer terminal"></div></main></div>
   <div class="config-panel">🔧 PIA / SOCKS5: wscat은 WebSocket 클라이언트이며 VPN 터널을 만들지 않습니다. 실제 프록시 연결에는 별도의 정상적인 엔드포인트가 필요합니다.</div></div>
   <script type="module">
     import { Terminal } from 'https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/+esm';
@@ -27,6 +39,23 @@
     const fit = new FitAddon(); term.loadAddon(fit);
     term.open(document.getElementById('terminal')); fit.fit();
     const badge = document.getElementById('status-badge');
+    const kernelStatus = document.getElementById('kernel-status');
+    const vpnStatus = document.getElementById('vpn-status');
+    const checkButton = document.getElementById('btn-inject');
+    const clock = document.getElementById('system-clock');
+    const updateClock = () => { clock.textContent='JST '+new Intl.DateTimeFormat('ko-KR',{timeZone:'Asia/Tokyo',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(new Date()); };
+    updateClock(); setInterval(updateClock,1000);
+    checkButton.addEventListener('click',async()=>{
+      vpnStatus.textContent='조회 중';
+      try{
+        const response=await fetch('./api/vpn/public-status',{cache:'no-store'});
+        if(!response.ok)throw new Error('HTTP '+response.status);
+        const data=await response.json();
+        const connected=data.connected===true && data.egressVerified===true && data.egressCountry==='JP';
+        vpnStatus.textContent=connected?'일본 출구 검증됨':'연결 미확인';
+        vpnStatus.classList.toggle('online',connected);
+      }catch{vpnStatus.textContent='상태 API 없음';}
+    });
     const report = (message, ready=false) => { status.textContent=message; badge.textContent=ready?'가상 셸 준비 완료':message; badge.classList.toggle('ready',ready); term.writeln(message); };
     try {
       if (!window.isSecureContext || !crossOriginIsolated) throw new Error('WebContainer는 HTTPS 및 COOP/COEP 교차 출처 격리 헤더가 필요합니다.');
@@ -37,8 +66,10 @@
       const writer = shell.input.getWriter();
       term.onData(data => { writer.write(data).catch(error=>report('입력 오류: '+error.message)); });
       window.addEventListener('resize',()=>{fit.fit();shell.resize({cols:term.cols,rows:term.rows});});
+      kernelStatus.textContent='ONLINE'; kernelStatus.classList.add('online'); checkButton.disabled=false;
       report('가상 터미널 준비 완료 (VPN 연결 상태와 무관)',true);
     } catch (error) {
+      kernelStatus.textContent='FAILED';
       report('실행 실패: '+error.message);
       term.writeln('현재 브라우저나 호스팅에서 WebContainer 실행이 지원되지 않을 수 있습니다.');
     }
