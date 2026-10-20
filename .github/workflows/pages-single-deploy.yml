@@ -6,6 +6,7 @@ on:
     branches:
       - fix/free-api-local-gguf-engine-20261018
     paths:
+      - 'index.html'
       - 'GoldFireDragonBrowser.html'
       - 'gfd-3d-viewer.js'
       - 'tests/gfd-3d-browser.mjs'
@@ -15,6 +16,9 @@ on:
       - 'scripts/vpn-control.mjs'
       - 'scripts/vpn-egress.mjs'
       - 'scripts/build-static-site.mjs'
+      - 'sw.js'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/pages-single-deploy.yml'
 
 permissions:
@@ -49,7 +53,10 @@ jobs:
           node --check scripts/web-gateway.mjs
           node --check scripts/vpn-control.mjs
           node --check scripts/vpn-egress.mjs
-      - run: npm run build:static
+      - name: Build static site
+        run: |
+          rm -rf site-dist
+          npm run build:static
       - name: Verify browser assets included in Pages artifact
         run: |
           test -s site-dist/GoldFireDragonBrowser.html
