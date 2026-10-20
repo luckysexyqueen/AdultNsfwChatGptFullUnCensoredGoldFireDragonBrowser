@@ -2042,7 +2042,15 @@
             }
           }
         }
-        japanGoogleBtn.addEventListener("click", launchJapanGoogleProxy);
+        // Google blocks server-side proxy requests with 429. Search from the
+        // user's browser instead; this avoids the blocked Supabase egress.
+        // Keep launchJapanGoogleProxy available for explicit proxy diagnostics.
+        japanGoogleBtn.addEventListener("click", function () {
+          const keyword = (input.value || "").trim();
+          if (!keyword) { input.focus(); return; }
+          const googleTarget = window.GFDGooglePatch.buildGoogleSearchURL(keyword, { lucky: false });
+          void window.GFDOpenSearch(googleTarget);
+        });
 
         // Wayback Machine: URL이면 해당 사이트의 보관 기록을, 검색어면 아카이브 사이트 검색을 연다.
         waybackBtn.addEventListener("click", function () {
