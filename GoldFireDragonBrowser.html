@@ -1977,11 +1977,15 @@
 
         // Japan-targeted Korean Google results via existing same-origin relay.
         // gl=jp/hl=ko/safe=off are preferences, not proof of Japanese egress or bypass.
-        japanGoogleBtn.addEventListener("click", function () {
-          var keyword = (input.value || "").trim();
+        // 🇯🇵 일본 Google 한국어 검색: Supabase Edge Function 연결
+        const GFD_JP_PROXY_SERVER = "https://zuhevuyotcigibupboaz.supabase.co/functions/v1/goldfiredragon-jp-html-relay";
+        function launchJapanGoogleProxy() {
+          const keyword = (input.value || "").trim();
           if (!keyword) { input.focus(); return; }
-          openSearch(keyword, false);
-        });
+          const googleTarget = window.GFDGooglePatch.buildGoogleSearchURL(keyword, { lucky: false });
+          void window.GFDOpenSearch(GFD_JP_PROXY_SERVER + "?target=" + encodeURIComponent(googleTarget));
+        }
+        japanGoogleBtn.addEventListener("click", launchJapanGoogleProxy);
 
         // Wayback Machine: URL이면 해당 사이트의 보관 기록을, 검색어면 아카이브 사이트 검색을 연다.
         waybackBtn.addEventListener("click", function () {
