@@ -44,6 +44,20 @@ export default {
         return json({choices:[{message:{role:'assistant',content:result}}]});
       } catch { return json({error:'AI service temporarily unavailable'},503); }
     }
+    if (url.pathname === '/api/vpn/public-status') {
+      if (request.method !== 'GET') return new Response('Method not allowed', {status:405});
+      const endpoint = env.GFD_VPN_STATUS_URL;
+      if (!endpoint) return json({connected:false,egressVerified:false,egressCountry:null,message:'VPN status host not configured'});
+      try {
+        const target = new URL(endpoint);
+        if (target.protocol !== 'https:' || target.username || target.password || target.origin === url.origin || target.pathname !== '/api/vpn/public-status') return json({connected:false,egressVerified:false,message:'Invalid VPN status host'},503);
+        const upstream = await fetch(target.href,{redirect:'error',signal:AbortSignal.timeout(6000)});
+        if (!upstream.ok) throw new Error('Unavailable');
+        const state = await upstream.json();
+        const verified = state.connected === true && state.egressVerified === true && state.egressCountry === 'JP';
+        return json({connected:verified,egressVerified:verified,egressCountry:verified?'JP':null,message:verified?'Japan VPN verified':'Japan VPN not verified'});
+      } catch {return json({connected:false,egressVerified:false,message:'VPN verification unavailable'},503);}
+    }
     if (url.pathname === '/api/gateway/status') {
       if (request.method !== 'GET') return new Response('Method not allowed', {status:405});
       return json({available:true,mode:'cloudflare-pages-worker',tunnel:false,configured:Boolean(env.GATEWAY_TOKEN),region:'JP',language:'ko-KR',expectedEgressCountry:'JP',deploymentRegion:'cloudflare-edge',japanEgressVerified:false});
