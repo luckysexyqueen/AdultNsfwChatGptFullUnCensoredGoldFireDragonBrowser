@@ -1983,44 +1983,10 @@
           const keyword = (input.value || "").trim();
           if (!keyword) { input.focus(); return; }
           const googleTarget = window.GFDGooglePatch.buildGoogleSearchURL(keyword, { lucky: false });
-          // Keep GOOGLEJAPAN as the single source for the search page.
-          // Supabase's default functions domain may serve HTML as text/plain.
-          // Render HTML returned by the relay inside an isolated browser frame.
+          // Keep the existing desktop layout intact: do not inject a full-screen iframe.
+          // Route the Supabase proxy through the browser's existing navigation UI.
           const proxyUrl = GFD_JP_PROXY_SERVER + "?target=" + encodeURIComponent(googleTarget);
-          try {
-            const response = await fetch(proxyUrl, { credentials: "omit", signal: AbortSignal.timeout(20000) });
-            if (!response.ok) throw new Error("GOOGLEJAPAN HTTP " + response.status);
-            const content = await response.text();
-            const type = response.headers.get("content-type") || "";
-            if (!/<!doctype html|<html[\\s>]/i.test(content.slice(0, 2048)) &&
-                !/text\\/html/i.test(type)) {
-              throw new Error("GOOGLEJAPAN did not return an HTML page");
-            }
-            const frame = document.createElement("iframe");
-            frame.title = "🇯🇵 일본 Google 한국어 검색 결과";
-            frame.setAttribute("sandbox", "allow-forms allow-popups");
-            frame.setAttribute("referrerpolicy", "no-referrer");
-            frame.style.cssText = "position:fixed;inset:0;width:100vw;height:100vh;border:0;background:#fff;z-index:2147483646";
-            const close = document.createElement("button");
-            close.type = "button";
-            close.textContent = "✕ 검색 결과 닫기";
-            close.setAttribute("aria-label", "검색 결과 닫기");
-            close.style.cssText = "position:fixed;top:12px;right:12px;z-index:2147483647;padding:12px;background:#191827;color:white;border:1px solid #999;border-radius:8px;cursor:pointer";
-            const existing = document.getElementById("gfd-japan-proxy-overlay");
-            if (existing) existing.remove();
-            const overlay = document.createElement("div");
-            overlay.id = "gfd-japan-proxy-overlay";
-            close.addEventListener("click", () => overlay.remove());
-            // A base URL resolves relative assets against the original Google URL;
-            // scripts remain disabled by the sandbox for safety.
-            const base = '<base href="' + googleTarget.replace(/&/g, "&amp;").replace(/"/g, "&quot;") + '">';
-            frame.srcdoc = content.replace(/<head([^>]*)>/i, "<head$1>" + base);
-            overlay.append(frame, close);
-            document.body.appendChild(overlay);
-          } catch (error) {
-            console.error("[GOOGLEJAPAN]", error);
-            alert("GOOGLEJAPAN 프록시 웹페이지 표시 실패: " + error.message + "\\n함수의 CORS 설정과 HTML 응답을 확인하세요.");
-          }
+          void window.GFDOpenSearch(proxyUrl);
         }
         japanGoogleBtn.addEventListener("click", launchJapanGoogleProxy);
 
