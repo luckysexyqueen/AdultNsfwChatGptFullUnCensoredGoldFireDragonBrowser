@@ -2000,16 +2000,14 @@
           results.style.cssText = "flex:1;min-height:0;overflow:auto;white-space:normal;pointer-events:auto;";
           results.textContent = "🇯🇵 GOOGLEJAPAN 검색 결과를 불러오는 중...";
           try {
-            let response = await fetch(proxyUrl, { credentials: "omit" });
+            const response = await fetch(proxyUrl, { credentials: "omit" });
             if (response.status === 429) {
-              const retryHeader = Number(response.headers.get("Retry-After"));
-              const delay = Number.isFinite(retryHeader) && retryHeader > 0
-                ? Math.min(retryHeader * 1000, 15000) : 3000;
-              results.textContent = "Google 또는 프록시 요청 제한(429). 잠시 후 한 번 재시도합니다...";
-              await new Promise(resolve => setTimeout(resolve, delay));
-              response = await fetch(proxyUrl, { credentials: "omit" });
+              // A proxy cannot bypass Google's upstream rate limit. Fall back to
+              // the actual Google search page rather than retrying the blocked proxy.
+              results.textContent = "프록시 요청 제한(429). Google 검색 웹사이트로 전환합니다...";
+              await window.GFDOpenSearch(googleTarget);
+              return;
             }
-            if (response.status === 429) throw new Error("HTTP 429: Google 또는 프록시 요청 제한. 잠시 후 다시 검색하세요.");
             if (!response.ok) throw new Error("HTTP " + response.status);
             const html = await response.text();
             if (!/<(?:!doctype\s+html|html|body|div)[\s>]/i.test(html.slice(0, 8192))) {
