@@ -147,7 +147,8 @@
     "socket.io": "^4.8.4",
     "@webcontainer/api": "^1.6.4",
     "@xterm/xterm": "^6.0.0",
-    "@xterm/addon-fit": "^0.11.0"
+    "@xterm/addon-fit": "^0.11.0",
+    "rebrowser-puppeteer": "^24.8.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
