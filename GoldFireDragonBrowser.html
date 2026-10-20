@@ -1875,50 +1875,55 @@
           document.getElementById("supabase-results-panel").classList.remove("flex");
         });
 
-        fullscreenBtnTop.addEventListener("click", function () {
-          const docElem = document.documentElement;
-          const requestFS =
-            docElem.requestFullscreen ||
-            docElem.mozRequestFullScreen ||
-            docElem.webkitRequestFullscreen ||
-            docElem.msRequestFullscreen;
-          const exitFS =
-            document.exitFullscreen ||
-            document.mozCancelFullScreen ||
-            document.webkitExitFullscreen ||
-            document.msExitFullscreen;
-
-          if (
-            !document.fullscreenElement &&
-            !document.mozFullScreenElement &&
-            !document.webkitFullscreenElement &&
-            !document.msFullscreenElement
-          ) {
-            if (requestFS)
-              requestFS
-                .call(docElem)
-                .then(() => setTimeout(fitHybridLayout, 100))
-                .catch((e) => console.error(e));
-          } else {
-            if (exitFS) exitFS.call(document).then(() => setTimeout(fitHybridLayout, 100));
-          }
-        });
+        // Fullscreen API is gesture-gated and vendor variants may return void.
+        // Never assume requestFullscreen()/exitFullscreen() returns a Promise.
+        const getFullscreenElement = () =>
+          document.fullscreenElement ||
+          document.webkitFullscreenElement ||
+          document.mozFullScreenElement ||
+          document.msFullscreenElement;
 
         const handleFSChange = () => {
-          const isFS =
-            document.fullscreenElement ||
-            document.mozFullScreenElement ||
-            document.webkitFullscreenElement ||
-            document.msFullscreenElement;
+          const isFS = Boolean(getFullscreenElement());
           fullscreenBtnTop.innerHTML = isFS
             ? '<i class="fa-solid fa-compress"></i> 🖥️ 전체화면 해제'
             : '<i class="fa-solid fa-expand"></i> 🖥️ 전체화면';
+          fullscreenBtnTop.setAttribute("aria-pressed", String(isFS));
           setTimeout(fitHybridLayout, 100);
         };
 
-        document.addEventListener("fullscreenchange", handleFSChange);
-        document.addEventListener("webkitfullscreenchange", handleFSChange);
-        document.addEventListener("mozfullscreenchange", handleFSChange);
+        fullscreenBtnTop.addEventListener("click", async function (event) {
+          event.preventDefault();
+          const docElem = document.documentElement;
+          const requestFS =
+            docElem.requestFullscreen ||
+            docElem.webkitRequestFullscreen ||
+            docElem.mozRequestFullScreen ||
+            docElem.msRequestFullscreen;
+          const exitFS =
+            document.exitFullscreen ||
+            document.webkitExitFullscreen ||
+            document.mozCancelFullScreen ||
+            document.msExitFullscreen;
+          try {
+            if (getFullscreenElement()) {
+              if (!exitFS) throw new Error("Fullscreen exit API unavailable");
+              await Promise.resolve(exitFS.call(document));
+            } else {
+              if (!requestFS) throw new Error("Fullscreen API unavailable");
+              await Promise.resolve(requestFS.call(docElem));
+            }
+          } catch (error) {
+            console.warn("[GFD fullscreen] Request rejected:", error);
+          } finally {
+            handleFSChange();
+          }
+        });
+
+        for (const eventName of ["fullscreenchange", "webkitfullscreenchange", "mozfullscreenchange", "MSFullscreenChange"]) {
+          document.addEventListener(eventName, handleFSChange);
+        }
+        handleFSChange();
 
         function handleToggleAction(e) {
           if (e) {
