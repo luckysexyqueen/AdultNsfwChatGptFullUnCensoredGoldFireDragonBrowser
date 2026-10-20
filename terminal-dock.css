@@ -1,6 +1,4 @@
-/* GoldFireDragon: one bottom-right vertical control stack, no overlaps. */
-#gfd-vpn-widget-toggle{position:fixed!important;right:12px!important;bottom:calc(12px + env(safe-area-inset-bottom))!important;box-sizing:border-box}
-#gfd-history-launch{position:fixed!important;right:12px!important;bottom:calc(66px + env(safe-area-inset-bottom))!important;box-sizing:border-box}
-#gfd-pia-widget{position:fixed!important;right:12px!important;bottom:calc(122px + env(safe-area-inset-bottom))!important;box-sizing:border-box;max-height:calc(100dvh - 155px)!important;width:min(380px,calc(100vw - 24px))!important}
-.gfd-corner-vr{position:fixed!important;right:12px!important;bottom:calc(var(--gfd-vr-bottom,122px) + env(safe-area-inset-bottom))!important;box-sizing:border-box;max-width:calc(100vw - 24px)}
-@media(max-width:600px){#gfd-vpn-widget-toggle,#gfd-history-launch,.gfd-corner-vr{font-size:12px!important;padding:8px 10px!important}}
+/* Bottom-corner buttons are positioned at runtime using their measured heights. */
+#gfd-vpn-widget-toggle,#gfd-history-launch{box-sizing:border-box;max-width:calc(100vw - 24px)}
+#gfd-pia-widget{right:12px!important;width:min(380px,calc(100vw - 24px))!important;box-sizing:border-box;overflow:auto}
+@media(max-width:600px){#gfd-vpn-widget-toggle,#gfd-history-launch{font-size:12px!important;padding:8px 10px!important}}
