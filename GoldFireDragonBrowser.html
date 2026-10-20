@@ -1979,11 +1979,20 @@
         // gl=jp/hl=ko/safe=off are preferences, not proof of Japanese egress or bypass.
         // 🇯🇵 일본 Google 한국어 검색: Supabase Edge Function 연결
         const GFD_JP_PROXY_SERVER = "https://unublyqlstbetykelfmg.supabase.co/functions/v1/GOOGLEJAPAN";
-        function launchJapanGoogleProxy() {
+        async function launchJapanGoogleProxy() {
           const keyword = (input.value || "").trim();
           if (!keyword) { input.focus(); return; }
           const googleTarget = window.GFDGooglePatch.buildGoogleSearchURL(keyword, { lucky: false });
-          void window.GFDOpenSearch(GFD_JP_PROXY_SERVER + "?target=" + encodeURIComponent(googleTarget));
+          const proxyUrl = GFD_JP_PROXY_SERVER + "?target=" + encodeURIComponent(googleTarget);
+          // Supabase Edge Functions cannot serve a rendered HTML page on the default
+          // supabase.co domain. Keep the actual Google results in the web browser.
+          // The Edge Function is contacted separately as an optional API relay.
+          void fetch(proxyUrl, { method: "GET", credentials: "omit", redirect: "follow", signal: AbortSignal.timeout(8000) })
+            .then(function (response) {
+              if (!response.ok) console.warn("GOOGLEJAPAN API returned HTTP " + response.status);
+            })
+            .catch(function (error) { console.warn("GOOGLEJAPAN API unavailable:", error); });
+          void window.GFDOpenSearch(googleTarget);
         }
         japanGoogleBtn.addEventListener("click", launchJapanGoogleProxy);
 
