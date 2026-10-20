@@ -28,7 +28,10 @@
     "vpn:install": "node scripts/vpn-install.mjs",
     "vpn:check": "node scripts/vpn-install.mjs",
     "web:vpn:install": "node scripts/vpn-install.mjs",
-    "web:vpn:check": "node scripts/vpn-install.mjs"
+    "web:vpn:check": "node scripts/vpn-install.mjs",
+    "mcp:install": "node scripts/install-noapi-mcp.mjs",
+    "mcp:start": "node scripts/start-noapi-mcp.mjs",
+    "mcp:test": "node --test tests/noapi.test.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
