@@ -33,7 +33,8 @@
     "mcp:start": "node scripts/start-noapi-mcp.mjs",
     "mcp:test": "node --test tests/noapi.test.mjs",
     "firecrawl:test": "node --test tests/firecrawl.test.mjs",
-    "vpngate:test": "node --test tests/vpngate-directory.test.mjs tests/vpngate-api.test.mjs"
+    "vpngate:test": "node --test tests/vpngate-directory.test.mjs tests/vpngate-api.test.mjs",
+    "ovpn:web:test": "node --test tests/ovpn-web.test.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -132,7 +133,8 @@
     "zustand": "^5.0.8",
     "@mendable/firecrawl-js": "^4.50.0",
     "firecrawl": "^4.50.0",
-    "@goldfiredragon/vpngate-api": "file:packages/vpngate-api"
+    "@goldfiredragon/vpngate-api": "file:packages/vpngate-api",
+    "@goldfiredragon/ovpn-web": "file:packages/ovpn-web"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
