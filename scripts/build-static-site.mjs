@@ -75,7 +75,7 @@ export async function buildStatic(output = path.join(root, 'site-dist')) {
     '  Cross-Origin-Embedder-Policy: require-corp',
     '  Cross-Origin-Resource-Policy: same-origin',
     ''
-  ].join('\\n'));
+  ].join('\n'));
   await writeFile(path.join(output, '.nojekyll'), '');
   console.log(`Static site prepared: ${output}`);
   return output;
