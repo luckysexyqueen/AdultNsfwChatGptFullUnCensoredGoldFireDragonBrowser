@@ -34,15 +34,6 @@ node --test supabase/functions/jp-ip-search-proxy/core.test.mjs
 
 오류 코드 `GOOGLE_JAVASCRIPT_REQUIRED`는 구글이 검색 결과 대신 자바스크립트 실행 화면을 반환했다는 뜻입니다. HTTP 200인 확인 화면을 검색 성공으로 처리하지 않습니다. 이 경우 Supabase의 일반 HTTP 요청만으로는 검색 결과를 보장할 수 없습니다.
 
-## 자바스크립트 실행 경로
+## 무료 경로 고정
 
-관리형 Browserless 브라우저를 연결하는 선택 경로를 제공합니다. 직접 서버를 운영할 필요는 없지만 별도 서비스 계정과 이용 크레딧이 필요합니다. 기본적으로 꺼져 있으며 무료·무제한 서비스가 아닙니다.
-
-사용하려면 Supabase 비밀값에 다음 두 항목을 설정합니다.
-
-- `BROWSERLESS_TOKEN`: 해당 서비스에서 발급받은 토큰
-- `GOOGLE_BROWSER_ENABLED`: `true`
-
-이 경우 검색어를 Browserless에 전달하고 일본 프록시의 동일 브라우저 세션에서 출구 국가 검사와 구글 자바스크립트 실행을 진행합니다. 브라우저 출구가 일본이 아니면 검색을 중단합니다. 구글 확인·동의 화면을 자동으로 통과시키지 않으며, 실제 결과가 없으면 오류를 반환합니다. 인증 토큰 없이 이 경로의 실검색 성공을 확인할 수 없습니다.
-
-참조: https://docs.browserless.io/rest-apis/function 및 https://docs.browserless.io/rest-apis/proxies
+외부 유료 브라우저·프록시와 자동 유료 전환 경로는 포함하지 않습니다. Supabase 자체 무료 플랜의 사용량 제한은 별도로 적용됩니다. 구글의 자바스크립트 실행 요구는 여전히 외부 제약이며, 현재 구글 실검색 성공은 확인되지 않았습니다.

@@ -93,36 +93,3 @@ test('큰 요청을 제한하고 구글의 실행 요구 화면을 명확히 구
  const r=await h(request('q=Tokyo'));assert.equal(r.status,502);
  assert.equal((await r.json()).code,'GOOGLE_JAVASCRIPT_REQUIRED');
 });
-
-import {createGoogleRenderer} from './browser-render.mjs';
-test('브라우저 서비스는 활성화 설정과 토큰 없이 호출하지 않음',async()=>{
- let called=false;
- for(const config of [{enabled:false,token:'test'},{enabled:true,token:''}]){
-  const render=createGoogleRenderer({...config,fetcher:async()=>{called=true;}});
-  assert.equal((await render('도쿄')).code,'GOOGLE_RENDER_NOT_CONFIGURED');
- }
- assert.equal(called,false);
-});
-test('브라우저에는 일본의 고정 세션과 검색어를 분리해서 전달함',async()=>{
- const query='도쿄 "</script>"';
- const render=createGoogleRenderer({enabled:true,token:'test-token',fetcher:async(url,options)=>{
-  const u=new URL(url),body=JSON.parse(options.body);
-  assert.equal(u.hostname,'production-sfo.browserless.io');
-  assert.equal(u.searchParams.get('proxyCountry'),'jp');assert.equal(u.searchParams.get('proxySticky'),'true');
-  assert.equal(body.context.query,query);assert.equal(body.code.includes(query),false);
-  return Response.json({egressIp:'203.0.113.1',egressCountry:'JP',japanEgressVerified:true,results:[{title:'도쿄',url:'https://example.org/'},{title:'잘못된 주소',url:'javascript:alert(1)'}]});
- }});
- const data=await render(query);assert.equal(data.results.length,1);assert.equal(data.engine,'google');assert.equal(data.egressSource,'browser-session');
-});
-test('브라우저의 일본 출구가 검증되지 않으면 성공으로 처리하지 않음',async()=>{
- const render=createGoogleRenderer({enabled:true,token:'test',fetcher:async()=>Response.json({egressIp:'203.0.113.1',egressCountry:'US',japanEgressVerified:true,results:[{title:'도쿄',url:'https://example.org/'}]})});
- assert.equal((await render('도쿄')).code,'BROWSER_EGRESS_NOT_JP');
-});
-test('브라우저 오류에는 토큰이나 서비스 내부 응답을 노출하지 않음',async()=>{
- const render=createGoogleRenderer({enabled:true,token:'test-secret',fetcher:async()=>new Response('test-secret',{status:401})});
- const data=await render('도쿄');assert.equal(data.code,'GOOGLE_RENDER_SERVICE_ERROR');assert.ok(!JSON.stringify(data).includes('test-secret'));
-});
-test('브라우저 모드의 결과에는 브라우저 출구를 사용함',async()=>{
- const h=createHandler({region:()=> 'ap-northeast-1',fetcher:async()=>trace('JP'),renderGoogle:async()=>({egressIp:'203.0.113.2',egressCountry:'JP',japanEgressVerified:true,engine:'google',results:[{title:'도쿄',url:'https://example.org/'}]})});
- const data=await (await h(request('q=도쿄'))).json();assert.equal(data.egressIp,'203.0.113.2');assert.equal(data.engine,'google');
-});
