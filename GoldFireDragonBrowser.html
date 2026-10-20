@@ -1983,16 +1983,10 @@
           const keyword = (input.value || "").trim();
           if (!keyword) { input.focus(); return; }
           const googleTarget = window.GFDGooglePatch.buildGoogleSearchURL(keyword, { lucky: false });
+          // Keep the Supabase relay as the single navigation target.
+          // GOOGLEJAPAN must implement ?target= and return a browser-renderable response.
           const proxyUrl = GFD_JP_PROXY_SERVER + "?target=" + encodeURIComponent(googleTarget);
-          // Supabase Edge Functions cannot serve a rendered HTML page on the default
-          // supabase.co domain. Keep the actual Google results in the web browser.
-          // The Edge Function is contacted separately as an optional API relay.
-          void fetch(proxyUrl, { method: "GET", credentials: "omit", redirect: "follow", signal: AbortSignal.timeout(8000) })
-            .then(function (response) {
-              if (!response.ok) console.warn("GOOGLEJAPAN API returned HTTP " + response.status);
-            })
-            .catch(function (error) { console.warn("GOOGLEJAPAN API unavailable:", error); });
-          void window.GFDOpenSearch(googleTarget);
+          void window.GFDOpenSearch(proxyUrl);
         }
         japanGoogleBtn.addEventListener("click", launchJapanGoogleProxy);
 
