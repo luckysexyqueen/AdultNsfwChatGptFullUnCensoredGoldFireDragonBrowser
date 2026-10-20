@@ -24,3 +24,4 @@ host=db.unublyqlstbetykelfmg.supabase.co
 port=5432
 database=postgres
 user=postgres
+HUGGINGFACE_TOKEN=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
