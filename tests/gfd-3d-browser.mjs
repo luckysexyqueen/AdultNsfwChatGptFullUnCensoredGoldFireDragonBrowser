@@ -29,16 +29,15 @@ try{
  assert.match(text,/window.GFD3DEngine/);
  assert.match(text,/inferDepth/);
  assert.match(text,/WebGLRenderer/);
- // Real browser verifies the shipped script parses and registers without requiring model CDN.
- await page.evaluate(async source=>{
-  const script=document.createElement('script');
-  script.textContent=source;
-  document.body.appendChild(script);
- },text);
- assert.equal(await page.evaluate(()=>typeof window.GFD3DEngine?.refresh),'function');
+ // Use a separate clean page for deterministic WebGL rendering assertions.
+ const renderPage=await browser.newPage();
+ await renderPage.goto(origin+'/GoldFireDragonBrowser.html',{waitUntil:'domcontentloaded'});
+ await renderPage.setContent('<!doctype html><html><body></body></html>');
+ await renderPage.addScriptTag({content:text});
+ assert.equal(await renderPage.evaluate(()=>typeof window.GFD3DEngine?.refresh),'function');
  assert.equal(errors.filter(e=>/SyntaxError/.test(e)).length,0,errors.join('\n'));
  // Verify real WebGL drawing on an existing DOM image, not just module registration.
- const result=await page.evaluate(async()=>{
+ const result=await renderPage.evaluate(async()=>{
   const image=document.createElement('img');
   image.src='data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" fill="red"/></svg>');
   image.style.cssText='display:block;width:128px;height:128px';
