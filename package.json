@@ -31,7 +31,8 @@
     "web:vpn:check": "node scripts/vpn-install.mjs",
     "mcp:install": "node scripts/install-noapi-mcp.mjs",
     "mcp:start": "node scripts/start-noapi-mcp.mjs",
-    "mcp:test": "node --test tests/noapi.test.mjs"
+    "mcp:test": "node --test tests/noapi.test.mjs",
+    "firecrawl:test": "node --test tests/firecrawl.test.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -127,7 +128,8 @@
     "web-vitals": "^5.1.0",
     "xlsx": "^0.18.5",
     "zod": "^3.23.8",
-    "zustand": "^5.0.8"
+    "zustand": "^5.0.8",
+    "@mendable/firecrawl-js": "^4.50.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
