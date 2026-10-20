@@ -1,0 +1,84 @@
+name: GoldFireDragon All Workflows Launcher
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_ref:
+        description: 'Branch or tag to run workflows against'
+        required: true
+        default: 'fix/free-api-local-gguf-engine-20261018'
+        type: string
+      include_infrastructure:
+        description: 'Also dispatch VPN, hosting, runner, and external sync workflows'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: gfd-workflow-launcher-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  launch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Dispatch eligible workflows with bounded retries
+        uses: actions/github-script@v7
+        env:
+          TARGET_REF: ${{ inputs.target_ref }}
+          INCLUDE_INFRA: ${{ inputs.include_infrastructure }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const ref = process.env.TARGET_REF;
+            const includeInfra = process.env.INCLUDE_INFRA === 'true';
+            const { owner, repo } = context.repo;
+            // Never redispatch this launcher or unapproved privileged workflows.
+            const self = 'all-workflows-launcher.yml';
+            const risky = /(?:vpn|ovpn|runner|fly-|vercel|huggingface|supabase|gateway|cloudflare)/i;
+            const skipped = [], dispatched = [], failed = [];
+            const workflows = await github.paginate(github.rest.actions.listRepoWorkflows, {
+              owner, repo, per_page: 100
+            });
+            for (const workflow of workflows) {
+              const filename = workflow.path.split('/').pop();
+              if (filename === self || workflow.state !== 'active') {
+                skipped.push(filename + ' (self/inactive)'); continue;
+              }
+              if (!includeInfra && risky.test(filename)) {
+                skipped.push(filename + ' (infrastructure opt-in required)'); continue;
+              }
+              // API dispatch requires workflow_dispatch. A 422 is not retried.
+              try {
+                await github.rest.actions.createWorkflowDispatch({
+                  owner, repo, workflow_id: workflow.id, ref
+                });
+                dispatched.push(filename);
+              } catch (error) {
+                const reason = String(error.message || error);
+                if (error.status === 422 || error.status === 404) {
+                  skipped.push(filename + ' (not dispatchable on target ref)');
+                } else {
+                  failed.push(filename + ': ' + reason);
+                }
+              }
+              await new Promise(resolve => setTimeout(resolve, 350));
+            }
+            const summary = core.summary
+              .addHeading('GoldFireDragon workflow launcher')
+              .addRaw('Target ref: ' + ref + '\\n\\n')
+              .addRaw('Dispatched: ' + dispatched.length + '; skipped: ' + skipped.length + '; failed: ' + failed.length + '\\n\\n')
+              .addHeading('Dispatched', 3)
+              .addList(dispatched.length ? dispatched : ['None'])
+              .addHeading('Skipped', 3)
+              .addList(skipped.length ? skipped : ['None'])
+              .addHeading('Errors', 3)
+              .addList(failed.length ? failed : ['None']);
+            await summary.write();
+            if (failed.length) core.setFailed('Some workflow dispatches failed: ' + failed.join('; '));
+            // Dispatch success does not imply child workflows succeeded.
