@@ -32,7 +32,8 @@
     "mcp:install": "node scripts/install-noapi-mcp.mjs",
     "mcp:start": "node scripts/start-noapi-mcp.mjs",
     "mcp:test": "node --test tests/noapi.test.mjs",
-    "firecrawl:test": "node --test tests/firecrawl.test.mjs"
+    "firecrawl:test": "node --test tests/firecrawl.test.mjs",
+    "vpngate:test": "node --test tests/vpngate-directory.test.mjs tests/vpngate-api.test.mjs"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
@@ -130,7 +131,8 @@
     "zod": "^3.23.8",
     "zustand": "^5.0.8",
     "@mendable/firecrawl-js": "^4.50.0",
-    "firecrawl": "^4.50.0"
+    "firecrawl": "^4.50.0",
+    "@goldfiredragon/vpngate-api": "file:packages/vpngate-api"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",

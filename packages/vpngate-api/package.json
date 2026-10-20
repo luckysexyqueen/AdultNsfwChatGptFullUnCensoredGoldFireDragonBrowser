@@ -1,0 +1,13 @@
+{
+  "name": "@goldfiredragon/vpngate-api",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "main": "./index.mjs",
+  "exports": {
+    ".": "./index.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
