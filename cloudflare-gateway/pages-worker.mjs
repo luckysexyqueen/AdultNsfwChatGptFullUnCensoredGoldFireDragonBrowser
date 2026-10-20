@@ -1,6 +1,7 @@
 // Cloudflare Pages advanced-mode Worker: serves static browser assets and the Node gateway-compatible API.
 // This is request-driven serverless execution, not a permanently running Node.js process.
 const allowedOrigins = new Set(['https://www.google.co.jp']);
+const isolationHeaders = {'Cross-Origin-Opener-Policy':'same-origin','Cross-Origin-Embedder-Policy':'require-corp','Cross-Origin-Resource-Policy':'same-origin'};
 const json = (value, status = 200) => Response.json(value, {status, headers:{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
 export default {
   async fetch(request, env) {
@@ -62,11 +63,10 @@ export default {
         return new Response(bytes,{status:upstream.status,headers:{'Content-Type':upstream.headers.get('Content-Type') || 'application/octet-stream','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}});
       } catch { return new Response('Upstream unavailable',{status:502}); }
     }
-    if (url.pathname === '/') {
-      // Show the original GoldFireDragon Browser interface on the website homepage.
-      return env.ASSETS.fetch(request);
-    }
-    // Keep /GoldFireDragonBrowser.html as the real browser page and /index.html as AI chat.
-    return env.ASSETS.fetch(request);
+    // Advanced-mode _worker.js bypasses Pages _headers processing: attach isolation headers here.
+    const asset = await env.ASSETS.fetch(request);
+    const headers = new Headers(asset.headers);
+    for (const [key,value] of Object.entries(isolationHeaders)) headers.set(key,value);
+    return new Response(asset.body,{status:asset.status,statusText:asset.statusText,headers});
   }
 };
