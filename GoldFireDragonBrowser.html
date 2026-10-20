@@ -2153,6 +2153,66 @@
       </script>
     </div>
   <script>window.onload=function(){var d=document.createElement("div");d.id="appLoadFinished";document.body.appendChild(d);};</script>
+
+<!-- Historical search research mode: does not claim to recreate Google's private 2014 index. -->
+<style>
+#gfd-history-launch{position:fixed;right:18px;bottom:18px;z-index:2147483000;background:#2459aa;color:#fff;border:1px solid #bcd4ff;border-radius:10px;padding:11px 15px;cursor:pointer;font:600 14px Arial,sans-serif;box-shadow:0 3px 14px #0005}
+#gfd-history-panel{display:none;position:fixed;inset:5vh 5vw;z-index:2147483001;background:#fff;color:#222;border:2px solid #2459aa;border-radius:12px;padding:20px;overflow:auto;box-shadow:0 8px 45px #0009;font:15px Arial,sans-serif}
+#gfd-history-panel[data-open="true"]{display:block}
+#gfd-history-panel input{padding:10px;margin:6px;max-width:95%;border:1px solid #aaa;border-radius:5px}
+#gfd-history-panel button{padding:10px;margin:5px;cursor:pointer}
+#gfd-history-results a{display:block;margin:13px 0;color:#174ea6;overflow-wrap:anywhere}
+</style>
+<button id="gfd-history-launch" type="button">🕰️ 2014 검색</button>
+<section id="gfd-history-panel" role="dialog" aria-modal="true" aria-label="과거 웹 검색">
+<button id="gfd-history-close" type="button" style="float:right">✕ 닫기</button>
+<h2 style="color:#2459aa">Google Time Machine · 과거 웹 검색</h2>
+<p>2014년 스타일의 조사 도구입니다. 실제 2014년 Google 색인·순위·검색 화면을 복원하지 않습니다.</p>
+<label>검색어 <input id="gfd-history-query" type="search" placeholder="리제로 호접지몽" size="35"></label>
+<label>기준 날짜 <input id="gfd-history-date" type="date" value="2014-04-01"></label>
+<button id="gfd-history-search" type="button">과거 자료 찾기</button>
+<div id="gfd-history-results" aria-live="polite"></div>
+</section>
+<script>
+(function(){
+"use strict";
+var panel=document.getElementById("gfd-history-panel");
+var query=document.getElementById("gfd-history-query");
+var date=document.getElementById("gfd-history-date");
+var results=document.getElementById("gfd-history-results");
+document.getElementById("gfd-history-launch").addEventListener("click",function(){
+panel.dataset.open="true";
+var existing=document.querySelector("#search-input, #searchInput, input[type=search]");
+if(existing && existing!==query && existing.value)query.value=existing.value;
+query.focus();
+});
+document.getElementById("gfd-history-close").addEventListener("click",function(){panel.dataset.open="false";});
+panel.addEventListener("keydown",function(e){if(e.key==="Escape")panel.dataset.open="false";if(e.key==="Enter"&&e.target===query)search();});
+function link(label,url,detail){
+var a=document.createElement("a");a.href=url;a.target="_blank";a.rel="noopener noreferrer";a.textContent=label;
+results.appendChild(a);
+var p=document.createElement("p");p.textContent=detail;results.appendChild(p);
+}
+function search(){
+results.replaceChildren();
+var q=query.value.trim(),d=date.value;
+if(!q){results.textContent="검색어를 입력하세요.";return;}
+if(!/^\d{4}-\d{2}-\d{2}$/.test(d)){results.textContent="날짜를 선택하세요.";return;}
+var parts=d.split("-"),md=Number(parts[1])+"/"+Number(parts[2])+"/"+parts[0];
+var google=new URL("https://www.google.co.jp/search");
+google.searchParams.set("q",q);google.searchParams.set("gl","jp");google.searchParams.set("hl","ko");
+google.searchParams.set("tbs","cdr:1,cd_max:"+md);
+link("Google · "+d+" 이전 자료 검색",google.href,"현재 Google 색인의 날짜 필터입니다. 당시 검색 순위가 아닙니다.");
+var dayGoogle=new URL(google.href);dayGoogle.searchParams.set("tbs","cdr:1,cd_min:"+md+",cd_max:"+md);
+link("Google · "+d+" 당일 자료 검색",dayGoogle.href,"당일 날짜로 분류된 문서만 검색합니다. 자료가 누락될 수 있습니다.");
+var cc=new URL("https://index.commoncrawl.org/");
+link("Common Crawl · 과거 수집 자료 인덱스",cc.href,"과거 수집본을 확인할 수 있습니다. 전체 본문 자유검색은 별도 색인 구축이 필요합니다.");
+var archive=new URL("https://archive.ph/");
+link("Archive.today · 별도 아카이브",archive.href,"보관된 자료가 있는지 직접 확인할 수 있습니다. Wayback Machine은 사용하지 않습니다.");
+}
+document.getElementById("gfd-history-search").addEventListener("click",search);
+})();
+</script>
 </body>
 
   </html>
