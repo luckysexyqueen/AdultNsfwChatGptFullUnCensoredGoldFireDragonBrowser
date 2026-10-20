@@ -46,3 +46,50 @@ test('사전 요청 및 잘못된 입력에는 외부 요청을 보내지 않음
   assert.equal((await h(request('q='))).status,400);
   assert.equal((await h(request('action=fetch&url=https://example.org'))).status,400);
 });
+test('널·배열·객체 검색어를 명확한 입력 오류로 반환함',async()=>{
+ const h=createHandler({fetcher:async()=>{throw Error('호출 금지');}});
+ for(const body of ['null','[]','{"query":{}}','{"query":123}']) {
+  const r=await h(new Request('https://example.test/',{method:'POST',body}));
+  assert.equal(r.status,400);
+ }
+});
+test('표준 구글 리디렉션 링크와 모바일 제목을 읽음',()=>{
+ const html='<a href="https://www.google.com/url?q=https%3A%2F%2Fexample.org%2F%3Fx%3D1%26y%3D2&amp;sa=U"><div class="BNeawe vvjwJb AP7Wnd">&#xB3C4;&#xCFC4;</div></a>';
+ assert.equal(googleResults(html)[0]?.title,'도쿄');
+ assert.equal(googleResults(html)[0]?.url,'https://example.org/?x=1&y=2');
+});
+test('구글 도메인 내부의 표준 검색 리디렉션만 따라감',async()=>{
+ const calls=[];
+ const h=createHandler({region:()=> 'ap-northeast-1',fetcher:async url=>{
+  calls.push(String(url));
+  if(String(url).includes('cloudflare.com'))return trace('JP');
+  if(calls.length===2)return new Response(null,{status:302,headers:{location:'https://www.google.co.jp/search?q=Tokyo'}});
+  return new Response('<a href="https://example.org/"><h3>도쿄</h3></a>');
+ }});
+ const r=await h(request('q=Tokyo'));assert.equal(r.status,200);
+ assert.equal(new URL(calls[2]).hostname,'www.google.co.jp');
+});
+test('외부 주소로 향하는 리디렉션은 요청하지 않음',async()=>{
+ const hosts=[];
+ const h=createHandler({region:()=> 'ap-northeast-1',fetcher:async url=>{
+  hosts.push(new URL(url).hostname);
+  if(url.includes('cloudflare.com'))return trace('JP');
+  return new Response(null,{status:302,headers:{location:'https://untrusted.test/search'}});
+ }});
+ assert.equal((await h(request('q=Tokyo'))).status,502);
+ assert.ok(!hosts.includes('untrusted.test'));
+});
+test('일본 출구 검사 실패를 다음 요청에 재사용하지 않음',async()=>{
+ let probes=0;
+ const h=createHandler({region:()=> 'ap-northeast-1',fetcher:async()=>trace(++probes===1?'KR':'JP')});
+ assert.equal((await (await h(request('action=status'))).json()).japanEgressVerified,false);
+ assert.equal((await (await h(request('action=status'))).json()).japanEgressVerified,true);
+ assert.equal(probes,2);
+});
+test('큰 요청을 제한하고 구글의 실행 요구 화면을 명확히 구분함',async()=>{
+ const h=createHandler({region:()=> 'ap-northeast-1',fetcher:async url=>url.includes('cloudflare.com')?trace('JP'):new Response('<a href="/httpservice/retry/enablejs">Enable JavaScript</a>')});
+ const large=await h(new Request('https://example.test/',{method:'POST',body:JSON.stringify({query:'x'.repeat(9000)})}));
+ assert.equal(large.status,400);
+ const r=await h(request('q=Tokyo'));assert.equal(r.status,502);
+ assert.equal((await r.json()).code,'GOOGLE_JAVASCRIPT_REQUIRED');
+});
