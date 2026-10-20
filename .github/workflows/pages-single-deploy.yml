@@ -35,7 +35,11 @@ jobs:
           node-version: '22'
           cache: npm
 
-      - run: npm ci
+      - name: Install dependencies without Puppeteer browser downloads
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+        run: npm ci
       - run: npm run build:static
       - name: Verify browser assets included in Pages artifact
         run: |
