@@ -31,15 +31,6 @@ export function googleResults(html) {
   }
   return results;
 }
-export function bingResults(xml) {
-  const results = [];
-  for (const m of xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)) {
-    const field = tag => (m[1].match(new RegExp('<'+tag+'>([\\s\\S]*?)</'+tag+'>','i'))?.[1] || '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g,'$1');
-    const url = safeLink(field('link'));
-    if (url) results.push({title:plain(field('title')),url,snippet:plain(field('description'))});
-  }
-  return results.slice(0,10);
-}
 export function createHandler({fetcher = fetch, region = () => '', now = Date.now} = {}) {
   let cached = null;
   async function egress() {
@@ -74,18 +65,26 @@ export function createHandler({fetcher = fetch, region = () => '', now = Date.no
     if (!status.japanEgressVerified) return json({...status,error:'일본 출구 IP를 확인하지 못해 일본 IP 검색을 실행하지 않았습니다.',searchUrl},503);
     const headers = {'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36','Accept-Language':'ko-KR,ko;q=0.9'};
     const failures = [];
-    for (const engine of ['google','bing']) {
+    // 구글의 국가 도메인 통합에 대응해 표준 도메인을 먼저 사용합니다.
+    const targets = [
+      'https://www.google.com/search?' + new URLSearchParams({q,gl:'jp',hl:'ko',safe:'off',nfpr:'1',filter:'0',pws:'0',gbv:'1'}),
+      'https://www.google.com/search?' + new URLSearchParams({q,gl:'jp',hl:'ko',safe:'off',nfpr:'1',filter:'0',pws:'0',gbv:'1',udm:'14',client:'firefox-b-d'}),
+    ];
+    for (const [attempt, target] of targets.entries()) {
       try {
-        const target = engine === 'google' ? searchUrl : 'https://www.bing.com/search?' + new URLSearchParams({q,format:'rss',cc:'jp',setlang:'ko-KR'});
-        const r = await fetcher(target,{headers,redirect:'error',signal:AbortSignal.timeout(9000)});
-        if (!r.ok) throw Error('상태 '+r.status);
+        const requestHeaders = attempt === 1 ? {...headers, 'User-Agent':'Lynx/2.9.2 libwww-FM/2.14 SSL-MM/1.4.1'} : headers;
+        const r = await fetcher(target,{headers:requestHeaders,redirect:'error',signal:AbortSignal.timeout(9000)});
+        if (!r.ok) { failures.push({host:new URL(target).hostname,status:r.status}); continue; }
         const text = await r.text();
         if (text.length > 3000000) throw Error('응답이 너무 큽니다.');
-        const results = engine === 'google' ? googleResults(text) : bingResults(text);
-        if (!results.length) throw Error('결과 없음 또는 검색 서비스 확인 화면');
-        return json({...status,query:q,engine,results,searchUrl,fallback:engine!=='google',vpnConnected:false});
-      } catch { failures.push(engine); }
+        const results = googleResults(text);
+        if (!results.length) {
+          const reason = /captcha|\/sorry\/|unusual traffic/i.test(text) ? '구글 자동화 요청 확인 화면' : /enablejs|enable javascript/i.test(text) ? '구글 자바스크립트 실행 요구' : '검색 결과 없음 또는 지원하지 않는 구글 응답 형식';
+          failures.push({host:new URL(target).hostname,status:r.status,reason}); continue;
+        }
+        return json({...status,query:q,engine:'google',results,searchUrl,fallback:false,vpnConnected:false});
+      } catch { failures.push({host:new URL(target).hostname,reason:'구글 요청 실패 또는 리디렉션'}); }
     }
-    return json({...status,query:q,results:[],searchUrl,error:'검색 서비스가 결과를 반환하지 않았습니다. 잠시 후 다시 시도하세요.',failedEngines:failures},502);
+    return json({...status,query:q,engine:'google',fallback:false,results:[],searchUrl,error:'구글 검색 결과를 받지 못했습니다.',upstreamFailures:failures},502);
   };
 }
