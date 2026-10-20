@@ -139,7 +139,9 @@
     "@mendable/firecrawl-js": "^4.50.0",
     "firecrawl": "^4.50.0",
     "@goldfiredragon/vpngate-api": "file:packages/vpngate-api",
-    "@goldfiredragon/ovpn-web": "file:packages/ovpn-web"
+    "@goldfiredragon/ovpn-web": "file:packages/ovpn-web",
+    "websocket-stream": "^5.5.2",
+    "socks-proxy-agent": "^10.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
