@@ -2023,7 +2023,23 @@
             results.style.display = "flex";
             results.style.flexDirection = "column";
           } catch (error) {
-            results.textContent = "GOOGLEJAPAN 검색 실패: " + error.message + " (함수의 CORS·응답 상태를 확인하세요.)";
+            const message = String(error && error.message || error);
+            if (/429|rate.limit|too.many.requests/i.test(message)) {
+              results.textContent = "Google 또는 프록시 요청 제한(429). Google 검색 웹사이트로 전환합니다...";
+              try { await window.GFDOpenSearch(googleTarget); }
+              catch (navigationError) {
+                results.textContent = "검색 페이지 자동 전환 실패: " + navigationError.message;
+                const link = document.createElement("a");
+                link.href = googleTarget;
+                link.target = "_blank";
+                link.rel = "noopener noreferrer";
+                link.textContent = "Google 검색 결과 열기";
+                link.style.cssText = "display:block;color:#c4b5fd;text-decoration:underline;padding:12px";
+                results.appendChild(link);
+              }
+            } else {
+              results.textContent = "GOOGLEJAPAN 응답 오류: " + message;
+            }
           }
         }
         japanGoogleBtn.addEventListener("click", launchJapanGoogleProxy);
