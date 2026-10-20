@@ -6,15 +6,15 @@ VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjIwODE1NzY1
 
 #browser settings
 PROTOCOL=http
-PORT=3000
+PORT=AUTO GEN PORTFORWADING
 LOCALHOST_URL=localhost
 HOMEPAGE_FILE_NAME=GoldFireDragonBrowser.html
 SEARCH_ENGINE_URL=https://www.google.co.jp/?gl=jp&hl=ko&safe=off&nfpr=1&filter=0&pws=0&desktop=true&adult=true&age=19&is_adult=Y&adult_auth=true
 SEARCH_PROXY_URL=https://www.croxyproxy.com/_ko/?__cpLangSet=1
-DOH_URL=https://anycast.uncensoreddns.org/dns-query
+DOH_URL=https://jp-nrt.doh.sb/dns-query
 USER_AGENT="Mozilla/9.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 GoldFirefDragon/135.0"
 URL_PARAMETERS="&gl=jp&hl=ko&safe=off&nfpr=1&filter=0&pws=0&desktop=true&adult=true&age=19&is_adult=Y&adult_auth=true"
-SUPABASE_URL=https://zuhevuyotcigibupboaz.supabase.co
-SUPABASE_PUBLISHABLE_KEY=sb_publishable_pP4Oz7XuBpHBRhUC-PYl6Q_Ju5u95Pf
-SUPABASE_SECRET_KEY=sb_secret_mhjMQj2VOvpZUqCjBEOcDQ_bLLYGwq7
-SUPABASE_JWKS_URL=https://zuhevuyotcigibupboaz.supabase.co/auth/v1/.well-known/jwks.json
+SUPABASE_URL=https://unublyqlstbetykelfmg.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_iqmUYP3ODAIHKIH5uUmL5Q_LvbhwNgB
+SUPABASE_SECRET_KEY=sb_secret_Nz9dpd1JQRZkla-QMTXSvw_pnkqKy1X
+SUPABASE_JWKS_URL=https://unublyqlstbetykelfmg.supabase.co/auth/v1/.well-known/jwks.json
