@@ -67,7 +67,7 @@ async function enhance(img){
      samples[i]=((data[j]*0.2126+data[j+1]*0.7152+data[j+2]*0.0722)/255)*(data[j+3]/255);
     }
     // Prefer learned monocular depth; retain deterministic pixel-depth fallback offline.
-    try { const predicted=await inferDepth(img);samples.set(predicted); }
+    try { const predicted=await Promise.race([inferDepth(img),new Promise((_,reject)=>setTimeout(()=>reject(Error('AI depth timeout')),3500))]);samples.set(predicted); }
     catch(modelError){console.warn('[GFD 3D] AI depth unavailable, using local relief:',modelError);}
     const positions=geometry.attributes.position,uvs=geometry.attributes.uv;
     for(let i=0;i<positions.count;i++){
