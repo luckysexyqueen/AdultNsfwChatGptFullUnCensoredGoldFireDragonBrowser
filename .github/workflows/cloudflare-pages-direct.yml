@@ -1,11 +1,14 @@
 name: Deploy full GoldFireDragon website to Cloudflare Pages
 on:
   workflow_dispatch:
+concurrency:
+  group: goldfiredragon-cloudflare-pages
+  cancel-in-progress: false
 permissions:
   contents: read
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
       - name: Verify Cloudflare credentials
