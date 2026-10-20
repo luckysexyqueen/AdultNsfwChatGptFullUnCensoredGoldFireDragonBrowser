@@ -42,7 +42,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Wait for previous GitHub Pages deployment to clear
+      - name: Wait for GitHub Pages environment deployment to finish
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -50,16 +50,37 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in $(seq 1 20); do
-            response=$(curl -fsSL --retry 3 -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "https://api.github.com/repos/$GH_REPO/pages/deployments?per_page=10" || echo '[]')
-            if ! printf '%s' "$response" | node -e '
-              let input="";process.stdin.on("data",x=>input+=x);process.stdin.on("end",()=>{try{const rows=JSON.parse(input);if(!Array.isArray(rows))process.exit(0);process.exit(rows.some(d=>d.status==="in_progress"&&d.commit_sha!==process.env.CURRENT_SHA)?1:0)}catch{process.exit(0)}})
-            '; then
-              echo "Another Pages deployment is in progress (attempt $attempt/20). Waiting..."
-              sleep 15
-            else
-              break
+          # The /pages/deployments endpoint does not expose the active
+          # deployment status used by deploy-pages. Query Deployments API instead.
+          for attempt in $(seq 1 40); do
+            deployments=$(curl --fail --silent --show-error --retry 3 \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/$GH_REPO/deployments?environment=github-pages&per_page=20")
+            active=0
+            while IFS= read -r id; do
+              [ -n "$id" ] || continue
+              statuses=$(curl --fail --silent --show-error --retry 3 \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                "https://api.github.com/repos/$GH_REPO/deployments/$id/statuses?per_page=1")
+              state=$(printf '%s' "$statuses" | node -e '
+                let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const a=JSON.parse(s);if(!Array.isArray(a))process.exit(2);process.stdout.write(a[0]?.state||"pending")})
+              ')
+              case "$state" in
+                pending|queued|in_progress|waiting) active=1; echo "Deployment $id is $state";;
+              esac
+            done < <(printf '%s' "$deployments" | node -e '
+              let s="";process.stdin.on("data",d=>s+=d);process.stdin.on("end",()=>{const a=JSON.parse(s);if(!Array.isArray(a))process.exit(2);for(const d of a){if(d.sha!==process.env.CURRENT_SHA)console.log(d.id)}})
+            ')
+            if [ "$active" -eq 0 ]; then
+              echo "No conflicting active GitHub Pages environment deployments."
+              exit 0
             fi
+            echo "Waiting for prior Pages deployment ($attempt/40)..."
+            sleep 15
           done
+          echo "::error::Previous GitHub Pages deployment remains active. Refusing a conflicting deployment."
+          exit 1
       - id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e
