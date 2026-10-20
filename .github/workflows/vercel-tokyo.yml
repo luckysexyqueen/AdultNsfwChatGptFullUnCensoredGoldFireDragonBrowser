@@ -28,7 +28,7 @@ jobs:
             fi
           done
       - name: Install Vercel CLI
-        run: npm install --global vercel@48.2.9
+        run: npm install --global vercel@latest
       - name: Configure Tokyo function region
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
