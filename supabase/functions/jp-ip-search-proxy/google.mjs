@@ -8,7 +8,7 @@ const CORS = {
 };
 const GOOGLE_HOSTS = new Set(['www.google.com','www.google.co.jp']);
 const MAX_HTML = 3000000;
-async function boundedText(response, limit) {
+export async function boundedText(response, limit) {
   if (Number(response.headers.get('content-length')) > limit) {
     await response.body?.cancel(); throw Error('응답 크기 제한 초과');
   }
@@ -73,7 +73,7 @@ async function fetchGoogle(fetcher, target, headers) {
   }
   throw Error('구글 리디렉션 횟수 초과');
 }
-export function createHandler({fetcher = fetch, region = () => '', now = Date.now} = {}) {
+export function createHandler({fetcher = fetch, region = () => '', now = Date.now, renderGoogle = null} = {}) {
   let pendingProbe = null;
   async function egress() {
     if(pendingProbe)return pendingProbe;
@@ -107,8 +107,14 @@ export function createHandler({fetcher = fetch, region = () => '', now = Date.no
     const q = input.trim();
     if (action === 'search' && (!q || q.length > 300)) return json({error:'검색어는 1~300자로 입력하세요.'},400);
     const status = await egress();
-    if (action === 'status') return json({...status,mode:'supabase-search',vpnConnected:false});
+    if (action === 'status') return json({...status,mode:renderGoogle?'managed-browser':'supabase-search',browserRenderingEnabled:Boolean(renderGoogle),vpnConnected:false});
     const searchUrl = 'https://www.google.co.jp/search?' + new URLSearchParams({q,gl:'jp',hl:'ko',safe:'off',nfpr:'1',filter:'0',pws:'0'});
+    if (renderGoogle) {
+      let rendered;
+      try { rendered=await renderGoogle(q); } catch { rendered={error:'브라우저 검색 처리 실패',code:'GOOGLE_RENDER_SERVICE_ERROR'}; }
+      if(rendered.error)return json({...status,egressIp:null,egressCountry:null,japanEgressVerified:false,edgeEgressIp:status.egressIp,engine:'google',fallback:false,query:q,searchUrl,...rendered},rendered.code==='GOOGLE_RENDER_NOT_CONFIGURED'?503:502);
+      return json({...status,...rendered,query:q,searchUrl,vpnConnected:false});
+    }
     if (!status.japanEgressVerified) return json({...status,error:'일본 출구 IP를 확인하지 못해 일본 IP 검색을 실행하지 않았습니다.',searchUrl},503);
     const headers = {'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36','Accept-Language':'ko-KR,ko;q=0.9'};
     const failures = [];
