@@ -57,28 +57,14 @@ async function enhance(img){
     console.warn('[GFD 3D] Depth sampling unavailable; using 3D mesh fallback',depthError);
    }
   }
-  // Optional mesh reconstruction export: keep geometry and UVs as a reusable 3D model.
-  // The model is a relief surface, not a full object reconstructed from unseen views.
-  geometry.computeVertexNormals();
-  const exportModel=()=>{
-    const positions=geometry.attributes.position,uvs=geometry.attributes.uv;
-    const indices=geometry.index;
-    const vertices=[],faces=[];
-    for(let i=0;i<positions.count;i++){
-      vertices.push('v '+positions.getX(i)+' '+positions.getY(i)+' '+positions.getZ(i));
-      faces.push('vt '+uvs.getX(i)+' '+uvs.getY(i));
-    }
-    const faceLines=[];
-    const count=indices?indices.count:positions.count;
-    for(let i=0;i+2<count;i+=3){
-      const a=(indices?indices.getX(i):i)+1,b=(indices?indices.getX(i+1):i+1)+1,c=(indices?indices.getX(i+2):i+2)+1;
-      faceLines.push('f '+a+'/'+a+' '+b+'/'+b+' '+c+'/'+c);
-    }
-    return ['# GoldFireDragon reconstructed image mesh','o GFD_Image_Model',...vertices,...faces,...faceLines].join('\\n')+'\\n';
-  };
-  img.gfdExportOBJ=exportModel;
   camera.position.z=isPanorama?0:Math.max(6,4.5*ratio);
-  const material=new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide,transparent:true});
+  const material=isPanorama ? new THREE.MeshBasicMaterial({map:texture,side:THREE.DoubleSide,transparent:true}) : new THREE.MeshStandardMaterial({map:texture,side:THREE.DoubleSide,roughness:.88,metalness:0,transparent:true});
+  if(!isPanorama){
+   scene.add(new THREE.AmbientLight(0xffffff,1.6));
+   const keyLight=new THREE.DirectionalLight(0xffffff,1.8);
+   keyLight.position.set(-3,4,8);
+   scene.add(keyLight);
+  }
   const mesh=new THREE.Mesh(geometry,material);scene.add(mesh);
   holder.appendChild(renderer.domElement);
   renderer.domElement.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
