@@ -10,7 +10,10 @@ on:
       - 'gfd-3d-viewer.js'
       - 'tests/gfd-3d-browser.mjs'
       - 'google-search-patch.js'
-      - 'tests/gfd-3d-browser.mjs'
+      - 'server.js'
+      - 'scripts/web-gateway.mjs'
+      - 'scripts/vpn-control.mjs'
+      - 'scripts/vpn-egress.mjs'
       - 'scripts/build-static-site.mjs'
       - '.github/workflows/pages-single-deploy.yml'
 
@@ -40,6 +43,12 @@ jobs:
           PUPPETEER_SKIP_DOWNLOAD: 'true'
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
         run: npm ci
+      - name: Check server and gateway syntax
+        run: |
+          node --check server.js
+          node --check scripts/web-gateway.mjs
+          node --check scripts/vpn-control.mjs
+          node --check scripts/vpn-egress.mjs
       - run: npm run build:static
       - name: Verify browser assets included in Pages artifact
         run: |
