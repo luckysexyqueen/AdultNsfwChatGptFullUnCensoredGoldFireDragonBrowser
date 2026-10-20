@@ -33,7 +33,9 @@ export async function buildStatic(output = path.join(root, 'site-dist')) {
     try { await copyFile(path.join(root, file), path.join(output, file)); }
     catch (error) { if (error.code !== 'ENOENT') throw error; if (file === 'index.html') throw new Error('Website entry index.html is missing'); console.warn('Optional static asset missing:', file); }
   }
-  // Serve Three.js locally so the renderer does not depend on an external CDN.\n  await copyFile(path.join(root, 'node_modules/three/build/three.module.js'), path.join(output, 'gfd-three.module.js'));\n  for (const directory of directories) {
+  // Serve Three.js locally so the renderer does not depend on an external CDN.
+  await copyFile(path.join(root, 'node_modules/three/build/three.module.js'), path.join(output, 'gfd-three.module.js'));
+  for (const directory of directories) {
     try { await copyAssets(path.join(root, directory), path.join(output, directory)); }
     catch (error) { if (error.code !== 'ENOENT') throw error; console.warn('Optional asset directory missing:', directory); }
   }
