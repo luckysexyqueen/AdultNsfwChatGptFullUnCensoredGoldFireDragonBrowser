@@ -2,6 +2,15 @@ name: GoldFireDragon Pages Single Deployment
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - fix/free-api-local-gguf-engine-20261018
+    paths:
+      - 'GoldFireDragonBrowser.html'
+      - 'gfd-3d-viewer.js'
+      - 'google-search-patch.js'
+      - 'scripts/build-static-site.mjs'
+      - '.github/workflows/pages-single-deploy.yml'
 
 permissions:
   contents: read
@@ -26,6 +35,13 @@ jobs:
 
       - run: npm ci
       - run: npm run build:static
+      - name: Verify browser assets included in Pages artifact
+        run: |
+          test -s site-dist/GoldFireDragonBrowser.html
+          test -s site-dist/google-search-patch.js
+          test -s site-dist/gfd-3d-viewer.js
+          grep -q 'google-search-patch.js' site-dist/GoldFireDragonBrowser.html
+          grep -q 'gfd-3d-viewer.js' site-dist/GoldFireDragonBrowser.html
 
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b
         with:
