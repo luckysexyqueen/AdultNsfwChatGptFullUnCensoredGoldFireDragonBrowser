@@ -5,7 +5,8 @@ const status=document.getElementById('gfd-vpn-kernel-status');
 const log=document.getElementById('gfd-vpn-terminal-box');
 const button=document.getElementById('gfd-vpn-btn-connect');
 if(panel&&toggle&&status&&log&&button){
-  toggle.addEventListener('click',()=>{panel.hidden=!panel.hidden;toggle.setAttribute('aria-expanded',String(!panel.hidden));});
+  toggle.addEventListener('click',()=>{panel.hidden=!panel.hidden;panel.style.setProperty('display',panel.hidden?'none':'block','important');toggle.setAttribute('aria-expanded',String(!panel.hidden));});
+  panel.style.setProperty('display',panel.hidden?'none':'block','important');
   button.addEventListener('click',async()=>{
     button.disabled=true;status.textContent='확인 중';log.textContent='일본 게이트웨이 상태 API 조회 중...';
     try{
