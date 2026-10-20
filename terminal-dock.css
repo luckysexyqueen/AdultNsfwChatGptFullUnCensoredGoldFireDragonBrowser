@@ -1,4 +1,5 @@
-/* GoldFireDragon dock: reserve a distinct compact corner for VPN/terminal. */
-#gfd-vpn-widget-toggle{right:12px!important;bottom:max(12px,env(safe-area-inset-bottom))!important;max-width:calc(100vw - 24px);box-sizing:border-box}
-#gfd-pia-widget{right:12px!important;bottom:calc(64px + env(safe-area-inset-bottom))!important;box-sizing:border-box;max-height:calc(100dvh - 100px)!important;width:min(380px,calc(100vw - 24px))!important}
-@media(max-width:600px){#gfd-vpn-widget-toggle{font-size:12px!important;padding:8px 10px!important}#gfd-pia-widget{width:min(330px,calc(100vw - 24px))!important}}
+/* Separate bottom-corner controls: history above VPN, VR above history. */
+#gfd-vpn-widget-toggle{position:fixed!important;right:12px!important;bottom:max(12px,env(safe-area-inset-bottom))!important;max-width:calc(100vw - 24px);box-sizing:border-box}
+#gfd-history-launch{position:fixed!important;right:12px!important;bottom:calc(66px + env(safe-area-inset-bottom))!important;box-sizing:border-box}
+#gfd-pia-widget{position:fixed!important;right:12px!important;bottom:calc(122px + env(safe-area-inset-bottom))!important;width:min(380px,calc(100vw - 24px))!important;box-sizing:border-box;max-height:calc(100dvh - 155px)!important}
+@media(max-width:600px){#gfd-vpn-widget-toggle,#gfd-history-launch{font-size:12px!important;padding:8px 10px!important}#gfd-history-launch{bottom:calc(54px + env(safe-area-inset-bottom))!important}#gfd-pia-widget{bottom:calc(100px + env(safe-area-inset-bottom))!important;max-height:calc(100dvh - 135px)!important}}
