@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildCatalog } from './build-plugin-catalog.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const files = ['index.html', 'GoldFireDragonBrowser.html', 'firecrawl-panel.js', 'boot-guard.js', 'inapp-browser.js',
+const files = ['index.html', 'GoldFireDragonBrowser.html', 'BrowserNativeWebTerminal.html', 'vpn-widget.js', 'corner-button-layout.js', 'terminal-dock.css', 'firecrawl-panel.js', 'boot-guard.js', 'inapp-browser.js',
   'vpn-index-control.js', 'vpn-control.js', 'vpn-profiles.json', 'native-bridge.js', 'cordova.js',
   'cordova_plugins.js', 'capacitor.plugins.json', 'aionspace-vip.js', 'hdr.js',
   'vr_360_enhanced patch script.js', 'icon.png', 'favicon.ico', 'placeholder.svg', 'robots.txt',
