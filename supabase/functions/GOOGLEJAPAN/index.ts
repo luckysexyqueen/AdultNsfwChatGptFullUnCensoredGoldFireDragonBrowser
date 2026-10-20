@@ -6,7 +6,7 @@ const corsHeaders = {
   'Access-Control-Allow-Credentials': 'true',
 }
 
-// 외부 import 주소 대신 최신 Deno.serve 표준 빌트인 규격으로 전면 개조
+// 외부 import 오류를 방지한 최신 Deno.serve 표준 규격 가동
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -20,6 +20,7 @@ Deno.serve(async (req) => {
     let rawTarget = currentUrl.searchParams.get('target')
 
     // 1. target 파라미터가 없으면 UI 게이트웨이 화면(HTML) 로드
+    // [안내] 사용자의 개인 외부 HTML에서 정상적으로 target을 주입해서 호출하면 이 섹션은 완벽하게 무시(스킵)됩니다.
     if (!rawTarget) {
       const htmlUI = `
 <!DOCTYPE html>
@@ -73,48 +74,54 @@ Deno.serve(async (req) => {
       return new Response(htmlUI, { status: 200, headers: { ...corsHeaders, 'Content-Type': 'text/html; charset=utf-8' } })
     }
 
-    // 2. 입력값이 도메인 주소(URL)인지 판단하는 지능형 필터링
+    // 2. 입력값이 도메인 주소(URL)인지 판단하는 지능형 정규식 필터링
     const urlPattern = /^(https?:\/\/)?([\da-z\.-]+)\.([a-z\.]{2,6})([\/\w \.-]*)*\/?(\s*|\?.*)?\$/i;
     let finalTargetUrl = "";
 
     if (urlPattern.test(rawTarget) || rawTarget.startsWith('http://') || rawTarget.startsWith('https://')) {
+      // [A] 주소 형태 -> 일반 웹사이트 직통 우회 서핑 모드 전환 (차단 사이트 접속)
       if (!rawTarget.startsWith('http://') && !rawTarget.startsWith('https://')) {
         rawTarget = 'https://' + rawTarget
       }
       finalTargetUrl = rawTarget
     } else {
-      // 🇯🇵 초정밀 무검열 및 성인 연령 우회 파라미터 세트 전체 자동 로딩
+      // [B] 일반 검색어 -> 🇯🇵 모든 무검열, 성인인증 우회, 초정밀 파라미터 세트 올인원 주입
       const googleUrl = new URL('https://google.co.jp')
       googleUrl.searchParams.append('q', rawTarget)
-      googleUrl.searchParams.append('num', '15')
-      googleUrl.searchParams.append('gl', 'jp')
-      googleUrl.searchParams.append('hl', 'ko')
-      googleUrl.searchParams.append('safe', 'off')
-      googleUrl.searchParams.append('nfpr', '1')
-      googleUrl.searchParams.append('filter', '0')
-      googleUrl.searchParams.append('pws', '0')
-      googleUrl.searchParams.append('tbs', 'li:1')
-      googleUrl.searchParams.append('near', 'Tokyo')
-      googleUrl.searchParams.append('gcr', 'jp')
       
-      googleUrl.searchParams.append('desktop', 'true')
-      googleUrl.searchParams.append('adult', 'true')
-      googleUrl.searchParams.append('age', '19')
-      googleUrl.searchParams.append('is_adult', 'Y')
-      googleUrl.searchParams.append('adult_auth', 'true')
+      // 초정밀 우회 및 출력 최적화 옵션
+      googleUrl.searchParams.append('num', '15')          // 한 페이지에 결과 15개 노출
+      googleUrl.searchParams.append('gl', 'jp')           // 지역: 일본 고정
+      googleUrl.searchParams.append('hl', 'ko')           // 출력 언어: 한국어 메뉴 표기
+      googleUrl.searchParams.append('safe', 'off')        // 세이프서치: 완전 해제
+      googleUrl.searchParams.append('nfpr', '1')          // 자동 검색어 맞춤법 교정 차단
+      googleUrl.searchParams.append('filter', '0')        // 유사/중복 검색 결과 생략 숨김 해제
+      googleUrl.searchParams.append('pws', '0')           // 개인 검색 기록에 의한 결과 왜곡 방지
+      googleUrl.searchParams.append('tbs', 'li:1')        // 완전 일치(Verbatim) 검색 모드 강제
+      googleUrl.searchParams.append('near', 'Tokyo')      // 검색 가상 위치 기준: 일본 도쿄
+      googleUrl.searchParams.append('gcr', 'jp')          // 국가 리다이렉션 방지 강제 고정
+      
+      // 성인 인증 및 연령 제한 무력화 옵션
+      googleUrl.searchParams.append('desktop', 'true')    // 데스크톱 페이지 모드 고정
+      googleUrl.searchParams.append('adult', 'true')      // 성인 콘텐츠 필터 오픈
+      googleUrl.searchParams.append('age', '19')          // 가상 나이 19세 고정 전달
+      googleUrl.searchParams.append('is_adult', 'Y')      // 성인 인증 여부 참(Y) 값 전달
+      googleUrl.searchParams.append('adult_auth', 'true') // 성인 인증 완료 상태 세션 위장 주입
       
       finalTargetUrl = googleUrl.toString()
     }
 
     const targetUrl = new URL(finalTargetUrl)
 
-    // 세션 유지 및 헤더 변조 우회를 위한 통합 Request 헤더 빌드
+    // 세션 유지 및 헤더 변조 우회를 위한 통합 Request 헤더 변환 조립
     const requestHeaders = new Headers(req.headers)
     requestHeaders.set('Host', targetUrl.host)
-    requestHeaders.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+    
+    // 💥 [패치 핵심] 사용자가 지정한 GoldFirefDragon 브라우저 식별자(User-Agent) 주입
+    requestHeaders.set('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:135.0) Gecko/20100101 GoldFirefDragon/135.0')
     requestHeaders.set('Accept-Language', 'ko-KR,ko;q=0.9,ja;q=0.8,en-US;q=0.7,en;q=0.6')
 
-    // Supabase 해외 인프라 망을 통해 리퀘스트 중계 수행
+    // Supabase 해외 가상망 인프라 노드를 이용해 중계 배달 호출 실행
     const response = await fetch(targetUrl.toString(), {
       method: req.method,
       headers: requestHeaders,
@@ -124,6 +131,7 @@ Deno.serve(async (req) => {
     const contentType = response.headers.get('content-type') || ''
     const responseHeaders = new Headers(corsHeaders)
     
+    // 타겟 사이트 및 구글 측이 발급한 동적 로그인 쿠키값 백업 복사 (세션 유지)
     const setCookie = response.headers.get('set-cookie')
     if (setCookie) {
       responseHeaders.set('Set-Cookie', setCookie)
@@ -132,7 +140,7 @@ Deno.serve(async (req) => {
       responseHeaders.set('Content-Type', contentType)
     }
 
-    // 3. HTML 웹페이지 내부 무한 프록시 주소 리라이팅 루프 시스템
+    // 3. HTML 웹페이지 응답 수집 시 무한 서핑을 위한 내부 자원 주소 강제 재매핑 엔진 가동
     if (contentType.includes('text/html')) {
       let html = await response.text()
 
@@ -140,12 +148,13 @@ Deno.serve(async (req) => {
         try { return new URL(urlStr, targetUrl.origin).toString() } catch { return urlStr }
       }
 
+      // 페이지 내부 모든 href 및 src 속성값 가로채서 ?target= 주소로 결합
       html = html.replace(/(href|src)=["'](.*?)["']/g, (match, attribute, path) => {
         if (path.startsWith('javascript:') || path.startsWith('data:') || path.startsWith('#') || path === '') return match
         return `${attribute}="${proxyBaseUrl}?target=${encodeURIComponent(absoluteUrl(path))}"`
       })
 
-      // 비동기 자바스크립트 가로채기 엔진 스크립트 인젝션
+      // 비동기 자바스크립트 네트워크 트래픽(Fetch/XHR) 강제 가로채기 커스텀 코어 인젝션
       const injectScript = `
         <script>
           (function() {
@@ -174,6 +183,7 @@ Deno.serve(async (req) => {
       return new Response(html, { status: response.status, headers: responseHeaders })
     }
 
+    // 이미지, CSS, JS 폰트 등 정적 에셋은 바이너리로 우회 가공 없이 즉시 통과 서빙
     const data = await response.arrayBuffer()
     return new Response(data, { status: response.status, headers: responseHeaders })
 
