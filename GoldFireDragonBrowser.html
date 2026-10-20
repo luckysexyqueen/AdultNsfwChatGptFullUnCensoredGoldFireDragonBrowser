@@ -2259,22 +2259,6 @@ output.appendChild(p);
 })();
 </script>
 
-<!-- Japan search shortcut: preserves all existing browser behavior. -->
-<script id="gfd-japan-search-shortcut">
-(function(){
- function add(){
-  if(document.getElementById('gfd-jp-search-link'))return;
-  var link=document.createElement('a');
-  link.id='gfd-jp-search-link';
-  link.href='./jp-search.html';
-  link.textContent='🇯🇵 일본 서버 검색';
-  link.title='일본 Google 검색어 제안 API (일본 출구 IP 미검증)';
-  link.style.cssText='position:fixed;right:18px;bottom:18px;z-index:2147483000;padding:12px 16px;background:#183052;color:#fff;border:1px solid #8bc5ff;border-radius:12px;text-decoration:none;font:14px sans-serif;box-shadow:0 3px 14px #0008';
-  document.body.appendChild(link);
- }
- if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',add);else add();
-})();
-</script>
 <script src="./firecrawl-panel.js" defer></script>
 </body>
 
