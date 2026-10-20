@@ -34,7 +34,11 @@ export async function buildStatic(output = path.join(root, 'site-dist')) {
     catch (error) { if (error.code !== 'ENOENT') throw error; if (file === 'index.html') throw new Error('Website entry index.html is missing'); console.warn('Optional static asset missing:', file); }
   }
   // Serve Three.js locally so the renderer does not depend on an external CDN.
-  await copyFile(path.join(root, 'node_modules/three/build/three.module.js'), path.join(output, 'gfd-three.module.js'));
+  // Three.js r160+ ships the ES module as three.core.js + three.module.js.
+  // The old standalone three.module.js path is no longer published by the package.
+  const threeBuild = path.join(root, 'node_modules/three/build');
+  await copyFile(path.join(threeBuild, 'three.module.js'), path.join(output, 'gfd-three.module.js'));
+  await copyFile(path.join(threeBuild, 'three.core.js'), path.join(output, 'three.core.js'));
   for (const directory of directories) {
     try { await copyAssets(path.join(root, directory), path.join(output, directory)); }
     catch (error) { if (error.code !== 'ENOENT') throw error; console.warn('Optional asset directory missing:', directory); }
