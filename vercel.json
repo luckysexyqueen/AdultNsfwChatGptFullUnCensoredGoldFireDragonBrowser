@@ -1,0 +1,33 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "app": {
+      "root": ".",
+      "framework": "vite"
+    },
+    "japan-ip-proxy": {
+      "root": "japan-ip-proxy",
+      "runtime": "node"
+    },
+    "lovebound-ai-model-studio-v1359-full-version-locked": {
+      "root": "LoveBound-AI-Model-Studio-v1.35.9-FULL-VERSION-LOCKED",
+      "runtime": "python"
+    },
+    "only-my-ai-api-mcp-plugins": {
+      "root": "ONLY-MY-AI-API-MCP-PLUGINS",
+      "framework": "fastapi"
+    },
+    "private-vpn-server": {
+      "root": "private-vpn-server",
+      "framework": "express"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": {
+        "service": "app"
+      }
+    }
+  ]
+}
