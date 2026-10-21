@@ -1,5 +1,5 @@
 {
-  "$schema": "https://vercel.sh",
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "services": {
     "app": {
       "root": ".",
@@ -7,11 +7,13 @@
     },
     "japan-ip-proxy": {
       "root": "japan-ip-proxy",
-      "runtime": "node"
+      "runtime": "node",
+      "entrypoint": "index.js" 
     },
     "lovebound-ai-model-studio-full-version-locked": {
       "root": "LoveBound-AI-Model-Studio-v1.35.9-FULL-VERSION-LOCKED",
-      "runtime": "python"
+      "runtime": "python",
+      "entrypoint": "main.py" 
     },
     "only-my-ai-api-mcp-plugins": {
       "root": "ONLY-MY-AI-API-MCP-PLUGINS",
