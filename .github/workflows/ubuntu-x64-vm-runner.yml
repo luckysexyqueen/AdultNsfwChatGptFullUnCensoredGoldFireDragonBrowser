@@ -1,0 +1,39 @@
+name: GoldFireDragon Ubuntu x64 VM Runner
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/ubuntu-x64-vm-runner.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu-x64:
+    name: GoldFireDragon Ubuntu x64
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Verify GitHub-hosted Ubuntu x64 VM
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = "x86_64"
+          test "$(uname -s)" = "Linux"
+          cat /etc/os-release
+          echo "Runner name: $RUNNER_NAME"
+          echo "Runner OS: $RUNNER_OS"
+          echo "Runner architecture: $RUNNER_ARCH"
+          echo "VM architecture: $(uname -m)"
+      - name: Check VPN prerequisites (no tunnel started)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y openvpn
+          openvpn --version | head -n 1
+          find Japan/Configs -type f -name '*.ovpn' -printf '%P\n' 2>/dev/null | sed -n '1,20p' || true
+          echo "OpenVPN installed for this ephemeral job only."

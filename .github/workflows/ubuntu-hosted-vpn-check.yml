@@ -1,0 +1,25 @@
+name: Ubuntu hosted runner check
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/ubuntu-hosted-vpn-check.yml'
+permissions:
+  contents: read
+jobs:
+  ubuntu-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Verify Ubuntu runner and networking
+        shell: bash
+        run: |
+          set -euo pipefail
+          uname -a
+          cat /etc/os-release
+          echo "Runner architecture: $(uname -m)"
+          test "$(uname -m)" = x86_64
+          echo "Public egress IP (not necessarily Japan):"
+          curl -fsS --max-time 15 https://api.ipify.org || true
+          echo
+          echo 'GitHub-hosted Ubuntu runner is working; it is ephemeral and not a Gateway SSH endpoint.'

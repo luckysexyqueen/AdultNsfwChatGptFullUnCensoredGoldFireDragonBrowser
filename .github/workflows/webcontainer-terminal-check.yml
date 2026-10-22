@@ -1,0 +1,53 @@
+name: WebContainer Terminal Dependency Check
+
+on:
+  push:
+    branches:
+      - fix/free-api-local-gguf-engine-20261018
+    paths:
+      - 'BrowserNativeWebTerminal.html'
+      - 'package.json'
+      - '.github/workflows/webcontainer-terminal-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: webcontainer-terminal-check-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  terminal-check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install terminal dependencies in isolation
+        run: |
+          mkdir -p /tmp/gfd-terminal-deps
+          cd /tmp/gfd-terminal-deps
+          npm install --no-audit --no-fund @webcontainer/api@1.6.4 @xterm/xterm@6.0.0 @xterm/addon-fit@0.11.0 isomorphic-git
+          npm ls --depth=0
+      - name: Verify terminal wiring and Git command entrypoints
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import assert from 'node:assert/strict';
+          const html=fs.readFileSync('BrowserNativeWebTerminal.html','utf8');
+          for(const marker of ['WebContainer.boot()', 'instance.spawn(', 'npm install', 'github-download', 'git-web.mjs', 'isomorphic-git']) {
+            assert.ok(html.includes(marker), 'Missing terminal integration: '+marker);
+          }
+          const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+          for(const name of ['@webcontainer/api','@xterm/xterm','@xterm/addon-fit']) {
+            assert.ok(pkg.dependencies[name], 'Missing dependency '+name);
+          }
+          console.log('Terminal integration static checks passed');
+          NODE
+      - name: Note browser runtime prerequisites
+        run: |
+          echo 'WebContainer runtime requires HTTPS, COOP/COEP cross-origin isolation and a supported browser.'
+          echo 'This workflow validates package installation and static wiring, not browser runtime or git push.'

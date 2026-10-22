@@ -1,0 +1,24 @@
+name: OVPN Failover Syntax Check SHA pinned
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/free-api-local-gguf-engine-20261018]
+    paths:
+      - scripts/ovpn-profile-rotation-v2.sh
+      - .github/workflows/ovpn-code-check-pinned.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Validate OVPN failover
+        run: |
+          set -euo pipefail
+          bash -n scripts/ovpn-profile-rotation-v2.sh
+          test -s scripts/ovpn-profile-rotation-v2.sh
+          grep -q 'country_code' scripts/ovpn-profile-rotation-v2.sh
+          echo "PASS: OVPN failover syntax validated"

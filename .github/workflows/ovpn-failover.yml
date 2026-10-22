@@ -1,0 +1,67 @@
+name: Install OVPN profile failover
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/free-api-local-gguf-engine-20261018]
+    paths:
+      - scripts/ovpn-profile-rotation-v2.sh
+      - .github/workflows/ovpn-failover.yml
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Explain persistent VPN runner requirements
+        shell: bash
+        run: |
+          echo '::notice::Persistent OpenVPN installation requires a registered, online self-hosted Linux runner with label goldfiredragon-vpn.'
+          echo '::notice::A GitHub-hosted runner cannot replace a persistent VPN server.'
+          echo '::notice::Check repository Settings > Actions > Runners and register the actual Linux host.'
+  install:
+    # Only schedule installation when a real VPN host has been registered.
+    # Set repository variable GFD_VPN_RUNNER_READY=true after registering it.
+    if: vars.GFD_VPN_RUNNER_READY == 'true'
+    needs: preflight
+    runs-on: [self-hosted, linux, goldfiredragon-vpn]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Install persistent OVPN failover service
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -n true
+          for cmd in openvpn ip curl python3 systemctl; do command -v "$cmd"; done
+          test -c /dev/net/tun
+          test -d Japan/Configs
+          find Japan/Configs -maxdepth 5 -type f -name '*.ovpn' -print -quit | grep -q . || { echo '::error::No .ovpn profiles found'; exit 1; }
+          sudo -n install -d -m 755 /opt/gfd-vpn/scripts /opt/gfd-vpn/Japan/Configs
+          sudo -n cp -a Japan/Configs/. /opt/gfd-vpn/Japan/Configs/
+          sudo -n chmod -R go-rwx /opt/gfd-vpn/Japan/Configs
+          sudo -n install -m 755 scripts/ovpn-profile-rotation-v2.sh /opt/gfd-vpn/scripts/ovpn-profile-rotation-v2.sh
+          sudo -n install -d /etc/systemd/system/goldfiredragon-vpn.service.d
+          printf '[Service]\nExecStart=\nExecStart=/bin/bash /opt/gfd-vpn/scripts/ovpn-profile-rotation-v2.sh\n' | sudo -n tee /etc/systemd/system/goldfiredragon-vpn.service.d/rotation.conf >/dev/null
+          sudo -n systemctl daemon-reload
+          sudo -n systemctl enable --now goldfiredragon-vpn.service
+          sudo -n systemctl restart goldfiredragon-vpn.service
+          sudo -n systemctl is-active --quiet goldfiredragon-vpn.service
+      - name: Confirm Japan tunnel egress
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 24); do
+            if ip -4 route get 1.1.1.1 | grep -Eq 'dev (tun[0-9]+|tap[0-9]+)'; then
+              ip="$(curl -4fsS --max-time 10 https://api.ipify.org || true)"
+              if [ -n "$ip" ] && curl -4fsS --max-time 10 "https://ipwho.is/$ip" | python3 -c 'import json,sys; x=json.load(sys.stdin); sys.exit(0 if x.get("success") and x.get("country_code")=="JP" else 1)'; then
+                echo "PASS: Japanese VPN egress confirmed"
+                exit 0
+              fi
+            fi
+            sleep 5
+          done
+          sudo -n systemctl is-active goldfiredragon-vpn.service || true
+          echo '::warning::Inspect VPN service logs privately on the Linux host; logs may contain sensitive profile details.'
+          echo "::error::Japan egress not verified"
+          exit 1

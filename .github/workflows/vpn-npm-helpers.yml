@@ -1,0 +1,22 @@
+name: Check optional VPN npm helpers
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/free-api-local-gguf-engine-20261018]
+    paths:
+      - 'package.json'
+      - 'scripts/check-piajs.mjs'
+      - '.github/workflows/vpn-npm-helpers.yml'
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - run: npm install --no-save --package-lock=false --ignore-scripts piajs@0.1.2 node-openvpn@0.1.1
+      - run: npm run vpn:piajs:check
+      - run: npm run vpn:node-openvpn:check

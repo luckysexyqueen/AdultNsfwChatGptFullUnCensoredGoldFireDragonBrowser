@@ -1,0 +1,21 @@
+name: Optional node-openvpn install check
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/free-api-local-gguf-engine-20261018]
+    paths:
+      - package.json
+      - scripts/check-node-openvpn.mjs
+      - .github/workflows/node-openvpn-install-check.yml
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - run: npm install --no-save --ignore-scripts --no-audit --no-fund node-openvpn@0.1.1
+      - run: npm run vpn:node-openvpn:check

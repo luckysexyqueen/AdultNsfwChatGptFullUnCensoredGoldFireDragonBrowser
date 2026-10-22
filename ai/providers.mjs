@@ -12,8 +12,9 @@ export function prepareMessages(messages, systemPrompt, instructions) {
   return result;
 }
 export async function freeChat(endpoint, messages, { signal, fetcher = fetch } = {}) {
-  const url = new URL(endpoint);
-  if (url.protocol !== 'https:' || url.username || url.password) throw Error('유효한 HTTPS AI 서버 주소가 필요합니다.');
+  const url = new URL(endpoint, globalThis.location?.origin);
+  const sameOrigin = url.origin === globalThis.location?.origin;
+  if ((url.protocol !== 'https:' && !sameOrigin) || url.username || url.password) throw Error('유효한 HTTPS AI 서버 주소가 필요합니다.');
   const controller = new AbortController();
   const abort = () => controller.abort();
   signal?.addEventListener('abort', abort, { once: true });

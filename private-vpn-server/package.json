@@ -1,0 +1,21 @@
+{
+  "name": "goldfiredragon-private-vpn-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test ../tests/private-vpn-server.test.mjs"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "cors": "^2.8.6",
+    "node-openvpn": "0.1.1",
+    "node-pty": "^1.1.0",
+    "socket.io": "^4.8.4",
+    "dotenv": "^17.4.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

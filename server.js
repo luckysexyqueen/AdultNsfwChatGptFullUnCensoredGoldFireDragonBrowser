@@ -1,3 +1,3 @@
 #!/usr/bin/env node
-/** Compatibility wrapper for the bundled web copy. */
-import '../server.full.mjs';
+/** GoldFireDragon Browser Node.js web gateway entrypoint. */
+import './scripts/web-gateway.js';

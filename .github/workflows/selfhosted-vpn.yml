@@ -1,0 +1,64 @@
+name: Self-hosted Linux OpenVPN 24x7
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/free-api-local-gguf-engine-20261018
+    paths:
+      - .github/workflows/selfhosted-vpn.yml
+permissions:
+  contents: read
+jobs:
+  vpn:
+    runs-on: [self-hosted, linux, ARM64, goldfiredragon-vpn]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Verify prerequisites and choose existing OVPN
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo -n true
+          for binary in openvpn ip curl python3 systemctl; do command -v "$binary"; done
+          test -c /dev/net/tun
+          PROFILE="${GFD_OVPN_PROFILE:-}"
+          if [ -z "$PROFILE" ]; then
+            PROFILE="$(find Japan/Configs -maxdepth 5 -type f -name '*.ovpn' | LC_ALL=C sort | head -n 1)"
+          fi
+          test -n "$PROFILE" || { echo "::error::No OVPN found in Japan/Configs (including Private)"; exit 1; }
+          case "$PROFILE" in
+            Japan/Configs/*.ovpn) ;;
+            *) echo "::error::Invalid OVPN profile path"; exit 1 ;;
+          esac
+          test -f "$PROFILE"
+          echo "GFD_OVPN_PROFILE=$PROFILE" >> "$GITHUB_ENV"
+      - name: Install persistent systemd OpenVPN watchdog
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Keep service files outside the ephemeral GitHub Actions workspace.
+          sudo -n install -d -m 755 /opt/gfd-vpn/scripts /opt/gfd-vpn/Japan/Configs
+          sudo -n install -m 755 scripts/vpn-24x7.sh /opt/gfd-vpn/scripts/vpn-24x7.sh
+          # Keep sibling certs/keys available for profiles using relative paths. Never print contents.
+          sudo -n cp -a Japan/Configs/. /opt/gfd-vpn/Japan/Configs/
+          sudo -n chmod -R go-rwx /opt/gfd-vpn/Japan/Configs
+          sudo -n bash /opt/gfd-vpn/scripts/vpn-24x7.sh install
+          sudo -n systemctl is-enabled --quiet goldfiredragon-vpn.service
+          sudo -n systemctl is-active --quiet goldfiredragon-vpn.service
+      - name: Verify live Japan VPN route and exit
+        shell: bash
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 24); do
+            if ip -4 route get 1.1.1.1 | grep -Eq 'dev (tun[0-9]+|tap[0-9]+)'; then
+              IP="$(curl -4fsS --max-time 10 https://api.ipify.org || true)"
+              if [ -n "$IP" ] && curl -4fsS --max-time 10 "https://ipwho.is/$IP" | python3 -c 'import json,sys; d=json.load(sys.stdin); sys.exit(0 if d.get("success") and d.get("country_code")=="JP" else 1)'; then
+                echo "PASS: persistent service active and Japan VPN egress verified"
+                exit 0
+              fi
+            fi
+            sleep 5
+          done
+          sudo -n systemctl --no-pager status goldfiredragon-vpn.service || true
+          echo "::error::Japanese VPN egress not verified"
+          exit 1
