@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.3.5",
   "type": "module",
-  "main": "server.js",
+  "main": "server.mjs",
   "homepage": "https://luckysexyqueen.github.io/AdultNsfwChatGptFullUnCensoredGoldFireDragonBrowser/",
   "scripts": {
     "plugins:build": "node scripts/build-plugin-catalog.mjs",
