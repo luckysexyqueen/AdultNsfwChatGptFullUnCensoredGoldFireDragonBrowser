@@ -566,7 +566,8 @@
         startVideoWatcher();
       })();
     </script>
-  </head>
+  <script src="/gfd-photo3d.js"></script>
+</head>
   <body>
     <script>
       let isConverted = false;
@@ -1228,7 +1229,9 @@
                 ctx.drawImage(leftSlice, x, 0, 1, h, (w - blendWidth) + x, 0, 1, h);
             }
             
-            const texture = new THREE.CanvasTexture(canvas);
+            const backgroundPhoto = window.GFDPhoto3D?.enhance(canvas);
+            const texture = new THREE.CanvasTexture(backgroundPhoto?.canvas || canvas);
+            if (backgroundPhoto) { backgroundPhoto.onUpdate = () => { texture.needsUpdate = true; }; backgroundPhoto.onError = () => { texture.image = canvas; texture.needsUpdate = true; }; }
             texture.wrapS = THREE.RepeatWrapping;
             texture.minFilter = THREE.LinearFilter;
 
@@ -1268,7 +1271,9 @@
             }
             charCtx.putImageData(imageData, 0, 0);
             
-            const charTexture = new THREE.CanvasTexture(charCanvas);
+            const characterPhoto = window.GFDPhoto3D?.enhance(charCanvas);
+            const charTexture = new THREE.CanvasTexture(characterPhoto?.canvas || charCanvas);
+            if (characterPhoto) { characterPhoto.onUpdate = () => { charTexture.needsUpdate = true; }; characterPhoto.onError = () => { charTexture.image = charCanvas; charTexture.needsUpdate = true; }; }
             charTexture.wrapS = THREE.RepeatWrapping;
             
             // 배경보다 살짝 작은 구체로 캐릭터를 카메라 쪽으로 당김 (물리적 3D)
@@ -1277,7 +1282,7 @@
             const charMat = new THREE.MeshBasicMaterial({ 
                 map: charTexture, 
                 transparent: true,
-                side: THREE.BackSide
+                side: THREE.DoubleSide
             });
             characterLayer = new THREE.Mesh(charGeo, charMat);
             scene.add(characterLayer);
@@ -1543,6 +1548,7 @@
           >
             GoldFireDragon 검색
           </button>
+          <button id="gfd-custom-search-btn" type="button" class="px-6 py-3 bg-transparent border border-purple-400 hover:bg-purple-500/20 rounded-xl text-sm font-semibold" title="입력한 검색어로 Google 맞춤검색 열기">Google 맞춤검색</button>
           <button
             id="japan-google-btn"
             type="button"
@@ -2343,6 +2349,7 @@ output.appendChild(p);
 <script type="module" src="./vpn-widget.js"></script>
 <script src="./gfd-3d-viewer.js" defer></script>
 <script src="./corner-button-layout.js" defer></script>
+<script src="./custom-search-launcher.js"></script>
 </body>
 
   </html>
