@@ -1,0 +1,50 @@
+name: OVPN Profile and Runtime Diagnostics
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.devcontainer/devcontainer.json'
+      - 'Japan/Configs/**'
+      - '.github/workflows/ovpn-diagnostics.yml'
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install OpenVPN tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y openvpn iproute2 jq
+      - name: Validate devcontainer configuration
+        run: jq -e '.image and .postCreateCommand' .devcontainer/devcontainer.json
+      - name: Inventory and validate public OVPN configurations
+        shell: bash
+        run: |
+          set -euo pipefail
+          count=0
+          while IFS= read -r -d '' config; do
+            count=$((count+1))
+            if ! grep -Eq '^[[:space:]]*remote[[:space:]]+[^[:space:]]+' "$config"; then
+              echo "::error file=$config::Missing remote directive"
+              exit 1
+            fi
+            if ! grep -Eq '^[[:space:]]*dev[[:space:]]+tun' "$config"; then
+              echo "::warning file=$config::Not a TUN profile"
+            fi
+          done < <(find Japan/Configs -maxdepth 1 -type f -name '*.ovpn' -print0)
+          echo "Validated $count public OVPN profiles"
+          test "$count" -gt 0
+      - name: Inspect runner VPN capability without modifying network routes
+        shell: bash
+        run: |
+          set -euo pipefail
+          openvpn --version | head -n 1
+          if test -c /dev/net/tun; then
+            echo 'TUN character device present'
+          else
+            echo '::notice::No TUN device; runner cannot start a VPN tunnel.'
+          fi
+          echo 'GitHub-hosted Actions runners are temporary. This workflow does not establish a persistent VPN or verify a Japanese exit IP.'

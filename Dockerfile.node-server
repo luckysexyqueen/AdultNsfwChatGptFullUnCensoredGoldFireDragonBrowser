@@ -1,0 +1,15 @@
+FROM node:22-alpine AS builder
+WORKDIR /app
+COPY . .
+RUN node scripts/build-static-site.mjs
+
+FROM node:22-alpine
+ENV NODE_ENV=production PORT=8080 GFD_STATIC_ROOT=/app/site-dist
+WORKDIR /app
+COPY --from=builder /app/server.js ./server.js
+COPY --from=builder /app/scripts/web-gateway.mjs ./scripts/web-gateway.mjs
+COPY --from=builder /app/site-dist ./site-dist
+COPY --from=builder /app/package.json ./package.json
+USER node
+EXPOSE 8080
+CMD ["node","server.js"]

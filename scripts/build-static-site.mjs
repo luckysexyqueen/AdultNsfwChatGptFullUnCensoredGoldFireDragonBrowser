@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { buildCatalog } from './build-plugin-catalog.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const files = ['index.html', 'GoldFireDragonBrowser.html', 'boot-guard.js', 'inapp-browser.js',
+const files = ['index.html', 'GoldFireDragonBrowser.html', 'BrowserNativeWebTerminal.html', 'vpn-widget.js', 'corner-button-layout.js', 'google-search-patch.js', 'gfd-3d-viewer.js', 'terminal-dock.css', 'firecrawl-panel.js', 'boot-guard.js', 'inapp-browser.js',
   'vpn-index-control.js', 'vpn-control.js', 'vpn-profiles.json', 'native-bridge.js', 'cordova.js',
   'cordova_plugins.js', 'capacitor.plugins.json', 'aionspace-vip.js', 'hdr.js',
   'vr_360_enhanced patch script.js', 'icon.png', 'favicon.ico', 'placeholder.svg', 'robots.txt',
@@ -29,12 +29,27 @@ export async function buildStatic(output = path.join(root, 'site-dist')) {
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   await buildCatalog();
   await mkdir(output, { recursive: true });
-  for (const file of files) await copyFile(path.join(root, file), path.join(output, file));
-  for (const directory of directories) await copyAssets(path.join(root, directory), path.join(output, directory));
+  for (const file of files) {
+    try { await copyFile(path.join(root, file), path.join(output, file)); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; if (file === 'index.html') throw new Error('Website entry index.html is missing'); console.warn('Optional static asset missing:', file); }
+  }
+  // Serve Three.js locally so the renderer does not depend on an external CDN.
+  // Three.js r160+ ships the ES module as three.core.js + three.module.js.
+  // The old standalone three.module.js path is no longer published by the package.
+  const threeBuild = path.join(root, 'node_modules/three/build');
+  await copyFile(path.join(threeBuild, 'three.module.js'), path.join(output, 'gfd-three.module.js'));
+  await copyFile(path.join(threeBuild, 'three.core.js'), path.join(output, 'three.core.js'));
+  for (const directory of directories) {
+    try { await copyAssets(path.join(root, directory), path.join(output, directory)); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; console.warn('Optional asset directory missing:', directory); }
+  }
   // Publish only the reviewed plugin chat entry, never Python, archives or private uploads.
   const studio = 'LoveBound-AI-Model-Studio-v1.35.9-FULL-VERSION-LOCKED';
   await mkdir(path.join(output, studio), { recursive: true });
-  for (const file of ['index.html', 'web-chat.mjs']) await copyFile(path.join(root, studio, file), path.join(output, studio, file));
+  for (const file of ['index.html', 'web-chat.mjs']) {
+    try { await copyFile(path.join(root, studio, file), path.join(output, studio, file)); }
+    catch (error) { if (error.code !== 'ENOENT') throw error; console.warn('Optional studio asset missing:', file); }
+  }
   // Environment is public client configuration only. Never copy .env or raw env-config.js.
   const sourceConfig = await readFile(path.join(root, 'env-config.js'), 'utf8');
   const publicConfig = {};
@@ -59,6 +74,14 @@ export async function buildStatic(output = path.join(root, 'site-dist')) {
     for (const icon of shortcut.icons || []) icon.src = './' + icon.src.replace(/^\/+/, '');
   }
   await writeFile(path.join(output, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+  // Cloudflare Pages applies these headers; GitHub Pages ignores _headers.
+  await writeFile(path.join(output, '_headers'), [
+    '/*',
+    '  Cross-Origin-Opener-Policy: same-origin',
+    '  Cross-Origin-Embedder-Policy: require-corp',
+    '  Cross-Origin-Resource-Policy: same-origin',
+    ''
+  ].join('\n'));
   await writeFile(path.join(output, '.nojekyll'), '');
   console.log(`Static site prepared: ${output}`);
   return output;

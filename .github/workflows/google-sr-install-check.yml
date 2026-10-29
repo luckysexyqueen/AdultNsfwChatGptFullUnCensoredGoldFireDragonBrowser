@@ -1,0 +1,26 @@
+name: Google SR npm installation check
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/free-api-local-gguf-engine-20261018
+    paths:
+      - '.github/workflows/google-sr-install-check.yml'
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install google-sr in isolated directory
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/gfd-google-sr
+          cd /tmp/gfd-google-sr
+          npm install --no-audit --no-fund google-sr
+          npm ls google-sr --depth=0

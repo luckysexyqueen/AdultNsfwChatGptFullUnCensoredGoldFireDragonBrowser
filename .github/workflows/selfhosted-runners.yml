@@ -1,0 +1,30 @@
+name: Self-hosted Runner Smoke Test
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  linux-arm64:
+    runs-on: [self-hosted, linux, ARM64, android-arm64]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect ARM64 environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          uname -m
+          node --version || true
+          java -version || true
+          if test -c /dev/net/tun; then echo 'TUN present'; else echo 'TUN missing'; fi
+  windows-x64:
+    runs-on: [self-hosted, windows, X64, windows-build]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect Windows environment
+        shell: pwsh
+        run: |
+          Write-Output "Architecture: $env:PROCESSOR_ARCHITECTURE"
+          node --version
+          java -version

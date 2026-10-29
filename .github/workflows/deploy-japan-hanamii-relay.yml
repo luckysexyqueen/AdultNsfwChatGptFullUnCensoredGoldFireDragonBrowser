@@ -1,0 +1,23 @@
+name: Deploy Japan HTTPS relay to hanamii
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy-japan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Require hanamii credentials
+        env:
+          HANAMII_TOKEN: ${{ secrets.HANAMII_TOKEN }}
+        run: |
+          test -n "$HANAMII_TOKEN" || { echo "::error::Set HANAMII_TOKEN as a GitHub Actions secret (do not commit the token)"; exit 1; }
+      - name: Deploy Japanese Node.js relay
+        working-directory: japan-ip-proxy
+        env:
+          HANAMII_TOKEN: ${{ secrets.HANAMII_TOKEN }}
+        run: npx -y hanamii deploy --name goldfiredragon-jp-https-relay
