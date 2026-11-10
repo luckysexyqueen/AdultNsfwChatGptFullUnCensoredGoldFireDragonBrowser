@@ -1,0 +1,51 @@
+name: Deploy Cloudflare Gateway
+on:
+  push:
+    branches:
+      - fix/free-api-local-gguf-engine-20261018
+      - main
+    paths:
+      - cloudflare-gateway/**
+      - .github/workflows/cloudflare-gateway.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Check credentials
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ba9f503376f9f52c15ea9ee2ee7a39af
+        run: |
+          test -n "$CF_TOKEN" || { echo "Missing repository Actions secret CLOUDFLARE_API_TOKEN"; exit 1; }
+          test -n "$CF_ACCOUNT" || { echo "Missing CLOUDFLARE_ACCOUNT_ID"; exit 1; }
+      - name: Build website assets required by Wrangler
+        run: |
+          npm run build:static
+          test -s site-dist/index.html || { echo 'Missing site-dist/index.html'; exit 1; }
+          test -s site-dist/GoldFireDragonBrowser.html || { echo 'Missing browser page'; exit 1; }
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('site-dist')
+          for p in root.rglob('*'):
+              if p.is_file() and p.stat().st_size < 1024 and p.read_bytes().startswith(b'version https://git-lfs.github.com/spec/v1'):
+                  p.unlink()
+              elif p.is_file() and p.stat().st_size > 25 * 1024 * 1024:
+                  p.unlink()
+          PY
+      - name: Deploy Worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ba9f503376f9f52c15ea9ee2ee7a39af
+        run: |
+          CLOUDFLARE_API_TOKEN="$(printf '%s' "$CLOUDFLARE_API_TOKEN" | tr -d '\r\n' | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^[Bb]earer[[:space:]]+//')"
+          CLOUDFLARE_ACCOUNT_ID="$(printf '%s' "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')"
+          export CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
+          if [[ ! "$CLOUDFLARE_API_TOKEN" =~ ^[A-Za-z0-9_-]+$ ]]; then echo 'Invalid Cloudflare API token format: provide only one raw API token in GitHub Secrets (not JSON, a curl command, or a Global API Key).'; exit 1; fi
+          if ! [[ "$CLOUDFLARE_ACCOUNT_ID" =~ ^[0-9a-fA-F]{32}$ ]]; then echo 'Invalid Cloudflare account ID: expected a single 32-character hexadecimal ID. Correct the GitHub secret.'; exit 1; fi
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then echo 'Missing CLOUDFLARE_API_TOKEN'; exit 1; fi
+          cd cloudflare-gateway
+          npx --yes wrangler@4 deploy

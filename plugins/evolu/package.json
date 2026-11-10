@@ -1,0 +1,10 @@
+{
+  "name": "@goldfiredragon/evolu-adapter",
+  "private": true,
+  "type": "module",
+  "description": "Optional Evolu local-first integration",
+  "peerDependencies": {
+    "@evolu/common": "*",
+    "@evolu/web": "*"
+  }
+}

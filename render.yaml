@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: goldfiredragon-web-gateway
+    runtime: node
+    plan: free
+    buildCommand: echo "Using Node.js built-in modules"
+    startCommand: node server.js
+    healthCheckPath: /api/gateway/status
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: GFD_DEPLOYMENT_REGION
+        value: unverified
+      - key: GFD_PROXY_ALLOWED_ORIGINS
+        sync: false
+      # HTTPS endpoint of the real Linux VPN node (not a Cloudflare/Pages URL).
+      - key: GFD_VPN_NODE_URL
+        sync: false
+      # Private bearer token shared with the Linux VPN node; never commit it.
+      - key: GFD_VPN_NODE_TOKEN
+        sync: false
+
+  - type: web
+    name: goldfiredragon-jp-https-relay
+    runtime: node
+    plan: free
+    rootDir: japan-ip-proxy
+    buildCommand: npm ci --omit=dev || npm install --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: JP_PROXY_TOKEN
+        generateValue: true
+      - key: MAX_PROXY_ATTEMPTS
+        value: 4

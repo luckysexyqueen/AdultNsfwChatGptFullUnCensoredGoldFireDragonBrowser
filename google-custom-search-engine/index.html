@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>골드파이어드래곤 · Google 맞춤검색</title>
+    <link rel="icon" href="image/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="node_modules/reset.css/reset.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- Start header Element -->
+    <header>
+        <a class="small" href="https://mail.google.com/mail/&ogbl">Gmail</a>
+        <a class="small" href="https://www.google.co.jp/imghp?hl=ko&gl=jp&safe=off">Images</a>
+        <div id="btn-app">
+            <svg focusable="false" viewBox="0 0 24 24"><path d="M6,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,20c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM6,20c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM6,14c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,14c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM16,6c0,1.1 0.9,2 2,2s2,-0.9 2,-2 -0.9,-2 -2,-2 -2,0.9 -2,2zM12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM18,14c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM18,20c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2z"></path></svg>
+        </div>
+        <a id="sign-in" href="https://accounts.google.com/ServiceLogin?hl=en&passive=true&continue=https://www.google.com/&ec=GAZAmgQ">Sign in</a>
+    </header>
+  <!-- End header Element -->
+
+
+
+  <!-- Start Main Element -->
+    <main>
+        <div id="logo-wrapper">
+            <img src="image/google.png" alt="Google Logo">
+        </div>
+        <div id="form-wrapper">
+            <form action="search-result.html" method="GET" enctype="application/x-www-form-urlencoded">
+                <div id="search-wrapper">
+                    <div id="icon-search">
+                        <svg focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"></path></svg>
+                    </div>
+                    <input name="q" type="search" required aria-label="검색어" autocomplete="off">
+                </div>
+                <div id="button-wrapper">
+                    <button>Google 맞춤검색</button>
+                    <button type="button" id="jp-search">일본 Google 검색</button>
+                </div>
+            </form>
+        </div>
+        <div id="offer-wrapper">
+            <a href="../GoldFireDragonBrowser.html">브라우저 홈</a> · <a href="../index.html">AI 채팅</a>
+            <details><summary>맞춤검색 엔진 설정</summary>
+              <form id="engine-settings"><label>검색엔진 ID <input id="engine-id" required pattern="[A-Za-z0-9:_-]{5,160}" maxlength="160"></label><button>저장</button></form>
+              <p>초기값은 원본 프로젝트의 공개 검색엔진입니다. 검색 범위와 광고는 해당 엔진 설정을 따릅니다.</p>
+              <p id="engine-status" role="status"></p>
+            </details>
+        </div>
+
+        <p class="copyright">
+            All trademarks, logos and brand names are the property of their respective owners.<br> All company, product and service names used in this website are for experiment purposes only.
+          </p>
+
+    </main>    
+    <!-- End Main Element -->
+
+
+    <!-- start footer element -->
+    <footer>
+        <div id="country">일본 지역 · 한국어</div>
+        <div id="links">
+            <div>
+                <a href="https://about.google/?utm_source=google-LK&utm_medium=referral&utm_campaign=hp-footer&fg=1">About</a>
+                <a href="https://www.google.com/intl/en_lk/ads/?subid=ww-ww-et-g-awa-a-g_hpafoot1_1!o2&utm_source=google.com&utm_medium=referral&utm_campaign=google_hpafooter&fg=1">Advertising</a>
+                <a href="https://www.google.com/services/?subid=ww-ww-et-g-awa-a-g_hpbfoot1_1!o2&utm_source=google.com&utm_medium=referral&utm_campaign=google_hpbfooter&fg=1">Business</a>
+                <a href="https://google.com/search/howsearchworks/?fg=1">How Search works</a>
+            </div>
+            <div>
+                <a href="https://policies.google.com/privacy?hl=en-LK&fg=1">Privacy</a>
+                <a href="https://policies.google.com/terms?hl=en-LK&fg=1">Terms</a>
+                <a href="javascript:void(0)">Settings</a>
+            </div>
+        </div>
+    </footer>
+    <!-- end footer element -->
+    
+<script src="integration.js"></script>
+</body>
+</html>

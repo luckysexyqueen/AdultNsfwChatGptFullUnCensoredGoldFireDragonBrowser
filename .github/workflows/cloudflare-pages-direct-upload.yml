@@ -1,0 +1,88 @@
+name: Deploy full GitHub project web app to existing Cloudflare Pages
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - fix/free-api-local-gguf-engine-20261018
+permissions:
+  contents: read
+concurrency:
+  group: goldfiredragon-cloudflare-pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout original GitHub source without modifying it
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 1
+          lfs: false
+      - name: Restore available LFS files
+        run: |
+          git lfs install
+          git lfs pull || echo "::warning::Some original LFS objects are missing; GitHub cannot supply their contents."
+      - name: Build complete supported Cloudflare web distribution
+        run: |
+          npm run build:static
+          cp cloudflare-gateway/pages-worker.mjs site-dist/_worker.js
+          python3 - <<'PY'
+          from pathlib import Path
+          root = Path('site-dist')
+          missing = []
+          for p in root.rglob('*'):
+              if p.is_file() and p.stat().st_size < 1024 and p.read_bytes().startswith(b'version https://git-lfs.github.com/spec/v1\n'):
+                  missing.append(str(p.relative_to(root)))
+                  p.unlink()
+          if missing:
+              print('::warning::Unresolved LFS pointers excluded from website: ' + ', '.join(missing[:20]))
+          # Cloudflare Pages rejects individual assets larger than 25 MiB.
+          # Keep originals in GitHub; exclude oversize assets from deploy output only.
+          limit = 25 * 1024 * 1024
+          oversized = []
+          for p in root.rglob('*'):
+              if p.is_file() and p.stat().st_size > limit:
+                  oversized.append((str(p.relative_to(root)), p.stat().st_size))
+                  p.unlink()
+          if oversized:
+              print('::warning::Oversized assets excluded from Cloudflare Pages (originals remain in GitHub): ' + ', '.join(f'{name} ({size // 1048576} MiB)' for name, size in oversized[:30]))
+          if not (root / 'index.html').is_file():
+              raise SystemExit('Missing site-dist/index.html')
+          if not (root / '_worker.js').is_file():
+              raise SystemExit('Missing Cloudflare API Worker')
+          PY
+      - name: Deploy to existing goldfiredragon-browser-web Pages project
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ba9f503376f9f52c15ea9ee2ee7a39af
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" || { echo "::error::Set CLOUDFLARE_API_TOKEN secret with Cloudflare Pages Edit permission"; exit 1; }
+          echo "Targeting verified Cloudflare Pages account and existing project"
+          echo "Cloudflare token must be authorized for account ba9f503376f9f52c15ea9ee2ee7a39af (Pages Edit)."
+          npx --yes wrangler@4 pages project list
+          npx --yes wrangler@4 pages deploy site-dist --project-name goldfiredragon-browser-web --branch fix/free-api-local-gguf-engine-20261018 --commit-dirty=true
+      - name: Verify production terminal URL and WebContainer isolation headers
+        run: |
+          for attempt in $(seq 1 12); do
+            if curl -fsS -D /tmp/gfd-terminal-headers -o /tmp/gfd-terminal-page --max-time 15 https://goldfiredragon-browser-web.pages.dev/BrowserNativeWebTerminal.html; then
+              if grep -qi '<html' /tmp/gfd-terminal-page && grep -qi '^cross-origin-opener-policy: same-origin' /tmp/gfd-terminal-headers && grep -qi '^cross-origin-embedder-policy: require-corp' /tmp/gfd-terminal-headers; then
+                echo 'Terminal page and isolation headers verified'; exit 0
+              fi
+            fi
+            sleep 5
+          done
+          echo '::error::Production terminal missing or isolation headers absent'; exit 1
+      - name: Verify the live website renders HTML
+        run: |
+          for attempt in $(seq 1 12); do
+            if curl -fsSL --max-time 15 https://goldfiredragon-browser-web.pages.dev/ -o /tmp/goldfiredragon-live.html && grep -qi "<html" /tmp/goldfiredragon-live.html && grep -qiE "GoldFireDragon|FireDragon" /tmp/goldfiredragon-live.html; then
+              echo "Original GoldFireDragon Browser HTML is live at https://goldfiredragon-browser-web.pages.dev/"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "::error::Cloudflare deployment did not serve original GoldFireDragon Browser HTML at the production URL"
+          exit 1
+      - name: Print production URL
+        run: echo "https://goldfiredragon-browser-web.pages.dev"

@@ -1,6 +1,18 @@
-"ghcr.io/devcontainers-extra/features/browserify:2": {}
-"ghcr.io/helpers4/devcontainer/package-auto-install:1": {}
-"ghcr.io/devcontainers-extra/features/express-generator:2": {}
-"ghcr.io/devcontainers-extra/features/http-server:1": {}
-"ghcr.io/devcontainers-extra/features/live-server:1": {}
-
+{
+  "name": "GoldFireDragon OVPN Diagnostics",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22"
+    }
+  },
+  "postCreateCommand": "sudo apt-get update && sudo apt-get install -y openvpn iproute2 curl jq && node --version && openvpn --version | head -n 1",
+  "remoteUser": "vscode",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.vscode-typescript-next"
+      ]
+    }
+  }
+}

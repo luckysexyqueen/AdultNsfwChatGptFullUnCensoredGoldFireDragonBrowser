@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>앱에 저장한 모델</title>
+<script type="module" src="./native-model-store.js"></script>
+<style>body{margin:0;background:#1d1333;color:#f9f2ff;font:16px system-ui}main{max-width:800px;margin:auto;padding:24px}h1{color:#ebc862;font-size:26px}input,button{box-sizing:border-box;font:inherit;border:1px solid #78668f;border-radius:10px;padding:12px;background:#30223f;color:white}input{width:100%;margin:12px 0}button{cursor:pointer;margin:4px}article{padding:16px;margin:14px 0;border:1px solid #78668f;border-radius:14px;overflow-wrap:anywhere}progress{width:100%}small,p{color:#dbcde5}#error{color:#ffb4b4;white-space:pre-wrap}</style></head>
+<body><main><a href="./index.html" style="color:#ebc862">홈페이지로 돌아가기</a><h1>앱에 저장한 모델</h1><p>설치 후 내려받은 모델을 앱 전용 공간에 보관해요. 앱 재실행과 업데이트 후에도 유지되며, 앱 삭제·데이터 초기화 시 삭제돼요.</p>
+<form id="download"><label for="url">단일 GGUF 파일의 보안 다운로드 주소</label><input id="url" type="url" required placeholder="모델 다운로드 주소를 붙여 넣으세요"><button type="submit">앱에 다운로드</button><button id="refresh" type="button">목록 새로고침</button></form>
+<p id="error" role="status"></p><section id="models" aria-label="저장한 모델 목록"></section>
+<p>파일을 저장하는 기능과 모델 추론 호환성은 별개예요. 기기의 메모리와 엔진이 지원하는 모델을 선택해 주세요.</p></main>
+<script type="module">
+import './native-model-store.js';
+const container = document.querySelector('#models'), error = document.querySelector('#error');
+const size = bytes => bytes < 0 ? '알 수 없음' : (bytes / 1048576).toFixed(1) + ' MB';
+let busy = false;
+async function refresh() {
+  if (busy) return; busy = true;
+  try {
+    const list = await window.GFDNativeModels.list();
+    container.replaceChildren();
+    if (!list.length) container.textContent = '아직 다운로드한 모델이 없어요.';
+    for (const model of list) {
+      const article = document.createElement('article'), title = document.createElement('strong'), info = document.createElement('p');
+      title.textContent = model.name; info.textContent = model.state + ' · ' + size(model.downloaded) + ' / ' + size(model.total);
+      article.append(title, info);
+      if (!model.ready && model.total > 0) { const progress = document.createElement('progress'); progress.max = model.total; progress.value = model.downloaded; article.append(progress); }
+      if (model.ready) {
+        const use = document.createElement('button'); use.textContent = '이 모델 사용';
+        use.onclick = () => { localStorage.setItem('gfd-native-selected-model', model.id); location.href = './index.html?nativeModel=' + encodeURIComponent(model.id); };
+        article.append(use);
+      }
+      const remove = document.createElement('button'); remove.textContent = model.ready ? '모델 삭제' : '다운로드 취소·삭제';
+      remove.onclick = async () => {
+        if (!confirm('이 모델의 다운로드와 저장 파일을 삭제할까요?')) return;
+        try { await window.GFDNativeModels.remove(model.id); if (localStorage.getItem('gfd-native-selected-model') === model.id) localStorage.removeItem('gfd-native-selected-model'); await refresh(); }
+        catch (failure) { error.textContent = failure.message; }
+      };
+      article.append(remove); container.append(article);
+    }
+  } catch (failure) { error.textContent = failure.message; }
+  finally { busy = false; }
+}
+document.querySelector('#download').onsubmit = async event => {
+  event.preventDefault(); error.textContent = '';
+  try { await window.GFDNativeModels.download(document.querySelector('#url').value.trim()); await refresh(); }
+  catch (failure) { error.textContent = failure.message; }
+};
+document.querySelector('#refresh').onclick = refresh;
+await refresh(); setInterval(refresh, 2000);
+</script></body></html>

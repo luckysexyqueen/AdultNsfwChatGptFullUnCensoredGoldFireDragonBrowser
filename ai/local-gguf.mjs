@@ -37,7 +37,9 @@ export class LocalGGUFEngine {
         suppressNativeLog: true, allowOffline: true,
         logger: { debug() {}, log() {}, warn() {}, error() {} },
       });
-      const contextLength = number(options.contextLength, 16384, 512, 32768);
+      const deviceMemory = Number(globalThis.navigator?.deviceMemory) || 0;
+      const recommendedContext = deviceMemory >= 8 ? 8192 : deviceMemory >= 4 ? 4096 : 2048;
+      const contextLength = number(options.contextLength, recommendedContext, 512, 32768);
       const params = { n_ctx: contextLength, n_threads: globalThis.crossOriginIsolated ? Math.min(navigator.hardwareConcurrency || 2, 4) : 1,
         n_gpu_layers: options.useGpu === true ? 99999 : 0, jinja: true,
         progressCallback: ({ loaded, total }) => options.onProgress?.(total ? `모델 다운로드 ${Math.floor(100 * loaded / total)}%` : `모델 다운로드 ${Math.floor(loaded / 1048576)}MB`),
@@ -46,7 +48,7 @@ export class LocalGGUFEngine {
       else await runtime.loadModel(source, params);
       this.runtime = runtime;
       this.update({ ready: true, loading: false, generating: false, modelName: name, modelSize: size, modelFiles: typeof source === 'string' ? 1 : source.length,
-        contextLength, webGpuAvailable: runtime.isSupportWebGPU() });
+        contextLength, webGpuAvailable: typeof runtime.isSupportWebGPU === 'function' ? runtime.isSupportWebGPU() : false });
       options.onProgress?.('로컬 모델 준비 완료. 대화가 서버로 전송되지 않습니다.');
       return this.getStatus();
     } catch (error) {
@@ -65,12 +67,19 @@ export class LocalGGUFEngine {
     this.update({ generating: true });
     let full = '';
     try {
-      const meta = this.runtime.getModelMetadata().meta;
-      const common = { stream: true, max_tokens: number(options.maxTokens, 4096, 1, 8192), temperature: number(options.temperature, 0.7, 0, 2),
+      const meta = this.runtime.getModelMetadata()?.meta || {};
+      const common = { stream: true, max_tokens: number(options.maxTokens, 512, 1, Math.max(1, Math.min(2048, (this.status.contextLength || 4096) - 512))), temperature: number(options.temperature, 0.7, 0, 2),
         seed: options.seed, abortSignal: options.signal };
       const stream = meta['general.architecture'] === 'gpt2'
         ? await this.runtime.createCompletion({ ...common, prompt: messages.map(m => `${m.role === 'user' ? 'User' : m.role === 'assistant' ? 'Assistant' : 'System'}: ${m.content}`).join('\n') + '\nAssistant:' })
         : await this.runtime.createChatCompletion({ ...common, messages, chat_template_kwargs: { enable_thinking: false } });
+      // Some Wllama builds return a complete response instead of an async stream.
+      if (typeof stream?.[Symbol.asyncIterator] !== 'function') {
+        const text = stream?.choices?.[0]?.message?.content ?? stream?.choices?.[0]?.text ?? '';
+        if (typeof text !== 'string' || !text.trim()) throw Error('모델이 빈 응답을 반환했습니다.');
+        options.onToken?.(text);
+        return text;
+      }
       for await (const chunk of stream) {
         const token = chunk.choices?.[0]?.delta?.content ?? chunk.choices?.[0]?.text ?? '';
         if (token) { full += token; options.onToken?.(token); }

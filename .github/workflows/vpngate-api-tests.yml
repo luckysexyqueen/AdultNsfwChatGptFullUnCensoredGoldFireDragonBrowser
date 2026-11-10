@@ -1,0 +1,25 @@
+name: VPN Gate npm API tests
+on:
+  push:
+    branches: [fix/free-api-local-gguf-engine-20261018]
+    paths:
+      - 'packages/vpngate-api/**'
+      - 'scripts/vpngate-directory.mjs'
+      - 'tests/vpngate*.test.mjs'
+      - 'api/vpngate.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/vpngate-api-tests.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run vpngate:test
