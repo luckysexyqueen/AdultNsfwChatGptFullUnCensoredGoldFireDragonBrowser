@@ -143,7 +143,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#10a37f" />
     <script defer src="./plugins/boot.js"></script>
-    <script type="module" src="./ai/boot.mjs"></script>
+<script type="module" src="./ai/boot.mjs?v=20261111-relay-final-2"></script>
     <script>
       (function () {
         try {
@@ -2100,16 +2100,17 @@
           },
         };
       }
-      const blobStore = makeStore({ name: "aichat-files", storeName: "blobs" });
-      const metaStore = makeStore({ name: "aichat-files", storeName: "meta" });
+      const blobStore = makeStore({ name: "aichat-files-blobs", storeName: "blobs" });
+      const metaStore = makeStore({ name: "aichat-files-meta", storeName: "meta" });
       const msgFileStore = makeStore({ name: "aichat-files", storeName: "msg_files" });
       // 앱 내부 내장 파일 인덱스: 업로드 파일을 앱 전용 영구 저장소에 귀속합니다.
-      const embeddedFileIndexStore = makeStore({ name: "aichat-files", storeName: "embedded_index" });
+      const embeddedFileIndexStore = makeStore({ name: "aichat-files-index", storeName: "embedded_index" });
       const convStore = makeStore({ name: "aichat-offline", storeName: "conversations" });
       const msgStore = makeStore({ name: "aichat-offline", storeName: "messages" });
       // GPT 빌더는 Supabase 설정 여부와 무관하게 이 전용 LocalForage 저장소를 기준으로 동작합니다.
       const localGPTStore = makeStore({ name: "aichat-gpt-builder", storeName: "gpts" });
-      const localGPTFileStore = makeStore({ name: "aichat-gpt-builder", storeName: "files" });
+      // GPT 메타데이터와 파일은 별도 DB로 열어 IndexedDB 저장소 생성 순서에 영향을 받지 않게 합니다.
+      const localGPTFileStore = makeStore({ name: "aichat-gpt-builder-files", storeName: "files" });
 
       const TEXT_EXTS = new Set([
         "txt",
@@ -2968,7 +2969,9 @@
         const trimmed = content.trim();
         if (!trimmed && filesToSend.length === 0) return false;
         if (S.isStreaming) return false;
-        if (window.GFDAI?.getMode() === 'local' && !window.LocalGGUF?.getStatus?.().ready) {
+        // 모든 채팅은 로컬 GGUF가 아니라 무료 API만 사용합니다.
+        window.GFDAI?.setMode('free');
+        if (!S.currentGPT && window.GFDAI?.getMode() === 'local' && !window.LocalGGUF?.getStatus?.().ready) {
           toast('로컬 모델 관리에서 GGUF 모델을 먼저 불러오세요.', 'info');
           void renderLocalModelModal();
           return false;
@@ -3081,17 +3084,17 @@
         const inferenceInstructions = window.GFDAI?.extendInstructions(pluginInstructions) || pluginInstructions;
 
         // 오프라인/API 장애 대비: 현재 GPT에 연결된 GGUF → 앱 저장 GGUF 순으로 자동 폴백합니다.
-        if (!S.isOnline && S.ggufAutoFallback && !S.localModel?.ready) {
+        if (false && !S.isOnline && S.ggufAutoFallback && !S.localModel?.ready) {
           try { await ensureLocalGGUFForFallback(S.currentGPT?.local_gguf_model_id || ""); } catch (e) { console.warn("offline GGUF fallback 준비 실패:", e); }
         }
-        if (!S.isOnline && S.ggufAutoFallback && !S.localModel?.ready) {
+        if (false && !S.isOnline && S.ggufAutoFallback && !S.localModel?.ready) {
           setState({ isStreaming: false, streamingMsg: "" });
           toast("오프라인 상태입니다. 저장된 GGUF 모델이 없어서 메시지를 로컬에 보관했습니다.", "info");
           return true;
         }
 
         // 선택된 로컬 GGUF 모델은 네트워크 요청 없이 현재 브라우저에서 실행합니다.
-        if (window.LocalGGUF?.getStatus?.().ready && window.GFDAI?.getMode() !== 'free') {
+        if (false) {
           try {
             const localMessages = [];
             if (sysPrompt) localMessages.push({ role: "system", content: sysPrompt });
@@ -3222,8 +3225,8 @@
           console.error("sendMessage API error:", err);
           // API 실패/타임아웃/서버 오류를 로컬 GGUF로 자동 대체합니다.
           try {
-            if (!S.localModel?.ready && (S.ggufAutoFallback || S.currentGPT?.local_gguf_model_id)) await ensureLocalGGUFForFallback(S.currentGPT?.local_gguf_model_id || "");
-            if (S.localModel?.ready && window.LocalGGUF) {
+            // 전체 배포본은 무료 API로 통일하므로 로컬 GGUF 자동 폴백을 사용하지 않습니다.
+            if (false) {
               const fallbackMessages = [];
               if (sysPrompt) fallbackMessages.push({ role: "system", content: sysPrompt });
               if (inferenceInstructions) fallbackMessages.push({ role: "system", content: inferenceInstructions });
@@ -3333,10 +3336,8 @@
 
       async function startGPTChat(gpt) {
         const files = await loadGPTFiles(gpt.id);
-        if (gpt.local_gguf_model_id && !S.localModel?.ready) {
-          try { await ensureLocalGGUFForFallback(gpt.local_gguf_model_id); }
-          catch (error) { toast("연결된 GGUF 모델을 자동 로드하지 못했습니다. 설정에서 다시 불러오세요.", "error", 5000); }
-        }
+        // 커스텀 GPT는 항상 검증된 무료 API를 사용하고 GGUF를 자동 실행하지 않습니다.
+        window.GFDAI?.setMode('free');
         const now = new Date().toISOString();
         const conversation = {
           id: `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -3350,7 +3351,7 @@
         };
         setState({ currentGPT: gpt, currentGPTFiles: files, conversations: [conversation, ...S.conversations], currentConvId: conversation.id, messages: [] });
         await cacheConv(conversation).catch(() => {});
-        toast(`${gpt.name}과(와) 로컬 대화를 시작합니다.`, "success");
+        toast(`${gpt.name}과(와) 무료 API 대화를 시작합니다.`, "success");
       }
 
       async function deleteConv(id) {
