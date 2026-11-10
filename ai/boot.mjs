@@ -2,11 +2,14 @@ import './local-gguf.mjs';
 import { freeChat, prepareMessages } from './providers.mjs';
 import { koreanInstructions } from './language.mjs';
 import { loadPackedModel } from './packed-model.mjs';
-let mode = location.hostname.endsWith('.pages.dev') ? 'free' : 'existing';
-try { mode = localStorage.getItem('gfd-ai-mode') || mode; } catch { /* private browsing */ }
-if (!['existing', 'free', 'local'].includes(mode)) mode = 'existing';
+// 이 배포본은 모든 대화를 검증된 무료 API로 통일합니다.
+let mode = 'free';
+try { localStorage.setItem('gfd-ai-mode', 'free'); } catch { /* private browsing */ }
+mode = 'free';
+  const fallbackConfig = { schemaVersion: 1, freeEndpoint: 'https://goldfire-vireonix-relay.choluckyhexsexyqueen.workers.dev' };
 const configReady = fetch(new URL('./config.json', import.meta.url), { credentials: 'omit', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(4000) })
-  .then(async r => { if (!r.ok) throw Error('AI 설정을 불러오지 못했습니다.'); return r.json(); });
+  .then(async r => r.ok ? r.json() : fallbackConfig)
+  .catch(() => fallbackConfig);
 configReady.catch(() => {});
 window.GFDAI = Object.freeze({
   extendInstructions: koreanInstructions,
@@ -18,8 +21,7 @@ window.GFDAI = Object.freeze({
   },
   getMode: () => mode,
   setMode(value) {
-    if (!['existing', 'free', 'local'].includes(value)) return false;
-    mode = value;
+    mode = 'free';
     try { localStorage.setItem('gfd-ai-mode', mode); } catch { /* in memory */ }
     window.dispatchEvent(new CustomEvent('gfd:ai-mode-changed', { detail: mode }));
     return true;
@@ -62,24 +64,25 @@ window.GFDAI = Object.freeze({
         { role: 'user', content: '요약 메모:\n' + notes + '\n\n최종 요청:\n' + localMessages.filter(m => m.role === 'user').at(-1)?.content.slice(-1200) }
       ], { maxTokens, onToken, signal, temperature: 0.7 });
     };
-    if (mode === 'local') return runLocal();
     const inputChars = localMessages.reduce((sum, message) => sum + message.content.length, 0);
-    if (mode === 'free' && (inputChars > 4000 || localMessages.length > 16)) {
-      return runLocal();
-    }
-    if (mode === 'existing') throw Error('기존 API 모드에서는 기존 채팅 연결을 사용하세요.');
+    // 모든 배포 경로는 무료 API만 사용합니다. 긴 커스텀 GPT 지침도 로컬 GGUF로
+    // 우회하지 않고 API에 전달하되, 서버 제한은 API 오류로 명확히 표시합니다.
     let config;
     try { config = await configReady; }
-    catch (error) { if (local?.getStatus?.().ready) return runLocal(); throw error; }
+    catch (error) { throw error; }
     if (config.schemaVersion !== 1) throw Error('지원하지 않는 AI 설정입니다.');
     try {
-      const text = await freeChat(config.freeEndpoint, prepareMessages(messages, systemPrompt, instructions), { signal, maxTokens });
+      const text = await freeChat(config.freeEndpoint, await prepareMessages(messages, systemPrompt, instructions, {
+        summarize: (source) => freeChat(config.freeEndpoint, [
+          { role: 'system', content: '이전 대화와 자료를 빠짐없이 보존하는 한국어 요약을 작성하세요. 고유명사, 설정, 지시, 사실을 생략하지 말고 압축하세요. 요약만 출력하세요.' },
+          { role: 'user', content: source.slice(0, 18000) },
+        ], { signal, translate: false }),
+      }), { signal, maxTokens });
       onToken?.(text);
       return text;
     } catch (error) {
       if (signal?.aborted) throw error;
-      if (local?.getStatus?.().ready) return runLocal();
-      throw new Error('무료 API 요청에 실패했고 준비된 로컬 모델이 없습니다: ' + (error?.message || error));
+      throw new Error('무료 API 요청에 실패했습니다: ' + (error?.message || error));
     }
   },
 });
@@ -92,7 +95,7 @@ function mount() {
   const details = document.createElement('details');
   const summary = document.createElement('summary'); summary.textContent = 'AI 연결';
   const select = document.createElement('select'); select.setAttribute('aria-label', 'AI 응답 방식');
-  for (const [value, label] of [['existing','기존 API 유지'],['free','무료 API (공유 한도)'],['local','로컬 모델 (서버 전송 없음)']]) {
+  for (const [value, label] of [['free','무료 API (공유 한도)']]) {
     const option = document.createElement('option'); option.value = value; option.textContent = label; select.append(option);
   }
   select.value = mode; select.addEventListener('change', () => window.GFDAI.setMode(select.value));
